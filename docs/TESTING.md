@@ -62,6 +62,18 @@ A PR **cannot merge** if: typecheck/lint fails · required unit/integration/cont
 ## 8. Test Data / Fixtures Policy
 Synthetic fixtures + factories (`@quad/testing`); tenant-scoped; **Rutgers data only as example/seed**. Deterministic where possible.
 
+## 8a. Local Test Harness (`@quad/testing`)
+The `@quad/testing` package provides reusable, dependency-light building blocks (no product behavior):
+- **Fixtures** — `tenantFixtures()` (configured tenants from `@quad/config`) and `makeTenantFixture(overrides?)` (tenant-neutral, DC2-only, **no default tenant**).
+- **Readiness helpers** — `waitForPostgres()` (real connect + `SELECT 1`) and `waitForRedis()` (RESP `PING` → `+PONG`): **protocol-level** checks, not just an open TCP port, so a container that has opened its port before the datastore is ready cannot produce a false-green. `waitForPort()` / `isDockerRunning()` are lower-level primitives.
+- **Local URLs/creds** — `localTestDatabaseUrl()`, `tenantHost()`, `tenantHostHeader()`, `localTestUrl()` — local-only values matching `docker-compose.yml` (never secrets).
+
+**Tiers & commands** (always run via Turbo so workspace deps `@quad/core`/`@quad/config` build first):
+- **Unit** (no Docker; part of `pnpm check`): `pnpm test`.
+- **Integration** (needs local datastores): `docker compose up -d postgres redis` → `pnpm test:integration` → `docker compose down`.
+
+Integration tests target the Dockerized Postgres/Redis in `docker-compose.yml` (`TEST-INV-3`) and assert **protocol** readiness, not just port reachability.
+
 ## 9. No Production Data
 Never use real student/production data in tests/dev (`SEC-INV` privacy). `DC3` never in fixtures beyond synthetic.
 

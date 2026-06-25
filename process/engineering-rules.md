@@ -20,6 +20,14 @@
 15. **No `DC3` in public surfaces or normal logs** — `DC2` only.
 16. **No implementation before `START IMPLEMENTATION`.**
 
+## Branch & Merge Discipline
+- **One task per branch, one task per PR.** Branch/commit/PR names describe the *work*, not task/milestone numbers.
+- **`main` is protected** — no direct pushes; changes land only through a PR (emergency repository repair excepted).
+- **Signed commits are required** — configure SSH (or GPG) commit signing; unsigned/unverified commits cannot merge.
+- **To merge:** CI `verify` (lint/typecheck/test/build) green and branch up to date with `main`; commits **verified/signed**; review threads resolved (including external review apps).
+- **Neutral history** — no tool/automation/authorship attribution in commit messages, files, branch names, or PR text.
+- **Docs move with the change** — a contract/behavior change updates `@quad/core` + the owning doc/spec **in the same PR**, not as a trailing cleanup.
+
 ## Stop Conditions (always)
 Ambiguous product requirement · any API/WS/event/DB contract change · auth/security/cooldown/tenant/event-sourcing/moderation change · migration/data-loss risk · performance-budget risk · PR too large · missing tests.
 

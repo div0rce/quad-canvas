@@ -2,7 +2,7 @@
 
 > **This is the product source of truth.** It defines *what* Quad is and *how it must behave for users* — not how it is built. Architecture, data models, APIs, and algorithms live in their own docs (`ARCHITECTURE.md`, `DATABASE.md`, `API.md`, `COOLDOWN.md`, …) and must conform to this document. When product intent and an architecture doc disagree, **this file wins** until it is explicitly changed.
 >
-> **Naming:** the platform is **Quad**. **Rutgers Quad** is **tenant #1 / the first deployment** — never a hardcoded assumption in platform behavior. Code lives in the `rutgers-canvas` repo under `@quad/*` packages. Wherever this doc says "the university" or "the tenant," it means *any* current or future tenant.
+> **Naming:** the platform is **Quad**. **Rutgers Quad** is **tenant #1 / the first deployment** — never a hardcoded assumption in platform behavior. Code lives in the `quad-canvas` repo under `@quad/*` packages. Wherever this doc says "the university" or "the tenant," it means *any* current or future tenant.
 >
 > **Versions:** see [`docs/TECH_BASELINE.md`](TECH_BASELINE.md). Not repeated here.
 >

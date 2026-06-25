@@ -31,7 +31,7 @@ Counts verified: **docs 37**, **docs/adr 10**, **templates 15**, **specs READMEs
 ## 2. Naming / Package Consistency
 
 - **Platform = Quad; Rutgers Quad = tenant #1** (example/config) — consistent; "Rutgers" appears in 45 files only as tenant-#1/example, and in build/config **only** as commented examples in `.env.example` (no hardcoding in `package.json`/`turbo.json`/`docker-compose.yml`/`ci.yml`). ✅
-- **Repo dir remains `rutgers-canvas`** (historical), code tenant-neutral. ✅
+- **Repo dir remains `quad-canvas`** (tenant-neutral code). ✅
 - **Deployable apps = `apps/web` / `apps/api`; packages = `@quad/*`** — verified: a repo-wide grep for `@quad/web`/`@quad/api` returns **zero usages in corpus content**; the only matches are the **self-referential tracking notes in `process/SPEC_PLAN.md` §8** that flag this very nuance. **Resolution: the stale-label nuance is effectively closed** — no doc/spec/scaffolding/config uses the stale labels. (Optional tidy: trim the historical tracking notes; non-blocking.) ✅
 - **`@quad/core` = canonical shared-contract owner** — asserted consistently across `ARCHITECTURE`/`BACKEND`/`API`/`WEBSOCKETS`/`EVENT_SOURCING`/`CODE_QUALITY` + specs. ✅
 - **`apps/web`/`apps/api` are package *targets only*** until implementation (no source exists). ✅
