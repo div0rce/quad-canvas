@@ -1,0 +1,22 @@
+{
+  "name": "api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "dependencies": {
+    "@quad/config": "workspace:*",
+    "@quad/core": "workspace:*",
+    "fastify": "^5",
+    "fastify-plugin": "^5"
+  },
+  "devDependencies": {
+    "@types/node": "^22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  }
+}
