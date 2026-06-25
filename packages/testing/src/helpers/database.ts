@@ -36,32 +36,72 @@ export async function waitForDatabasePort(opts: LocalDatabaseOptions & WaitOptio
   await waitForPort(opts.host ?? LOCAL_TEST_DATABASE.host, opts.port ?? LOCAL_TEST_DATABASE.port, opts);
 }
 
+/** Redact credentials from a Postgres URL so it is safe to log or include in errors. */
+export function redactDatabaseUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.username) parsed.username = '***';
+    if (parsed.password) parsed.password = '***';
+    return parsed.toString();
+  } catch {
+    return 'invalid-postgres-url';
+  }
+}
+
+/** Race a promise against a timeout, clearing the timer on settle. */
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), ms);
+  });
+  // If the timeout wins, `promise` may settle later — swallow it to avoid unhandled rejections.
+  promise.catch(() => undefined);
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /**
  * Wait until Postgres actually accepts connections and answers a query (protocol-level readiness,
- * not just an open TCP port). Connects to the LOCAL test datastore and runs `SELECT 1`.
+ * not just an open TCP port). Each attempt is bounded, so a port that accepts TCP but never speaks
+ * Postgres cannot hang past the requested deadline. Errors never include credentials.
  */
 export async function waitForPostgres(opts: LocalDatabaseOptions & WaitOptions = {}): Promise<void> {
   const connectionString = localTestDatabaseUrl(opts);
+  const safeTarget = redactDatabaseUrl(connectionString);
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const intervalMs = opts.intervalMs ?? 500;
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
 
   while (Date.now() < deadline) {
-    const client = new Client({ connectionString });
+    const perAttemptMs = Math.min(2_000, Math.max(1, deadline - Date.now()));
+    const client = new Client({
+      connectionString,
+      connectionTimeoutMillis: perAttemptMs,
+      query_timeout: perAttemptMs,
+    });
     try {
-      await client.connect();
-      await client.query('SELECT 1');
+      await withDeadline(
+        (async (): Promise<void> => {
+          await client.connect();
+          await client.query('SELECT 1');
+        })(),
+        perAttemptMs,
+        'postgres readiness attempt timed out',
+      );
       return;
     } catch (err) {
       lastError = err;
-      await sleep(intervalMs);
+      await sleep(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
     } finally {
-      await client.end().catch(() => undefined);
+      // Fire-and-forget: a client still mid-connect to a silent peer can make end() hang,
+      // and the underlying socket is bounded by connectionTimeoutMillis regardless.
+      void client.end().catch(() => undefined);
     }
   }
+  const detail = lastError instanceof Error ? lastError.message : lastError ? String(lastError) : '';
   throw new Error(
-    `Postgres not ready at ${connectionString} after ${timeoutMs}ms` +
-      (lastError ? ` (last error: ${String(lastError)})` : ''),
+    `Postgres not ready at ${safeTarget} after ${timeoutMs}ms` + (detail ? ` (last error: ${detail})` : ''),
   );
 }

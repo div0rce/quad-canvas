@@ -4,7 +4,7 @@
 >
 > **Altitude:** workflow + governance. **No** code, and **no** concrete `process/*` role guides, `templates/*`, playbook files, CI files, or scripts — those are **Phase 4** scaffolding. **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
 >
-> **Hard gate:** **no application implementation happens before the owner issues `START IMPLEMENTATION`** (`PROC-INV-6`). Until then, engineers author docs/specs/scaffolding only.
+> **Status:** the spec corpus is complete and the **foundation is built and merged** (`@quad/*` packages, `apps/web`/`apps/api` shells, `@quad/testing` harness); the **G1 foundation checkpoint** is recorded in `docs/CHECKPOINTS.md` §4a. **Product behaviour is added only within its milestone** (`MILESTONES.md`) — never ahead of it.
 
 ---
 
@@ -26,7 +26,7 @@ The corpus is large precisely so that engineering roles can implement Quad **mil
 - **`PROC-DP-4` Tests before claims** — no "it works" without commands + results (`PROC-INV-4`).
 - **`PROC-DP-5` No architecture drift** — `@quad/core` contracts, clean boundaries, hard rules (`§12`).
 - **`PROC-DP-6` Stop instead of guessing** — hit a stop condition → ask (`§8`).
-- **`PROC-DP-7` No implementation before `START IMPLEMENTATION`.**
+- **`PROC-DP-7` No product behaviour ahead of its milestone** — the foundation is built; product features follow `MILESTONES.md` and their checkpoint gates.
 
 ## 4. Engineer Operating Model (roles)
 Each role becomes a concrete `process/<role>-guidelines.md` in Phase 4; here are their lanes. All obey the global rules (Phase 4 `process/engineering-rules.md`).
@@ -59,7 +59,7 @@ flowchart LR
   REV -- fail --> FF["fix-forward"]
   FF --> VER
 ```
-We are currently in **corpus authoring**; implementation begins only after the audit + `START IMPLEMENTATION`.
+The corpus is complete and the foundation is built and merged; product features are implemented milestone-by-milestone (see `MILESTONES.md` and `docs/CHECKPOINTS.md` §4a).
 
 ## 6. Task Intake Protocol
 Before writing code for a task, the engineer:
@@ -122,7 +122,7 @@ Each maps to a code-review rejection reason (`§14`) and a test where feasible.
 - **No bypassing auth/cooldown/moderation/audit** (`SECURITY.md` invariants).
 - **No fabricated test results**; **no claiming verification without commands + results.**
 - **No untested event-sourcing changes** (`ES-INV-*`).
-- **No `START IMPLEMENTATION` violation** — docs/specs/scaffolding only until the signal.
+- **No product behaviour ahead of its milestone** — implement features only within their milestone.
 
 ## 14. Review Model
 - **Self-review checklist** (pre-request): spec linked · acceptance met · tests green · docs updated · guardrails respected · diff small/scoped.

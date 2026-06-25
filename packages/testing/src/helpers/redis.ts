@@ -7,21 +7,24 @@ function pingOnce(host: string, port: number, timeoutMs: number): Promise<void> 
   return new Promise<void>((resolve, reject) => {
     const socket = connect({ host, port });
     let buffer = '';
-    const fail = (err: Error): void => {
+    let settled = false;
+    const settle = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      socket.removeAllListeners();
       socket.destroy();
-      reject(err);
+      action();
     };
     socket.setTimeout(timeoutMs);
     socket.once('connect', () => socket.write('PING\r\n'));
     socket.on('data', (chunk) => {
       buffer += chunk.toString('utf8');
-      if (buffer.includes('+PONG')) {
-        socket.end();
-        resolve();
-      }
+      if (buffer.includes('+PONG')) settle(resolve);
     });
-    socket.once('timeout', () => fail(new Error('redis ping timed out')));
-    socket.once('error', fail);
+    socket.once('timeout', () => settle(() => reject(new Error('redis ping timed out'))));
+    socket.once('error', (err: Error) => settle(() => reject(err)));
+    socket.once('end', () => settle(() => reject(new Error('connection ended before PONG'))));
+    socket.once('close', () => settle(() => reject(new Error('connection closed before PONG'))));
   });
 }
 
