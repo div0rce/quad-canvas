@@ -1,0 +1,4 @@
+# Quad — pnpm workspace (scaffolding). Packages land at START IMPLEMENTATION.
+packages:
+  - "apps/*"
+  - "packages/*"

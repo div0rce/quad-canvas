@@ -1,0 +1,53 @@
+# Quad — CI (SCAFFOLDING ONLY). No deploy. Versions per docs/TECH_BASELINE.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10              # pnpm major per TECH_BASELINE
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"       # Node 22 LTS per TECH_BASELINE
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # --- Security scanning placeholder (see SECURITY.md §18 / DEPLOYMENT.md) ---
+      - name: Security/dependency/secret scan
+        run: echo "TODO: dependency (SCA) + secret scanning (tooling → DEPLOYMENT.md)"
+
+  # ----------------------------------------------------------------------------
+  # TODO (added at START IMPLEMENTATION; see docs/TESTING.md & docs/PERFORMANCE.md):
+  #  - integration job: spin Postgres + Redis (services/compose), run pnpm test:integration
+  #  - e2e job: Playwright (pnpm test:e2e) incl. mobile/touch + a11y
+  #  - performance gates: hot-path budgets (B06/B07/B10) where feasible
+  #  - security gates: authz / no-DC3 / tenant-isolation tests
+  # NO deploy steps and NO production secrets in CI yet (deployment → ADR-0010).
+  # ----------------------------------------------------------------------------

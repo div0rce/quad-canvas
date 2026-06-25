@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment / secrets (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# Build / generated outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+# Prisma-generated client output (generated at implementation; path settled in DATABASE.md)
+**/generated/
+
+# Test / coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+# (VS Code settings intentionally allowed; ignore local-only overrides)
+.vscode/*.local

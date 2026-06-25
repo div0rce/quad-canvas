@@ -1,0 +1,23 @@
+{
+  "name": "quad",
+  "private": true,
+  "description": "Quad — multi-tenant collaborative pixel-canvas platform (scaffolding only; no app implementation yet).",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "build": "turbo run build",
+    "format": "turbo run format",
+    "check": "turbo run lint typecheck test build"
+  },
+  "devDependencies": {
+    "turbo": "^2",
+    "typescript": "^5.9"
+  }
+}

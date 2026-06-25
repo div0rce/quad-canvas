@@ -1,0 +1,59 @@
+# Quad — LOCAL development infrastructure (SCAFFOLDING ONLY)
+# ----------------------------------------------------------------------------
+# This is local-only dev infra — NOT production topology (see docs/DEPLOYMENT.md).
+# It provides datastores so an engineer/dev gets identical infra every run.
+# App services (apps/web, apps/api) are intentionally NOT defined yet
+# (no application implementation before START IMPLEMENTATION).
+# Image tags below are MAJOR-aligned to docs/TECH_BASELINE.md; exact tags are
+# pinned at implementation. No real secrets — example creds only.
+# ----------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:17            # major per TECH_BASELINE (PostgreSQL 17; 18 acceptable)
+    environment:
+      POSTGRES_USER: quad
+      POSTGRES_PASSWORD: quad     # example only — never a real secret
+      POSTGRES_DB: quad
+    ports:
+      - "5432:5432"
+    volumes:
+      - quad_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quad -d quad"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    # Redis 8 per TECH_BASELINE; Valkey is an approved drop-in alternative (ADR-0010).
+    image: redis:8
+    command: ["redis-server", "--save", "", "--appendonly", "no"]  # ephemeral; cooldown keys must not be improperly evicted (COOL-INV-12)
+    ports:
+      - "6379:6379"
+    volumes:
+      - quad_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional local object-storage substitute (archives/replay/final images).
+  # Uncomment for local archive work; production uses managed object storage + CDN.
+  # minio:
+  #   image: minio/minio          # local substitute only
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: quad
+  #     MINIO_ROOT_PASSWORD: quadquad   # example only
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - quad_obj:/data
+
+volumes:
+  quad_pg:
+  quad_redis:
+  # quad_obj:
