@@ -1,6 +1,6 @@
 # Contributing to Quad
 
-Quad is built **spec-first**, primarily by engineering roles, milestone-by-milestone. This file is the contribution workflow. **Scaffolding only — no application implementation has begun (the `START IMPLEMENTATION` gate is closed).**
+Quad is built **spec-first**, primarily by engineering roles, milestone-by-milestone. This file is the contribution workflow. **Foundation built & merged** (workspace, `@quad/*` packages, `apps/web` / `apps/api` shells, `@quad/testing` harness); **product features build next, milestone-by-milestone** — no product behaviour ahead of its milestone.
 
 ## Source of truth
 **The docs are the source of truth.** Code conforms to the corpus, not the other way around. If behavior and a doc disagree, the doc wins until explicitly changed. Read `docs/ENGINEERING_WORKFLOW.md` first.

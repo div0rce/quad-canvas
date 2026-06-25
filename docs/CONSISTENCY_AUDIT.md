@@ -1,6 +1,6 @@
 # Quad — Corpus Consistency Audit (Phase 5)
 
-> **Whole-corpus cross-reference / contract-drift audit before any implementation.** Evidence-based: findings below were verified against the real filesystem (file listing + targeted `grep`) on **2026-06-24**, not asserted. This document also contains the proposed **first-10 implementation tasks** (plan only). **No implementation has begun — `START IMPLEMENTATION` remains ungiven.**
+> **Whole-corpus cross-reference / contract-drift audit** (point-in-time, **2026-06-24**) that gated the start of implementation. Evidence-based: findings below were verified against the real filesystem (file listing + targeted `grep`), not asserted. It also defined the **first foundation tasks**. **Status since:** the foundation — workspace, `@quad/*` packages, `apps/web` / `apps/api` shells, and the `@quad/testing` harness — has been built and **merged to `main`**; product features are not yet started. See `docs/CHECKPOINTS.md` §4a for the live current state.
 >
 > **Method:** `find` for manifest completeness; `grep` for label/contract/privacy/tenant consistency across `docs/`, `process/`, `templates/`, `specs/`, and root config. Tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -8,7 +8,7 @@
 
 ## 1. Manifest Completeness
 
-Counts verified: **docs 37**, **docs/adr 10**, **templates 15**, **specs READMEs 10**, **engineering (top) 14**, **process/playbooks 6** (incl. the historical bootstrap playbook). `docs/CONSISTENCY_AUDIT.md` is this file.
+Counts verified: **docs 37**, **docs/adr 10**, **templates 15**, **specs READMEs 10**, **process (top) 14**, **process/playbooks 6** (incl. the historical bootstrap playbook). `docs/CONSISTENCY_AUDIT.md` is this file.
 
 | Group | Expected | Present | Status |
 | --- | --- | --- | --- |
