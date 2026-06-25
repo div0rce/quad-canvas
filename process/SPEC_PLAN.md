@@ -2,7 +2,7 @@
 
 > **This is the operating manual for building Quad.** It is the durable, in-repo home for the bootstrap "first response": repository strategy, the complete repository tree, the full documentation manifest, the generation order, the quality bar, and the engineering governance model. It exists so that no planning knowledge lives only in a chat log.
 >
-> **Codename:** `Quad` (packages `@quad/*`). **Tenant #1:** Rutgers. **Repo dir:** `rutgers-canvas` (historical name only — code is tenant-neutral).
+> **Codename:** `Quad` (packages `@quad/*`). **Tenant #1:** Rutgers. **Repo dir:** `quad-canvas` (tenant-neutral code).
 >
 > **Governing spec:** [`process/playbooks/000-bootstrap-architecture.md`](playbooks/000-bootstrap-architecture.md).
 
@@ -45,7 +45,7 @@ These rules govern every subsequent turn until the owner says otherwise.
 ## 2. Complete Repository Tree
 
 ```text
-rutgers-canvas/
+quad-canvas/
 ├── README.md
 ├── CONTRIBUTING.md
 ├── ENGINEERING_CONTEXT.md                         # repo-wide role guides (entry point for the team)

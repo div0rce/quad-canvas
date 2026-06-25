@@ -8,10 +8,12 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "dependencies": {
     "@quad/config": "workspace:*",
-    "@quad/core": "workspace:*"
+    "@quad/core": "workspace:*",
+    "pg": "^8"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pg": "^8",
     "vitest": "^3"
   },
   "scripts": {

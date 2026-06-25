@@ -45,7 +45,7 @@ Before requesting review, the author completes the §4 checklist, runs the full 
 All §4 items satisfied · required tests green with evidence · docs/specs updated · no open rejection reasons · invariants upheld.
 
 ## 10. Merge Criteria
-Approved + CI green (`TESTING.md` §11) + checkpoint context respected (if at a gate boundary, the gate is considered, `CHECKPOINTS.md`). **No `git commit`/merge unless explicitly asked** by the owner (`PROC-INV-12`); never merge straight to the default branch.
+`main` is **branch-protected** and enforces: changes land only via PR (no direct pushes; force-push and deletion blocked), CI **`verify` green and strict** (branch up to date with `main`), **verified/signed commits**, and resolved review threads (including external review apps). Beyond those platform gates: approved + required tests green with evidence + checkpoint context respected (if at a gate boundary, `CHECKPOINTS.md`). Never merge straight to the default branch.
 
 ## 11. Handling Follow-Up Work
 Out-of-scope discoveries become **new milestones/issues**, not scope creep in the current PR. Known follow-ups are listed in the PR summary and tracked; a PR is not held hostage to unrelated work, nor merged with its own required work deferred.

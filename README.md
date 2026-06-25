@@ -19,7 +19,7 @@ No application code exists yet by design; see [Project Status](#project-status).
 
 Quad is **not** a Reddit clone and **not** a one-off school project. It is a **multi-tenant platform**: the application never hardcodes any single school. **Rutgers University is tenant #1**, and onboarding the next university (Princeton, Michigan, Penn State, Georgia Tech, …) is a matter of **configuration, not a rewrite**.
 
-> The repository directory is named `rutgers-canvas` for historical reasons; the **platform and all code are tenant-neutral and branded `Quad`** (`@quad/*` packages). Rutgers lives entirely in tenant configuration.
+> The repository directory is named `quad-canvas`; the **platform and all code are tenant-neutral and branded `Quad`** (`@quad/*` packages). Rutgers lives entirely in tenant configuration.
 
 ### Why "every student has equal influence"
 
@@ -99,7 +99,7 @@ The intended technology stack is below. **Exact major versions and ecosystem ass
 ## Repository Layout
 
 ```text
-rutgers-canvas/
+quad-canvas/
 ├── apps/
 │   ├── web/                 # Next.js client (canvas UI, profiles, replay) — scaffolding until START IMPLEMENTATION
 │   └── api/                 # Fastify server (REST + WS, event store, projector, cron) — scaffolding until START IMPLEMENTATION

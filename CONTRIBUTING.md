@@ -17,7 +17,8 @@ Quad is built **spec-first**, primarily by engineering roles, milestone-by-miles
 ## Hard rules
 - **One task per branch, one task per PR**; small, scoped diff (soft cap ~400 LOC / ~10 files).
 - **No direct commits to the default branch** except emergency repository repair; merge only via PR.
-- **All checks pass before merge** (lint / typecheck / build / tests), and the **PR description carries the verification evidence** (commands + real results).
+- **All checks pass before merge** — CI `verify` (lint / typecheck / build / tests) green and branch up to date with `main`; the **PR description carries the verification evidence** (commands + real results).
+- **Signed commits required** — `main` is protected and rejects unsigned/unverified commits; configure SSH (or GPG) commit signing before pushing.
 - **Neutral commit history** — commit messages and files carry no tool/automation attribution.
 - **Contract change ⇒ same-PR docs/spec update** (`@quad/core` is the single contract source).
 - **Tests + evidence required** — claims need commands + real results; **no fabricated results**; critical subsystems are never manual-only.

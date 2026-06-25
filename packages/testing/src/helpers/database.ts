@@ -1,6 +1,7 @@
-// @quad/testing — local test database helpers (SHAPE ONLY; no production DB logic).
+// @quad/testing — local test database helpers (no production DB logic).
 // Connection values match the local Docker Compose datastore — example/local creds, never secrets.
-import { waitForPort } from './docker.js';
+import { Client } from 'pg';
+import { sleep, waitForPort } from './docker.js';
 import type { WaitOptions } from '../types.js';
 
 /** Local Compose Postgres defaults (local-only; NOT production, NOT a real secret). */
@@ -30,7 +31,37 @@ export function localTestDatabaseUrl(opts: LocalDatabaseOptions = {}): string {
   return `postgresql://${user}:${password}@${host}:${port}/${database}`;
 }
 
-/** Wait until the local test database port is reachable (does not open a DB connection). */
-export async function waitForDatabase(opts: LocalDatabaseOptions & WaitOptions = {}): Promise<void> {
+/** Wait until the local test database port is reachable (TCP only; does not prove readiness). */
+export async function waitForDatabasePort(opts: LocalDatabaseOptions & WaitOptions = {}): Promise<void> {
   await waitForPort(opts.host ?? LOCAL_TEST_DATABASE.host, opts.port ?? LOCAL_TEST_DATABASE.port, opts);
+}
+
+/**
+ * Wait until Postgres actually accepts connections and answers a query (protocol-level readiness,
+ * not just an open TCP port). Connects to the LOCAL test datastore and runs `SELECT 1`.
+ */
+export async function waitForPostgres(opts: LocalDatabaseOptions & WaitOptions = {}): Promise<void> {
+  const connectionString = localTestDatabaseUrl(opts);
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const intervalMs = opts.intervalMs ?? 500;
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    const client = new Client({ connectionString });
+    try {
+      await client.connect();
+      await client.query('SELECT 1');
+      return;
+    } catch (err) {
+      lastError = err;
+      await sleep(intervalMs);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }
+  throw new Error(
+    `Postgres not ready at ${connectionString} after ${timeoutMs}ms` +
+      (lastError ? ` (last error: ${String(lastError)})` : ''),
+  );
 }
