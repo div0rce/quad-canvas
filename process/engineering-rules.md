@@ -18,7 +18,7 @@
 13. **No business logic in React components.**
 14. **No moderation without audit** — compensating events + atomic `DC4` audit; no hard delete.
 15. **No `DC3` in public surfaces or normal logs** — `DC2` only.
-16. **No implementation before `START IMPLEMENTATION`.**
+16. **No product behaviour ahead of its milestone** — the foundation is built; product features follow `docs/MILESTONES.md` and their checkpoint gates.
 
 ## Branch & Merge Discipline
 - **One task per branch, one task per PR.** Branch/commit/PR names describe the *work*, not task/milestone numbers.

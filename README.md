@@ -6,8 +6,7 @@
 
 *One student. One pixel. One cooldown. One semester-long work of art.*
 
-**Status:** 🏗️ Pre-implementation — architecture & specification corpus in progress.
-No application code exists yet by design; see [Project Status](#project-status).
+**Status:** 🏗️ Foundation in place — the specification corpus is complete and the workspace foundation (`@quad/*` packages, `apps/web` / `apps/api` shells, `@quad/testing` harness) is built and merged. Product features build next, milestone-by-milestone; see [Project Status](#project-status).
 
 </div>
 
@@ -189,16 +188,14 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e
 
 ## Project Status
 
-This repository is currently in its **architecture & documentation phase**. The build follows a deliberate, spec-driven sequence so that engineering implementation can proceed milestone-by-milestone without loss of architectural context:
+The specification corpus is **complete** and the **workspace foundation is built and merged to `main`**. The build follows a deliberate, spec-driven sequence so product features proceed milestone-by-milestone without loss of architectural context:
 
-1. **Turn 1 — Bootstrap** *(this commit)*: `README.md` + [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md) (repository strategy, full tree, documentation manifest, generation order, quality bar, governance model).
-2. **Phase 1 — Product**: tech baseline + product/principles/non-goals/roadmap/launch docs.
-3. **Phase 2 — Core architecture**: architecture, data, events, API, WebSockets, auth, multi-tenancy, cooldown, rendering, moderation, and derived feature docs.
-4. **Phase 3 — Engineering process**: security, performance, deployment, engineering workflow, milestones, testing, ops.
-5. **Phase 4 — Scaffolding contracts**: templates, specs, role guides, ADRs, and scaffolding-only root config.
-6. **Phase 5 — Consistency audit**: cross-corpus verification + the first 10 implementation tasks.
+1. **Specification corpus — complete**: product, architecture, and engineering-process docs; specs, templates, role guides, ADRs; the cross-corpus consistency audit and the first foundation tasks.
+2. **Workspace foundation — built & merged**: pnpm/Turborepo workspace, strict TypeScript, lockfile-based CI (`verify`); `@quad/core` / `@quad/config` / `@quad/db` + leaf packages; `apps/api` (Fastify health shell) and `apps/web` (Next tenant shell); and the `@quad/testing` local integration harness (Docker Postgres/Redis).
+3. **Next — foundation checkpoint (G1)**: verify the foundation end-to-end before product milestones begin (see [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md)).
+4. **Then — product milestones**: canvas, event sourcing, cooldown, auth, WebSockets, moderation, and derived features — each built against the corpus.
 
-**Implementation code is intentionally not written until the corpus is complete and the owner explicitly issues `START IMPLEMENTATION`.** Track progress in [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md).
+**Product feature code is built milestone-by-milestone ([`docs/MILESTONES.md`](docs/MILESTONES.md)); no product behaviour is added ahead of its milestone.** Track progress in [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), and [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md).
 
 ---
 

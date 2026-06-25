@@ -4,7 +4,7 @@
 >
 > **Altitude:** sequence + acceptance shape. **No** code, package files, templates, specs, or scaffolding (Phase 4 + `START IMPLEMENTATION` own those). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
 >
-> **Hard gate:** these milestones execute **only after `START IMPLEMENTATION`** (`MILESTONE-INV-6`).
+> **Hard gate:** these milestones execute **only after `START IMPLEMENTATION`** (`MILESTONE-INV-6`). **Status:** the signal has been given and the **foundation group (M0–M9) is built and merged to `main`**; the **G1 checkpoint** is next and product groups (M10+) are not started — see `docs/CHECKPOINTS.md` §4a.
 
 ---
 
@@ -24,7 +24,7 @@ Turn the corpus into a build path an engineer can execute **one PR at a time wit
 - **`M-DP-2` Acceptance-testable** — every milestone has testable acceptance + required tests (`MILESTONE-INV-2`).
 - **`M-DP-3` Dependency-ordered** — no milestone depends on a later one (`MILESTONE-INV-3`).
 - **`M-DP-4` No drift** — `@quad/core` contracts, clean boundaries (`ENGINEERING_WORKFLOW.md` §12).
-- **`M-DP-5` No implementation before `START IMPLEMENTATION`.**
+- **`M-DP-5` No product behaviour ahead of its milestone** — the foundation is built; product groups follow their checkpoint gates.
 
 ## 4. Numbering & Naming
 `M<NN> — <imperative title>`, grouped in tens (M0–M9 …). IDs are **stable** (deprecate, don't renumber). A milestone may be split into `M12a/M12b` if it exceeds PR size; the parent objective stays.

@@ -16,22 +16,45 @@ Checkpoints are the **gates between phases/milestone-groups**: each defines what
 - **`C-DP-2` Fix-forward on failure** — fix and re-gate; never skip a critical gate.
 - **`C-DP-3` Evidence required** — pass requires concrete evidence (tests/commands/results), not assertion (`PROC-INV-4`).
 - **`C-DP-4` No skipped critical gates.**
-- **`C-DP-5` No implementation before `START IMPLEMENTATION`.**
+- **`C-DP-5` No product behaviour ahead of its milestone** — the foundation is built; product features follow their milestone gates.
 
 ## 4. Checkpoint List
 | Checkpoint | Gates | Recorded |
 | --- | --- | --- |
 | **Phase 1 — Product** | product/principles/non-goals/roadmap/launch coherent | `SPEC_PLAN.md` §8 ✅ |
 | **Phase 2 — Architecture** | 19 arch docs consistent; invariants set | `SPEC_PLAN.md` §8 ✅ |
-| **Phase 3 — Engineering/process** | security/perf/deploy/workflow/milestones/support complete + consistent | this phase ⏳ |
-| **Phase 4 — Scaffolding** | templates/specs/engineers/ADRs/root config present, scaffolding-only | pending |
-| **G1 Foundation** | M0–M9 (workspace/CI/infra/core/db skeletons green) | impl |
+| **Phase 3 — Engineering/process** | security/perf/deploy/workflow/milestones/support complete + consistent | `SPEC_PLAN.md` §8 ✅ |
+| **Phase 4 — Scaffolding** | templates/specs/engineers/ADRs/root config present | `SPEC_PLAN.md` §8 ✅ |
+| **G1 Foundation** | workspace/CI/packages/app shells/db schema/testing harness green | **built & merged; verification next** (`chore/foundation-verification`) ⏳ |
 | **G2 Placement loop** | M10–M19 (place→event→projection→broadcast→render; reconnect converges) | impl |
 | **G3 Auth/tenant/fairness** | M20–M29 (verified membership, isolation, cooldown enforced+fair) | impl |
 | **G4 Moderation** | M30–M39 (reversible+audited moderation; sanitized public surfaces) | impl |
 | **G5 Replay/archive** | M40–M45 (archive dry-run + faithful replay proven) | impl |
 | **G6 Launch readiness** | M50–M59 + all `LG-*` pass | impl |
-| **Phase 5 — Consistency audit** | `CONSISTENCY_AUDIT.md` passes (whole corpus) | pending |
+| **Phase 5 — Consistency audit** | `CONSISTENCY_AUDIT.md` passes (whole corpus) | `CONSISTENCY_AUDIT.md` ✅ |
+
+## 4a. Current State & G1 Foundation Readiness
+*Snapshot for the foundation checkpoint — update as the foundation evolves.*
+
+**Completed (merged to `main`):**
+- **Specification corpus** complete (product / architecture / engineering-process docs, specs, templates, role guides, ADRs, consistency audit).
+- **Workspace foundation** — pnpm + Turborepo, strict TypeScript (`tsconfig.base.json`), `.gitignore` / `.nvmrc` (Node 22), lockfile-based CI (`verify`).
+- **Packages** — `@quad/core` (contracts), `@quad/config` (tenant registry/palette/env), `@quad/db` (Prisma schema + client/repositories), and leaf skeletons (`@quad/realtime` / `@quad/render` / `@quad/ui` / `@quad/eslint-config` / `@quad/tsconfig`).
+- **Apps** — `apps/api` (Fastify health/readiness shell) and `apps/web` (Next tenant-aware shell).
+- **`@quad/testing`** — local integration harness: tenant fixtures + **protocol-level** Postgres/Redis readiness, with unit + Docker-gated integration tests.
+- **Repository protection** — `main` requires a PR, green `verify` (strict), and signed/verified commits; force-push and deletion are blocked.
+
+**On a branch (not merged):** documentation/orientation updates (this branch, `docs/foundation-checkpoint-prep`).
+
+**Remaining before G1 passes:** run the full foundation verification (below) and record the result against this gate.
+
+**Expected G1 checks** (Node 22): `pnpm install --frozen-lockfile` · `pnpm -r typecheck` · `pnpm -r build` · `pnpm check` (lint/typecheck/test/build) · `docker compose config` + a Docker-up integration run (`docker compose up -d postgres redis` → `pnpm test:integration`). CI `verify` green on the PR.
+
+**Local services available:** Docker + Compose with **Postgres 17** and **Redis 8** from `docker-compose.yml` (local-only creds; ports 5432 / 6379).
+
+**Do not implement yet:** any product behaviour — pixel placement, event-log writes, projections, auth, WebSockets, the frontend canvas, or moderation. G1 verifies the **foundation**, not product features.
+
+**Next checkpoint task** runs on a dedicated branch: **`chore/foundation-verification`** (work-descriptive; no task/milestone numbers).
 
 ## 5. Checkpoint Template
 Each checkpoint records: **scope · files/milestones covered · required evidence · tests/commands · risks · contradictions found · pass/fail decision · fix-forward actions.** (Phase checkpoints live in `SPEC_PLAN.md` §8; implementation gates G1–G6 are recorded against their milestone group.)

@@ -345,7 +345,10 @@ Legend: ✅ done · ⏳ in progress · ⬜ pending.
 | 2 — Core architecture | ✅ | 13 solo docs (`ARCHITECTURE`→`MODERATION`) + derived batch [`REPLAY`, `ARCHIVES`, `ANALYTICS`, `LEADERBOARDS`, `PROFILES`, `HEATMAPS`]; **checkpoint ✅ (§8)** |
 | 3 — Engineering/process | ✅ | solo [`SECURITY`, `PERFORMANCE`, `DEPLOYMENT`, `ENGINEERING_WORKFLOW`, `MILESTONES`] + batch [`CHECKPOINTS`, `TESTING`, `OBSERVABILITY`, `OPERATIONS`, `DISASTER_RECOVERY`, `CODE_QUALITY`, `REVIEW_PROCESS`]; **checkpoint ✅ (§8)** |
 | 4 — Scaffolding contracts | ✅ | templates (15) + specs READMEs (10) + `process/*` (18) + ADRs `0001–0010` + root config (8) = **61 files, scaffolding-only**; **checkpoint ✅ (§8)** |
-| 5 — Consistency | ✅ | `docs/CONSISTENCY_AUDIT.md` — **PASS w/ non-blocking follow-ups** + first-10 tasks plan; **checkpoint ✅ (§8)**. Corpus cleared for `START IMPLEMENTATION`. |
+| 5 — Consistency | ✅ | `docs/CONSISTENCY_AUDIT.md` — **PASS w/ non-blocking follow-ups** + first foundation-tasks plan; **checkpoint ✅ (§8)**. Corpus cleared for `START IMPLEMENTATION`. |
+
+### Foundation implementation (post-corpus)
+`START IMPLEMENTATION` was given and the **foundation tier is built and merged to `main`**: workspace/CI, `@quad/core` / `@quad/config` / `@quad/db` + leaf packages, the `apps/api` and `apps/web` shells, and the `@quad/testing` integration harness. Repository protection is active (PR-only, `verify` strict, signed/verified commits, no force-push/deletion). **Product features (M10+) are not started.** The live current-state and **G1 foundation-checkpoint** readiness are maintained in `docs/CHECKPOINTS.md` §4a; the next checkpoint task runs on `chore/foundation-verification`.
 
 ---
 
