@@ -1,16 +1,20 @@
 import { describe, it } from 'vitest';
-import { LOCAL_TEST_DATABASE, waitForPort } from '../index.js';
+import { waitForPostgres, waitForRedis } from '../index.js';
 
-// Requires local Docker Compose services to be running:
+// Requires the local Docker Compose datastores to be running. Run via Turbo so workspace deps
+// (@quad/config, @quad/core) are built first:
 //   docker compose up -d postgres redis
-//   pnpm --filter @quad/testing test:integration
-// Proves harness wiring against real local services — no product behavior is exercised.
+//   pnpm test:integration            # root: turbo run test:integration (builds deps, then runs)
+//
+// These checks are PROTOCOL-level (Postgres `SELECT 1`, Redis `PING` -> +PONG), not just an open
+// TCP port — so a port opened before the datastore is ready (or another process on the port)
+// cannot produce a false-green. No product behavior is exercised.
 describe('local docker services', () => {
-  it('postgres port is reachable', async () => {
-    await waitForPort(LOCAL_TEST_DATABASE.host, LOCAL_TEST_DATABASE.port, { timeoutMs: 30_000 });
+  it('postgres accepts connections and answers a query', async () => {
+    await waitForPostgres({ timeoutMs: 30_000 });
   });
 
-  it('redis port is reachable', async () => {
-    await waitForPort('127.0.0.1', 6379, { timeoutMs: 30_000 });
+  it('redis answers PING with PONG', async () => {
+    await waitForRedis('127.0.0.1', 6379, { timeoutMs: 30_000 });
   });
 });
