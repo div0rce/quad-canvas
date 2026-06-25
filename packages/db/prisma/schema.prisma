@@ -1,0 +1,81 @@
+// @quad/db — Prisma schema (T6 skeleton). FOUNDATION TABLES ONLY.
+// NO event log / pixel / placement / replay / moderation tables — those land in later
+// milestones (event sourcing is append-only; see docs/EVENT_SOURCING.md, DATABASE.md).
+// Tenant isolation first; tenant-scoped uniqueness; NO default tenant.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  // Prisma 7: no `url` here. The runtime connection comes from the driver adapter
+  // (PrismaPg, see src/client.ts); the CLI/Migrate URL lives in prisma.config.ts.
+  provider = "postgresql"
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  publicTitle String
+  status      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+  canvases    Canvas[]
+}
+
+model User {
+  // DC3 internal identity. `email` is PRIVATE — never serialized into a public DTO/log.
+  id           String   @id @default(cuid())
+  email        String   @unique
+  // DC2 public-facing fields (nullable until set). Tenant-scoped handle uniqueness is
+  // intentionally NOT enforced yet — handle-vs-membership placement is unresolved (see T6 notes).
+  publicHandle String?
+  displayName  String?
+  status       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Tenant-scoped uniqueness: a user has at most one membership per tenant.
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Canvas {
+  id         String    @id @default(cuid())
+  tenantId   String
+  termLabel  String
+  status     String
+  width      Int
+  height     Int
+  startsAt   DateTime?
+  endsAt     DateTime?
+  frozenAt   DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // One canvas per term per tenant (tenant-scoped).
+  @@unique([tenantId, termLabel])
+  @@index([tenantId])
+}

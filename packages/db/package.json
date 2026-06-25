@@ -1,0 +1,25 @@
+{
+  "name": "@quad/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7",
+    "@prisma/client": "^7",
+    "pg": "^8"
+  },
+  "devDependencies": {
+    "@types/pg": "^8",
+    "prisma": "^7"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:validate": "prisma validate",
+    "db:generate": "prisma generate",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  }
+}
