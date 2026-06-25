@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Shareable TS preset (T3 skeleton): re-exports the repo-root strict base. Packages extend ../../tsconfig.base.json directly for now.",
+  "extends": "../../tsconfig.base.json"
+}
