@@ -160,28 +160,27 @@ The full governance model, per-role guide instructions, and playbook formats liv
 
 ## Getting Started
 
-> ⚠️ **Pre-implementation.** The commands below describe the **target** developer workflow that activates once implementation begins (the explicit `START IMPLEMENTATION` gate). They are documented here so the architecture is unambiguous; they are **not yet runnable**.
+The foundation is runnable today. (Foundation only — product features build per [`docs/MILESTONES.md`](docs/MILESTONES.md); their developer workflow activates as those milestones land.)
 
 ```bash
-# 1. Prerequisites: see docs/TECH_BASELINE.md for required Node / pnpm / Docker versions
-corepack enable
+# 1. Prerequisites: Node 22 + pnpm 10 + Docker (see docs/TECH_BASELINE.md)
+nvm use 22
 
-# 2. Install
-pnpm install
+# 2. Install (lockfile-pinned)
+pnpm install --frozen-lockfile
 
-# 3. Bring up infrastructure (Postgres + Redis) and apps
-docker compose up -d
-cp .env.example .env            # then fill in secrets
+# 3. Quality gates (Turbo-orchestrated: lint · typecheck · test · build)
+pnpm typecheck
+pnpm build
+pnpm check
 
-# 4. Database
-pnpm --filter @quad/db migrate
-pnpm --filter @quad/db seed     # seeds the Rutgers tenant (tenant #1) + a semester canvas
+# 4. Unit tests for the shared test harness
+pnpm --filter @quad/testing test
 
-# 5. Develop (Turbo orchestrates web + api)
-pnpm dev
-
-# 6. Quality gates
-pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e
+# 5. Docker-backed integration (local Postgres + Redis)
+docker compose up -d --wait postgres redis
+pnpm --filter @quad/testing test:integration
+docker compose down
 ```
 
 ---

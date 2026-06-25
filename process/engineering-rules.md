@@ -25,6 +25,7 @@
 - **`main` is protected** — no direct pushes; changes land only through a PR (emergency repository repair excepted).
 - **Signed commits are required** — configure SSH (or GPG) commit signing; unsigned/unverified commits cannot merge.
 - **To merge:** CI `verify` (lint/typecheck/test/build) green and branch up to date with `main`; commits **verified/signed**; review threads resolved (including external review apps).
+- **Squash merge only.** `main` accepts squash merges (merge commits and rebase merges are disabled; the branch is deleted on merge). The squash title is work-descriptive with no task/milestone labels; its body carries no co-author trailers or tool/authorship fingerprints.
 - **Neutral history** — no tool/automation/authorship attribution in commit messages, files, branch names, or PR text.
 - **Docs move with the change** — a contract/behavior change updates `@quad/core` + the owning doc/spec **in the same PR**, not as a trailing cleanup.
 

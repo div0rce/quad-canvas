@@ -1,6 +1,6 @@
 # Quad — Corpus Consistency Audit (Phase 5)
 
-> **Whole-corpus cross-reference / contract-drift audit** (point-in-time, **2026-06-24**) that gated the start of implementation. Evidence-based: findings below were verified against the real filesystem (file listing + targeted `grep`), not asserted. It also defined the **first foundation tasks**. **Status since:** the foundation — workspace, `@quad/*` packages, `apps/web` / `apps/api` shells, and the `@quad/testing` harness — has been built and **merged to `main`**; product features are not yet started. See `docs/CHECKPOINTS.md` §4a for the live current state.
+> **Whole-corpus cross-reference / contract-drift audit** (point-in-time, **2026-06-24**) that gated the start of implementation. Evidence-based: findings below were verified against the real filesystem (file listing + targeted `grep`), not asserted. It also defined the **first foundation tasks**. **Status since:** the foundation — workspace, `@quad/*` packages, `apps/web` / `apps/api` shells, and the `@quad/testing` harness — has been built and **merged to `main`**, and the **G1 foundation checkpoint has PASSED**; product features are not yet started. See `docs/CHECKPOINTS.md` §4a for the live current state.
 >
 > **Method:** `find` for manifest completeness; `grep` for label/contract/privacy/tenant consistency across `docs/`, `process/`, `templates/`, `specs/`, and root config. Tenant-neutral (Rutgers Quad = tenant #1).
 
