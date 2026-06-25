@@ -1,0 +1,4 @@
+# Next.js build output & types (recreated on `next build` / `next dev`)
+/.next/
+/next-env.d.ts
+*.tsbuildinfo
