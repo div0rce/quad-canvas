@@ -1,6 +1,6 @@
 // @quad/core — REST DTO contracts (T4 skeleton). The single source of shared shapes
 // (no duplicate DTOs elsewhere). Public/participant responses expose DC2 only — never DC3.
-import type { Coordinate, ColorIndex, PerCanvasSequence } from '../domain/ids.js';
+import type { Coordinate, ColorIndex, PerCanvasSequence, CanvasId } from '../domain/ids.js';
 import type { PublicIdentity } from '../domain/identity.js';
 
 /**
@@ -67,6 +67,8 @@ export interface PixelResponse {
 
 /** Live canvas metadata for the initial client load (no attribution; DC2-safe). */
 export interface CanvasMetaResponse {
+  /** Canvas resource id — the client uses it to subscribe over WebSocket. */
+  readonly id: CanvasId;
   readonly term: string;
   readonly status: string;
   readonly width: number;

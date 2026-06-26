@@ -13,5 +13,5 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "next.config.ts"],
-  "exclude": ["node_modules", ".next", "dist"]
+  "exclude": ["node_modules", ".next", "dist", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }
