@@ -331,7 +331,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const page = hasMore ? rows.slice(0, query.limit) : rows;
       const nextCursor = hasMore ? (page[page.length - 1]?.seq ?? null) : null;
       return {
-        entries: page.map((r) => ({ color: r.newColor, seq: r.seq, ownerHandle: r.actor.publicHandle, placedAt: r.createdAt })),
+        // PixelPlaced events always carry newColor (the filter excludes compensating events).
+        entries: page.map((r) => ({ color: r.newColor ?? 0, seq: r.seq, ownerHandle: r.actor.publicHandle, placedAt: r.createdAt })),
         nextCursor,
       };
     },
@@ -350,7 +351,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
         select: { x: true, y: true, newColor: true, seq: true, createdAt: true },
       });
-      return e ? { x: e.x, y: e.y, color: e.newColor, seq: e.seq, placedAt: e.createdAt } : null;
+      if (!e || e.newColor === null) return null; // only a placement (non-null newColor) is replayable
+      return { x: e.x, y: e.y, color: e.newColor, seq: e.seq, placedAt: e.createdAt };
     },
 
     async appendPlacement(input) {
@@ -364,7 +366,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           select: { x: true, y: true, newColor: true, seq: true, createdAt: true },
         });
         if (existing) {
-          return { kind: 'duplicate', row: { x: existing.x, y: existing.y, color: existing.newColor, seq: existing.seq, placedAt: existing.createdAt } };
+          return { kind: 'duplicate', row: { x: existing.x, y: existing.y, color: existing.newColor ?? color, seq: existing.seq, placedAt: existing.createdAt } };
         }
 
         // Re-check the canvas is still active INSIDE the lock — a freeze that committed between the
