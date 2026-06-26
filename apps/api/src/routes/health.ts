@@ -1,30 +1,48 @@
-// apps/api — health & readiness routes (T7 shell). The ONLY routes in the shell.
+// apps/api — health & readiness. Liveness (`/healthz`) = the process is up. Readiness (`/readyz`)
+// runs the configured dependency checks (DB, Redis, …): ALL must pass for 200 ready; any failure (or
+// no checks configured) → 503. Failures never leak internal/DC detail — only a per-check ok/fail.
 import type { FastifyPluginAsync } from 'fastify';
 
-const healthRoutes: FastifyPluginAsync = async (app) => {
-  // Liveness: the process is up and serving. `tenant` (DC2 slug) reflects host resolution.
-  app.get('/healthz', async (request) => {
-    return {
-      status: 'ok',
-      uptimeSeconds: Math.round(process.uptime()),
-      tenant: request.tenant ? request.tenant.slug : null,
-    };
-  });
+export interface ReadinessCheck {
+  readonly name: string;
+  /** Resolve when the dependency is reachable; reject/throw when it is not. */
+  readonly check: () => Promise<void>;
+}
 
-  // Readiness: T7 is a SHELL. The database is NOT wired or checked here, so this endpoint
-  // does NOT imply production readiness — `ready` stays false until real dependency checks exist.
-  app.get('/readyz', async (request) => {
-    return {
-      status: 'ok',
-      ready: false,
-      note: 'API shell (T7): database not wired; readiness is not a production guarantee.',
-      tenant: request.tenant ? request.tenant.slug : null,
-      checks: {
-        server: { status: 'ok' },
-        database: { status: 'not_checked', reason: 'DB not wired in T7 shell' },
-      },
-    };
-  });
-};
+export function makeHealthRoutes(checks: readonly ReadinessCheck[] = []): FastifyPluginAsync {
+  return async (app) => {
+    // Liveness: the process is up and serving. `tenant` (DC2 slug) reflects host resolution.
+    app.get('/healthz', async (request) => {
+      return {
+        status: 'ok',
+        uptimeSeconds: Math.round(process.uptime()),
+        tenant: request.tenant ? request.tenant.slug : null,
+      };
+    });
 
-export default healthRoutes;
+    // Readiness: run every dependency check. 200 only when checks exist AND all pass; else 503.
+    app.get('/readyz', async (request, reply) => {
+      const results = await Promise.all(
+        checks.map(async (c) => {
+          try {
+            await c.check();
+            return [c.name, true] as const;
+          } catch {
+            return [c.name, false] as const; // never surface the error (no internal/DC leak)
+          }
+        }),
+      );
+      const ready = checks.length > 0 && results.every(([, ok]) => ok);
+      const checkStatuses = Object.fromEntries(results.map(([name, ok]) => [name, { status: ok ? 'ok' : 'fail' }]));
+      if (!ready) void reply.status(503);
+      return {
+        status: ready ? 'ok' : 'unavailable',
+        ready,
+        tenant: request.tenant ? request.tenant.slug : null,
+        checks: { server: { status: 'ok' }, ...checkStatuses },
+      };
+    });
+  };
+}
+
+export default makeHealthRoutes;

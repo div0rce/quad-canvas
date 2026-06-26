@@ -13,7 +13,7 @@ import { makeMetricsPlugin } from './plugins/metrics.js';
 import { MetricsRegistry } from './metrics/registry.js';
 import tenantPlugin from './plugins/tenant.js';
 import { makeIdentityPlugin, type IdentityResolver } from './plugins/identity.js';
-import healthRoutes from './routes/health.js';
+import { makeHealthRoutes, type ReadinessCheck } from './routes/health.js';
 import { makePixelRoutes } from './routes/pixels.js';
 import { makeWsRoutes } from './routes/ws.js';
 import { makeSessionRoutes } from './routes/session.js';
@@ -64,6 +64,8 @@ export interface BuildAppOptions {
   readonly bodyLimitBytes?: number;
   /** Request-metrics registry (default a fresh one). Inject to read counters in tests. */
   readonly metrics?: MetricsRegistry;
+  /** Dependency checks for `/readyz` (DB, Redis, …) — built at the composition root. */
+  readonly readinessChecks?: readonly ReadinessCheck[];
 }
 
 const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
@@ -123,7 +125,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(cookiePlugin);
   await app.register(tenantPlugin);
   await app.register(makeIdentityPlugin(resolver));
-  await app.register(healthRoutes);
+  await app.register(makeHealthRoutes(opts.readinessChecks ?? []));
 
   if (opts.auth?.service) {
     await app.register(

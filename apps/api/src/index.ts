@@ -12,6 +12,7 @@ import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verifi
 import { LogMailTransport } from './auth/mail.js';
 import { AuthService } from './auth/auth-service.js';
 import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
+import type { ReadinessCheck } from './routes/health.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -39,8 +40,16 @@ async function main(): Promise<void> {
   let sessionStore: SessionStore | undefined;
   let sessionRedis: Redis | undefined;
   let authService: AuthService | undefined;
+  const readinessChecks: ReadinessCheck[] = [];
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
+    // Deep readiness: a trivial query proves the DB is reachable (not just that the process is up).
+    readinessChecks.push({
+      name: 'database',
+      check: async () => {
+        await prisma.$queryRaw`SELECT 1`;
+      },
+    });
     // Redis-backed fan-out (cross-node) when REDIS_URL is set; otherwise in-memory (single node).
     // Both implement the same RealtimeBus interface, so nothing else changes.
     bus = REDIS_URL ? new RedisRealtimeBus(REDIS_URL) : new InMemoryRealtimeBus();
@@ -56,6 +65,13 @@ async function main(): Promise<void> {
     if (REDIS_URL) {
       sessionRedis = new Redis(REDIS_URL);
       sessionStore = new RedisSessionStore(sessionRedis);
+      const redis = sessionRedis;
+      readinessChecks.push({
+        name: 'redis',
+        check: async () => {
+          await redis.ping();
+        },
+      });
     } else {
       sessionStore = new InMemorySessionStore();
     }
@@ -77,6 +93,7 @@ async function main(): Promise<void> {
   const app = await buildApp({
     logger: true,
     trustProxy: TRUST_PROXY,
+    ...(readinessChecks.length ? { readinessChecks } : {}),
     ...(placement ? { placement } : {}),
     // Cross-node abuse protection when Redis is available (reuses the session client; distinct key
     // prefix). Without Redis, buildApp falls back to a single-node in-memory limiter.
