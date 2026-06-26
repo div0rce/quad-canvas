@@ -221,6 +221,14 @@ export interface ArchivePage {
   readonly nextCursor: string | null;
 }
 
+export interface ProfileRow {
+  readonly handle: string;
+  readonly displayName: string | null;
+  readonly role: string;
+  readonly joinedAt: Date;
+  readonly pixelsPlaced: number;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -228,6 +236,10 @@ export interface PlacementRepository {
   listArchives(tenantId: string, query: { cursor?: string; limit: number }): Promise<ArchivePage>;
   /** A single archived canvas by term label, or null if none/not archived. */
   findArchiveByTerm(tenantId: string, term: string): Promise<ArchiveRow | null>;
+  /** A member's public profile (DC2 + placement count) by handle, scoped to the tenant. */
+  getProfileByHandle(tenantId: string, handle: string): Promise<ProfileRow | null>;
+  /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
+  getProfileByUserId(tenantId: string, userId: string): Promise<ProfileRow | null>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
@@ -331,6 +343,29 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       if (!c || c.status !== 'archived') return null; // only archived canvases are public archives
       return { id: c.id, term: c.termLabel, status: c.status, width: c.width, height: c.height, createdAt: c.createdAt };
+    },
+
+    async getProfileByHandle(tenantId, handle) {
+      // Tenant-scoped: an ACTIVE member of this tenant whose user carries this public handle.
+      // Handles are not yet tenant-unique (schema note), so pick deterministically by join order.
+      const m = await prisma.membership.findFirst({
+        where: { tenantId, status: 'active', user: { publicHandle: handle } },
+        orderBy: { createdAt: 'asc' },
+        select: { role: true, createdAt: true, userId: true, user: { select: { publicHandle: true, displayName: true } } },
+      });
+      if (!m || m.user.publicHandle === null) return null;
+      const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: m.userId, type: 'PixelPlaced' } });
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced };
+    },
+
+    async getProfileByUserId(tenantId, userId) {
+      const m = await prisma.membership.findUnique({
+        where: { tenantId_userId: { tenantId, userId } },
+        select: { role: true, status: true, createdAt: true, user: { select: { publicHandle: true, displayName: true } } },
+      });
+      if (!m || m.status !== 'active' || m.user.publicHandle === null) return null;
+      const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced' } });
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced };
     },
 
     async findActiveMembership(tenantId, userId) {

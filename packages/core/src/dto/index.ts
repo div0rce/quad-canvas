@@ -185,6 +185,20 @@ export interface CanvasLifecycleCommand {
   readonly status: string;
 }
 
+/** A user's public profile within a tenant (DC2 only — handle/display/role/stats, never email). */
+export interface ProfileResponse {
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly role: Role;
+  /** ISO-8601 timestamp the user joined this tenant. */
+  readonly joinedAt: string;
+  /** Count of the user's placements in this tenant. */
+  readonly pixelsPlaced: number;
+}
+
+/** The caller's own profile. Currently the same DC2 shape (private fields are a follow-on). */
+export type MyProfileResponse = ProfileResponse;
+
 /** A past-term canvas archive (immutable; public metadata only). */
 export interface ArchiveSummary {
   readonly id: string;
