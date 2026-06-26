@@ -8,6 +8,7 @@ import type { domain } from '@quad/core';
 import { SubscriptionRegistry } from '@quad/realtime';
 import errorsPlugin from './plugins/errors.js';
 import securityHeadersPlugin from './plugins/security-headers.js';
+import accessLogPlugin from './plugins/access-log.js';
 import tenantPlugin from './plugins/tenant.js';
 import { makeIdentityPlugin, type IdentityResolver } from './plugins/identity.js';
 import healthRoutes from './routes/health.js';
@@ -59,6 +60,9 @@ function toRole(role: string): domain.Role | null {
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: opts.logger ?? false,
+    // Our access-log hook is the single, DC-safe access log (route template, no raw URL/query). Turn
+    // off Fastify's built-in req/res logging so it doesn't duplicate or log the raw URL+query string.
+    disableRequestLogging: true,
   });
 
   // Resolve principals from sessions only when both a session store and the repository (for the
@@ -80,6 +84,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   }
 
   await app.register(securityHeadersPlugin);
+  await app.register(accessLogPlugin);
   await app.register(errorsPlugin);
   await app.register(cookiePlugin);
   await app.register(tenantPlugin);
