@@ -1,12 +1,15 @@
 // apps/api — application factory (T7 shell). buildApp wires plugins + routes but does NOT
 // listen, so it is reusable for tests (app.inject) and the composition root (index.ts).
 import Fastify from 'fastify';
+import websocketPlugin from '@fastify/websocket';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
+import { SubscriptionRegistry } from '@quad/realtime';
 import errorsPlugin from './plugins/errors.js';
 import tenantPlugin from './plugins/tenant.js';
 import identityPlugin from './plugins/identity.js';
 import healthRoutes from './routes/health.js';
 import { makePixelRoutes } from './routes/pixels.js';
+import { makeWsRoutes } from './routes/ws.js';
 import type { PlacementDeps } from './services/placement.js';
 
 export interface BuildAppOptions {
@@ -29,6 +32,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   if (opts.placement) {
     await app.register(makePixelRoutes(opts.placement));
+    const registry = new SubscriptionRegistry();
+    await app.register(websocketPlugin, { options: { maxPayload: 1_048_576 } });
+    await app.register(makeWsRoutes(registry, opts.placement.repo));
   }
 
   return app;

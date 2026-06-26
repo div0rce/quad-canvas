@@ -72,8 +72,12 @@ export class SubscriptionRegistry {
     for (const connectionId of set) {
       const entry = this.#connections.get(connectionId);
       if (entry && entry.conn.tenantId === tenantId) {
-        entry.conn.send(message);
-        sent += 1;
+        try {
+          entry.conn.send(message);
+          sent += 1;
+        } catch {
+          // A single broken transport must not abort fan-out to the rest of the subscribers.
+        }
       }
     }
     return sent;
