@@ -185,6 +185,21 @@ export interface CanvasLifecycleCommand {
   readonly status: string;
 }
 
+/** One ranked entry in a leaderboard (DC2 only). */
+export interface LeaderboardEntry {
+  readonly rank: number;
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly pixelsPlaced: number;
+}
+
+/** A ranked leaderboard for a (category, window). DC2; eventually consistent. */
+export interface LeaderboardResponse {
+  readonly category: string;
+  readonly window: string;
+  readonly entries: readonly LeaderboardEntry[];
+}
+
 /** A user's public profile within a tenant (DC2 only — handle/display/role/stats, never email). */
 export interface ProfileResponse {
   readonly handle: string;
