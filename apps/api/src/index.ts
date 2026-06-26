@@ -8,6 +8,13 @@ import { Redis } from 'ioredis';
 import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
 import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './auth/session-store.js';
+import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verification-store.js';
+import { LogMailTransport } from './auth/mail.js';
+import { AuthService } from './auth/auth-service.js';
+
+const VERIFICATION_TTL_SECONDS = 15 * 60;
+const SESSION_TTL_SECONDS = 12 * 60 * 60;
+const COOKIE_SECURE = process.env['QUAD_COOKIE_INSECURE'] !== '1';
 
 const PORT = Number(process.env['PORT'] ?? 3000);
 const HOST = process.env['HOST'] ?? '127.0.0.1';
@@ -25,6 +32,7 @@ async function main(): Promise<void> {
   let bus: RealtimeBus | undefined;
   let sessionStore: SessionStore | undefined;
   let sessionRedis: Redis | undefined;
+  let authService: AuthService | undefined;
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
     // Redis-backed fan-out (cross-node) when REDIS_URL is set; otherwise in-memory (single node).
@@ -45,12 +53,34 @@ async function main(): Promise<void> {
     } else {
       sessionStore = new InMemorySessionStore();
     }
+    // Verification front-door: tokens share the session Redis (distinct key prefix). The mail
+    // transport is a no-op logger by default — production wires the real provider (B6/SMTP).
+    const verifications = sessionRedis ? new RedisVerificationStore(sessionRedis) : new InMemoryVerificationStore();
+    authService = new AuthService({
+      verifications,
+      // No real provider configured: surface the masked link to the server log so tokens are not
+      // silently dropped (dev fallback). Production wires B6/SMTP via this same MailTransport seam.
+      mail: new LogMailTransport((m) => process.stdout.write(`[auth] ${m}\n`)),
+      repo: placement.repo,
+      sessions: sessionStore,
+      verificationTtlSeconds: VERIFICATION_TTL_SECONDS,
+      sessionTtlSeconds: SESSION_TTL_SECONDS,
+    });
   }
 
   const app = await buildApp({
     logger: true,
     ...(placement ? { placement } : {}),
-    ...(sessionStore ? { auth: { sessionStore } } : {}),
+    ...(sessionStore
+      ? {
+          auth: {
+            sessionStore,
+            ...(authService ? { service: authService } : {}),
+            sessionTtlSeconds: SESSION_TTL_SECONDS,
+            cookieSecure: COOKIE_SECURE,
+          },
+        }
+      : {}),
   });
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');

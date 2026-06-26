@@ -3,6 +3,7 @@
 // performs: idempotency replay → cooldown enforcement → per-canvas sequence allocation →
 // append PixelPlaced → upsert the projection. So duplicate-safety, cooldown fairness, and
 // ordering are all atomic with the append (docs/EVENT_SOURCING.md §9, DB-INV-4, COOL-DP-*).
+import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '../client.js';
 
 /** The tenant's current (active) canvas. */
@@ -91,6 +92,10 @@ export interface PlacementRepository {
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
   findActiveMembership(tenantId: string, userId: string): Promise<{ role: string } | null>;
+  /** Find or create a user by email (DC3); a placeholder public handle is generated for new users. */
+  findOrCreateUserByEmail(email: string): Promise<{ id: string }>;
+  /** Ensure a membership exists (active for new users); NEVER re-activates a suspended/banned one. */
+  ensureActiveMembership(tenantId: string, userId: string, role: string): Promise<void>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -130,6 +135,29 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       if (!m || m.status !== 'active') return null;
       return { role: m.role };
+    },
+
+    async findOrCreateUserByEmail(email) {
+      // Canonicalize so case/whitespace variants map to one account; upsert is race-safe on the
+      // unique email and the generated handle is only used on first insert.
+      const normalized = email.trim().toLowerCase();
+      const user = await prisma.user.upsert({
+        where: { email: normalized },
+        create: { email: normalized, publicHandle: `user_${randomBytes(5).toString('hex')}`, status: 'active' },
+        update: {},
+        select: { id: true },
+      });
+      return { id: user.id };
+    },
+
+    async ensureActiveMembership(tenantId, userId, role) {
+      // New members are created active; an existing membership is left untouched — re-verifying must
+      // never reinstate a suspended/banned user (status stays as-is).
+      await prisma.membership.upsert({
+        where: { tenantId_userId: { tenantId, userId } },
+        create: { tenantId, userId, role, status: 'active' },
+        update: {},
+      });
     },
 
     async getSnapshot(canvasId) {
