@@ -19,6 +19,8 @@ import { makeReportRoutes } from './routes/reports.js';
 import { makeArchiveRoutes } from './routes/archives.js';
 import { makeProfileRoutes } from './routes/profiles.js';
 import { makeLeaderboardRoutes } from './routes/leaderboards.js';
+import { InMemoryRateLimiter, type RateLimiter } from './rate-limit/rate-limiter.js';
+import { makeRateLimit } from './rate-limit/prehandler.js';
 import type { PlacementDeps } from './services/placement.js';
 import type { SessionStore } from './auth/session-store.js';
 import type { AuthService } from './auth/auth-service.js';
@@ -39,6 +41,10 @@ export interface BuildAppOptions {
     readonly sessionTtlSeconds?: number;
     readonly cookieSecure?: boolean;
   };
+  /** Abuse-protection limiter (default in-memory; inject a Redis-backed one in production). */
+  readonly rateLimiter?: RateLimiter;
+  /** Placement request budget (abuse protection — well above the cooldown-allowed human rate). */
+  readonly placementRateLimit?: { readonly limit: number; readonly windowSec: number };
 }
 
 const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
@@ -94,7 +100,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   }
 
   if (opts.placement) {
-    await app.register(makePixelRoutes(opts.placement));
+    // Abuse protection on writes (RATE_LIMITED) — distinct from the in-transaction placement cooldown.
+    const limiter = opts.rateLimiter ?? new InMemoryRateLimiter();
+    const placeBudget = opts.placementRateLimit ?? { limit: 240, windowSec: 60 };
+    const placementRateLimit = makeRateLimit(limiter, { ...placeBudget, bucket: 'place' });
+    await app.register(makePixelRoutes(opts.placement, placementRateLimit));
     await app.register(makeSessionRoutes(opts.placement.repo));
     await app.register(makeArchiveRoutes(opts.placement.repo));
     await app.register(makeProfileRoutes(opts.placement.repo));

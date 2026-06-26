@@ -11,6 +11,7 @@ import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './au
 import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verification-store.js';
 import { LogMailTransport } from './auth/mail.js';
 import { AuthService } from './auth/auth-service.js';
+import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -71,6 +72,9 @@ async function main(): Promise<void> {
   const app = await buildApp({
     logger: true,
     ...(placement ? { placement } : {}),
+    // Cross-node abuse protection when Redis is available (reuses the session client; distinct key
+    // prefix). Without Redis, buildApp falls back to a single-node in-memory limiter.
+    ...(sessionRedis ? { rateLimiter: new RedisRateLimiter(sessionRedis) } : {}),
     ...(sessionStore
       ? {
           auth: {

@@ -8,6 +8,9 @@ import type { domain, dto } from '@quad/core';
 import { placePixel } from '../services/placement.js';
 import type { PlacementDeps, PlacementInput } from '../services/placement.js';
 
+/** A preHandler hook (e.g. the rate limiter). */
+type PreHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
 const STATUS: Record<dto.ErrorCode, number> = {
   VALIDATION_ERROR: 422,
   UNAUTHENTICATED: 401,
@@ -46,10 +49,10 @@ function clampLimit(raw: unknown): number {
   return Math.min(n, MAX_HISTORY_LIMIT);
 }
 
-export function makePixelRoutes(placement: PlacementDeps): FastifyPluginAsync {
+export function makePixelRoutes(placement: PlacementDeps, rateLimit?: PreHandler): FastifyPluginAsync {
   return async (app) => {
     // Placement command (write). Tenant + verified principal required.
-    app.post('/api/v1/canvas/current/pixels', async (request, reply) => {
+    app.post('/api/v1/canvas/current/pixels', rateLimit ? { preHandler: rateLimit } : {}, async (request, reply) => {
       if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
       if (!request.principal) return sendError(reply, request, 'UNAUTHENTICATED', 'Authentication required.');
 
