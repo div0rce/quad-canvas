@@ -6,6 +6,9 @@ import type { dto } from '@quad/core';
 import type { PlacementRepository, ListReportsQuery } from '@quad/db';
 import { requireRole } from '../auth/roles.js';
 
+/** A preHandler hook (e.g. the rate limiter). */
+type PreHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
@@ -20,9 +23,11 @@ function err(reply: FastifyReply, request: FastifyRequest, status: number, code:
   return reply.status(status).send(body);
 }
 
-export function makeReportRoutes(repo: PlacementRepository): FastifyPluginAsync {
+export function makeReportRoutes(repo: PlacementRepository, rateLimit?: PreHandler): FastifyPluginAsync {
+  // Rate limit runs before the role gate so report spam is throttled per filer.
+  const filePreHandlers = rateLimit ? [rateLimit, requireRole('participant')] : requireRole('participant');
   return async (app) => {
-    app.post('/api/v1/reports', { preHandler: requireRole('participant') }, async (request, reply) => {
+    app.post('/api/v1/reports', { preHandler: filePreHandlers }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
       const body = (request.body ?? {}) as Partial<dto.SubmitReportCommand>;

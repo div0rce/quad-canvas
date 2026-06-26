@@ -21,6 +21,11 @@ const PORT = Number(process.env['PORT'] ?? 3000);
 const HOST = process.env['HOST'] ?? '127.0.0.1';
 const DATABASE_URL = process.env['DATABASE_URL'];
 const REDIS_URL = process.env['REDIS_URL'];
+// Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. '1'/'true' →
+// trust the immediate proxy; any other non-empty value is passed through (IP/CIDR/hop count).
+const rawTrustProxy = process.env['TRUST_PROXY']?.trim();
+const TRUST_PROXY: boolean | string =
+  rawTrustProxy === '1' || rawTrustProxy === 'true' ? true : rawTrustProxy && rawTrustProxy !== '' ? rawTrustProxy : false;
 // Fail-closed: an unset/empty/non-numeric/negative override falls back to the default cooldown
 // (never to 0 by accident). An explicit non-negative number is honoured.
 const DEFAULT_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;
@@ -71,6 +76,7 @@ async function main(): Promise<void> {
 
   const app = await buildApp({
     logger: true,
+    trustProxy: TRUST_PROXY,
     ...(placement ? { placement } : {}),
     // Cross-node abuse protection when Redis is available (reuses the session client; distinct key
     // prefix). Without Redis, buildApp falls back to a single-node in-memory limiter.

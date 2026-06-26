@@ -47,6 +47,17 @@ export interface BuildAppOptions {
   readonly rateLimiter?: RateLimiter;
   /** Placement request budget (abuse protection — well above the cooldown-allowed human rate). */
   readonly placementRateLimit?: { readonly limit: number; readonly windowSec: number };
+  /** Verify-endpoint budget per IP (anti-spam on magic-link request / anti-brute-force on confirm). */
+  readonly authRateLimit?: { readonly limit: number; readonly windowSec: number };
+  /** Report-filing budget per member (anti-spam). */
+  readonly reportRateLimit?: { readonly limit: number; readonly windowSec: number };
+  /**
+   * Trust `X-Forwarded-*` so `request.ip` resolves the real client behind a proxy/load balancer
+   * (production topology, DEPLOYMENT.md). Required for correct per-IP rate limiting of anonymous
+   * traffic — otherwise every client shares the proxy socket IP. Default false (direct connections).
+   * Set to a trusted proxy IP/CIDR (or hop count) rather than `true` when not solely behind the LB.
+   */
+  readonly trustProxy?: boolean | string | number;
 }
 
 const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
@@ -63,6 +74,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     // Our access-log hook is the single, DC-safe access log (route template, no raw URL/query). Turn
     // off Fastify's built-in req/res logging so it doesn't duplicate or log the raw URL+query string.
     disableRequestLogging: true,
+    // Behind the production LB, resolve the real client IP from X-Forwarded-For so per-IP rate
+    // limiting of anonymous traffic doesn't lump every client under the proxy socket IP.
+    trustProxy: opts.trustProxy ?? false,
   });
 
   // Resolve principals from sessions only when both a session store and the repository (for the
@@ -83,6 +97,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     };
   }
 
+  // One abuse-protection limiter shared across endpoints (distinct buckets keep their budgets
+  // independent). Default in-memory single-node; a Redis-backed one is injected in production.
+  const limiter = opts.rateLimiter ?? new InMemoryRateLimiter();
+  const authBudget = opts.authRateLimit ?? { limit: 10, windowSec: 60 };
+  const reportBudget = opts.reportRateLimit ?? { limit: 20, windowSec: 60 };
+  const authRateLimit = makeRateLimit(limiter, { ...authBudget, bucket: 'auth' });
+  const reportRateLimit = makeRateLimit(limiter, { ...reportBudget, bucket: 'report' });
+
   await app.register(securityHeadersPlugin);
   await app.register(accessLogPlugin);
   await app.register(errorsPlugin);
@@ -96,6 +118,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       makeAuthRoutes(opts.auth.service, opts.auth.sessionStore, {
         sessionTtlSeconds: opts.auth.sessionTtlSeconds ?? 60 * 60 * 12,
         cookieSecure: opts.auth.cookieSecure ?? true,
+        rateLimit: authRateLimit,
       }),
     );
   }
@@ -103,12 +126,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   if (opts.auth && opts.placement) {
     await app.register(makeModerationRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
     await app.register(makeAdminRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
-    await app.register(makeReportRoutes(opts.placement.repo));
+    await app.register(makeReportRoutes(opts.placement.repo, reportRateLimit));
   }
 
   if (opts.placement) {
     // Abuse protection on writes (RATE_LIMITED) — distinct from the in-transaction placement cooldown.
-    const limiter = opts.rateLimiter ?? new InMemoryRateLimiter();
     const placeBudget = opts.placementRateLimit ?? { limit: 240, windowSec: 60 };
     const placementRateLimit = makeRateLimit(limiter, { ...placeBudget, bucket: 'place' });
     await app.register(makePixelRoutes(opts.placement, placementRateLimit));

@@ -27,7 +27,9 @@ async function seed(): Promise<void> {
   await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
 }
 
-async function build(): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; mail: CaptureMail }> {
+async function build(
+  over: { authRateLimit?: { limit: number; windowSec: number }; trustProxy?: boolean | string } = {},
+): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; mail: CaptureMail }> {
   const sessions = new InMemorySessionStore();
   const mail = new CaptureMail();
   const service = new AuthService({
@@ -41,6 +43,8 @@ async function build(): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; mai
   const app = await buildApp({
     placement: { repo, cooldownMs: 0, now: () => new Date(), bus: new InMemoryRealtimeBus() },
     auth: { sessionStore: sessions, service, cookieSecure: false },
+    ...(over.authRateLimit ? { authRateLimit: over.authRateLimit } : {}),
+    ...(over.trustProxy !== undefined ? { trustProxy: over.trustProxy } : {}),
   });
   return { app, mail };
 }
@@ -119,6 +123,46 @@ describe('auth verification front-door (HTTP)', () => {
         payload: { token: 'garbage' },
       });
       expect(res.statusCode).toBe(409);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rate-limits the verify endpoints past the budget (429)', async () => {
+    await seed();
+    const { app } = await build({ authRateLimit: { limit: 1, windowSec: 60 } });
+    try {
+      const request = () =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/verify/request',
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json' },
+          payload: { email: 'someone@scarletmail.rutgers.edu' },
+        });
+      expect((await request()).statusCode).toBe(202);
+      const blocked = await request();
+      expect(blocked.statusCode).toBe(429);
+      expect((blocked.json() as { error: { code: string } }).error.code).toBe('RATE_LIMITED');
+      expect(blocked.headers['retry-after']).toBeDefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keys the verify limiter by the forwarded client IP when trustProxy is on', async () => {
+    await seed();
+    const { app } = await build({ authRateLimit: { limit: 1, windowSec: 60 }, trustProxy: true });
+    try {
+      const req = (xff: string) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/verify/request',
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'x-forwarded-for': xff },
+          payload: { email: 'x@scarletmail.rutgers.edu' },
+        });
+      expect((await req('1.1.1.1')).statusCode).toBe(202); // client A — first
+      expect((await req('1.1.1.1')).statusCode).toBe(429); // client A — over budget
+      expect((await req('2.2.2.2')).statusCode).toBe(202); // client B — independent budget (not lumped under the proxy IP)
     } finally {
       await app.close();
     }

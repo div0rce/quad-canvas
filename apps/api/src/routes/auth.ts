@@ -9,10 +9,15 @@ import type { AuthService } from '../auth/auth-service.js';
 import type { SessionStore } from '../auth/session-store.js';
 import { SESSION_COOKIE } from '../plugins/identity.js';
 
+/** A preHandler hook (e.g. the rate limiter). */
+type PreHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
 export interface AuthRouteOptions {
   readonly sessionTtlSeconds: number;
   /** Set Secure on the cookie (true in production; false only for local http dev). */
   readonly cookieSecure: boolean;
+  /** Optional anti-spam/anti-brute-force limiter applied to the verify endpoints. */
+  readonly rateLimit?: PreHandler;
 }
 
 function err(reply: FastifyReply, request: FastifyRequest, status: number, code: dto.ErrorCode, message: string): FastifyReply {
@@ -21,8 +26,11 @@ function err(reply: FastifyReply, request: FastifyRequest, status: number, code:
 }
 
 export function makeAuthRoutes(service: AuthService, sessions: SessionStore, opts: AuthRouteOptions): FastifyPluginAsync {
+  // Throttle the unauthenticated verify endpoints (keyed by IP) — anti-spam on the email-sending
+  // request and anti-brute-force on token confirmation.
+  const verifyOpts = opts.rateLimit ? { preHandler: opts.rateLimit } : {};
   return async (app) => {
-    app.post('/api/v1/auth/verify/request', async (request, reply) => {
+    app.post('/api/v1/auth/verify/request', verifyOpts, async (request, reply) => {
       if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
       const body = (request.body ?? {}) as { email?: unknown };
       if (typeof body.email !== 'string') return err(reply, request, 422, 'VALIDATION_ERROR', 'email is required.');
@@ -37,7 +45,7 @@ export function makeAuthRoutes(service: AuthService, sessions: SessionStore, opt
       return reply.status(202).send({ status: 'sent' });
     });
 
-    app.post('/api/v1/auth/verify/confirm', async (request, reply) => {
+    app.post('/api/v1/auth/verify/confirm', verifyOpts, async (request, reply) => {
       if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
       const body = (request.body ?? {}) as { token?: unknown };
       if (typeof body.token !== 'string') return err(reply, request, 422, 'VALIDATION_ERROR', 'token is required.');
