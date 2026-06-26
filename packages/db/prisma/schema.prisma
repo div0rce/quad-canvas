@@ -121,6 +121,7 @@ model PixelEvent {
   @@index([canvasId, actorUserId]) // per-user last placement (cooldown derivation)
   @@index([canvasId, x, y, seq]) // per-cell history (ordered)
   @@index([tenantId])
+  @@index([tenantId, actorUserId]) // per-user placement count (profiles)
   @@map("pixel_events")
 }
 

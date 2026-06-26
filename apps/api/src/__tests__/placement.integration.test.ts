@@ -960,3 +960,33 @@ describe('archives (HTTP)', () => {
     }
   });
 });
+
+describe('profiles (HTTP)', () => {
+  it('serves a public DC2 profile with placement count, and the caller own profile', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers', handle: 'alice' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'pa1' });
+    await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 2, idempotencyKey: 'pa2' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const pub = await app.inject({ method: 'GET', url: '/api/v1/profiles/alice', headers: { host: 'rutgers.localhost' } });
+      expect(pub.statusCode).toBe(200);
+      expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2 });
+      expect(pub.body).not.toContain('@'); // no DC3 email
+
+      const me = await app.inject({ method: 'GET', url: '/api/v1/profiles/me', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
+      expect(me.statusCode).toBe(200);
+      expect((me.json() as { handle: string }).handle).toBe('alice');
+
+      const unknown = await app.inject({ method: 'GET', url: '/api/v1/profiles/nobody', headers: { host: 'rutgers.localhost' } });
+      expect(unknown.statusCode).toBe(404);
+
+      const anonMe = await app.inject({ method: 'GET', url: '/api/v1/profiles/me', headers: { host: 'rutgers.localhost' } });
+      expect(anonMe.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+});
