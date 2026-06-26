@@ -132,6 +132,14 @@ export interface ReportPage {
   readonly nextCursor: string | null;
 }
 
+export interface ResolveReportInput {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+  readonly reportId: string;
+  readonly status: string;
+  readonly actionType: string;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -155,6 +163,8 @@ export interface PlacementRepository {
   createReport(input: CreateReportInput): Promise<{ id: string; status: string }>;
   /** Cursor-paginated report queue for a tenant (oldest→newest), optionally filtered by status. */
   listReports(tenantId: string, query: ListReportsQuery): Promise<ReportPage>;
+  /** Atomically set a report's status + write the DC4 audit record. `updated:false` if not found. */
+  resolveReport(input: ResolveReportInput): Promise<ApplyMemberModerationResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -403,6 +413,28 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const last = items[items.length - 1];
       const nextCursor = hasMore && last ? last.createdAt.toISOString() : null;
       return { items, nextCursor };
+    },
+
+    async resolveReport(input) {
+      // Report status change + audit commit together (no action without an audit, P-MOD-4).
+      return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        const result = await tx.report.updateMany({
+          where: { tenantId: input.tenantId, id: input.reportId },
+          data: { status: input.status },
+        });
+        if (result.count === 0) return { updated: false };
+        const action = await tx.moderationAction.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            actionType: input.actionType,
+            targetRef: input.reportId,
+            reason: `report ${input.status}`,
+          },
+          select: { id: true, createdAt: true },
+        });
+        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
     },
   };
 }

@@ -698,4 +698,41 @@ describe('reports queue (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('a moderator resolves a report (status transition + audit)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const reporter = await prisma.user.create({ data: { email: 'r3@scarletmail.rutgers.edu', publicHandle: 'r3', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: reporter.id, role: 'participant', status: 'active' } });
+    const mod = await prisma.user.create({ data: { email: 'mod3@scarletmail.rutgers.edu', publicHandle: 'mod3', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+
+    const sessions = new InMemorySessionStore();
+    const reporterSession = await sessions.create({ userId: reporter.id, tenantId: 'ten_rutgers' }, 3600);
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const filed = await app.inject({
+        method: 'POST',
+        url: '/api/v1/reports',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${reporterSession}` },
+        payload: { targetRef: 'pixel:1,1', reason: 'bad' },
+      });
+      const reportId = (filed.json() as { id: string }).id;
+
+      const resolved = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'resolve_report', targetRef: reportId, reason: 'handled' },
+      });
+      expect(resolved.statusCode).toBe(200);
+      const report = await prisma.report.findFirst({ where: { id: reportId } });
+      expect(report?.status).toBe('resolved');
+      const audits = await prisma.moderationAction.findMany({ where: { actionType: 'resolve_report' } });
+      expect(audits).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
 });
