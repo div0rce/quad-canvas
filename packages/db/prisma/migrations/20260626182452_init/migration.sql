@@ -88,6 +88,20 @@ CREATE TABLE "pixels" (
     CONSTRAINT "pixels_pkey" PRIMARY KEY ("canvas_id","x","y")
 );
 
+-- CreateTable
+CREATE TABLE "moderation_actions" (
+    "id" TEXT NOT NULL,
+    "tenant_id" TEXT NOT NULL,
+    "actor_user_id" TEXT NOT NULL,
+    "action_type" TEXT NOT NULL,
+    "target_ref" TEXT NOT NULL,
+    "reason" TEXT,
+    "related_event_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "moderation_actions_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Tenant_slug_key" ON "Tenant"("slug");
 
@@ -127,6 +141,9 @@ CREATE UNIQUE INDEX "pixel_events_tenant_id_idempotency_key_key" ON "pixel_event
 -- CreateIndex
 CREATE INDEX "pixels_tenant_id_idx" ON "pixels"("tenant_id");
 
+-- CreateIndex
+CREATE INDEX "moderation_actions_tenant_id_created_at_idx" ON "moderation_actions"("tenant_id", "created_at");
+
 -- AddForeignKey
 ALTER TABLE "Membership" ADD CONSTRAINT "Membership_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -156,3 +173,9 @@ ALTER TABLE "pixels" ADD CONSTRAINT "pixels_owner_user_id_fkey" FOREIGN KEY ("ow
 
 -- AddForeignKey
 ALTER TABLE "pixels" ADD CONSTRAINT "pixels_last_event_id_fkey" FOREIGN KEY ("last_event_id") REFERENCES "pixel_events"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "moderation_actions" ADD CONSTRAINT "moderation_actions_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "moderation_actions" ADD CONSTRAINT "moderation_actions_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

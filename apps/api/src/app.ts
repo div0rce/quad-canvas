@@ -13,6 +13,7 @@ import healthRoutes from './routes/health.js';
 import { makePixelRoutes } from './routes/pixels.js';
 import { makeWsRoutes } from './routes/ws.js';
 import { makeSessionRoutes } from './routes/session.js';
+import { makeModerationRoutes } from './routes/moderation.js';
 import type { PlacementDeps } from './services/placement.js';
 import type { SessionStore } from './auth/session-store.js';
 import type { AuthService } from './auth/auth-service.js';
@@ -79,6 +80,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         cookieSecure: opts.auth.cookieSecure ?? true,
       }),
     );
+  }
+
+  if (opts.auth && opts.placement) {
+    await app.register(makeModerationRoutes(opts.placement.repo, opts.auth.sessionStore));
   }
 
   if (opts.placement) {
