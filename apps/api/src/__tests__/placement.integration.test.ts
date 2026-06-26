@@ -1097,3 +1097,20 @@ describe('rate limiting (HTTP)', () => {
     }
   });
 });
+
+describe('request body limits (HTTP)', () => {
+  it('rejects an oversized request body with 413 (before the handler)', async () => {
+    const app = await buildApp({ placement: deps(0), bodyLimitBytes: 100 });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json' },
+        payload: JSON.stringify({ at: { x: 0, y: 0 }, color: 0, pad: 'x'.repeat(500) }),
+      });
+      expect(res.statusCode).toBe(413);
+    } finally {
+      await app.close();
+    }
+  });
+});
