@@ -628,6 +628,35 @@ describe('admin role assignment (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('lists the roster as DC2 for an admin', async () => {
+    const { app, cookie } = await seedAdmin();
+    try {
+      const p = await prisma.user.create({ data: { email: 'rosterp@scarletmail.rutgers.edu', publicHandle: 'rosterp', status: 'active' } });
+      await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: p.id, role: 'participant', status: 'active' } });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/admin/roster', headers: { host: 'rutgers.localhost', cookie } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { data: Array<{ userId: string; handle?: string; role: string }> };
+      expect(body.data.length).toBeGreaterThanOrEqual(2);
+      expect(body.data.map((m) => m.handle)).toContain('rosterp');
+      expect(res.body).not.toContain('@'); // no DC3 email
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects roster listing for a non-admin (403)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/admin/roster', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('reports queue (HTTP)', () => {

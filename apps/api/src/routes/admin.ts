@@ -8,6 +8,14 @@ import type { SessionStore } from '../auth/session-store.js';
 import { requireRole } from '../auth/roles.js';
 
 const ASSIGNABLE_ROLES = new Set<domain.Role>(['participant', 'moderator', 'admin']);
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
+
+function clampLimit(raw: unknown): number {
+  const n = typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+}
 
 function err(reply: FastifyReply, request: FastifyRequest, status: number, code: dto.ErrorCode, message: string): FastifyReply {
   const body: dto.ErrorResponse = { error: { code, message, requestId: request.id } };
@@ -51,6 +59,27 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
 
       const response: dto.RoleAssignmentResponse = { targetRef: body.targetRef, role };
       return reply.status(200).send(response);
+    });
+
+    app.get('/api/v1/admin/roster', { preHandler: requireRole('admin') }, async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const query = request.query as { cursor?: string; limit?: string };
+      const limit = clampLimit(query.limit);
+      const page = await repo.listRoster(request.tenant.id, {
+        limit,
+        ...(typeof query.cursor === 'string' ? { cursor: query.cursor } : {}),
+      });
+      const response: dto.RosterResponse = {
+        data: page.items.map((m) => ({
+          userId: m.userId,
+          role: m.role as domain.Role,
+          status: m.status,
+          ...(m.handle !== null ? { handle: m.handle } : {}),
+          ...(m.displayName !== null ? { displayName: m.displayName } : {}),
+        })),
+        page: { nextCursor: page.nextCursor, limit },
+      };
+      return reply.send(response);
     });
   };
 }
