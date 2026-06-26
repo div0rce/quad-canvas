@@ -1114,3 +1114,19 @@ describe('request body limits (HTTP)', () => {
     }
   });
 });
+
+describe('metrics (HTTP)', () => {
+  it('exposes Prometheus request counters at /metrics', async () => {
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      await app.inject({ method: 'GET', url: '/healthz', headers: { host: 'rutgers.localhost' } });
+      const res = await app.inject({ method: 'GET', url: '/metrics', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/plain');
+      expect(res.body).toContain('# TYPE http_requests_total counter');
+      expect(res.body).toMatch(/http_requests_total\{method="GET",route="\/healthz",status="200"\} \d+/);
+    } finally {
+      await app.close();
+    }
+  });
+});
