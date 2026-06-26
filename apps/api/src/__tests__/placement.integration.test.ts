@@ -657,6 +657,45 @@ describe('admin role assignment (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('an admin freezes the canvas: status + audit, and placement stops', async () => {
+    const { app, cookie, sessions } = await seedAdmin();
+    try {
+      await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+      const p = await prisma.user.create({ data: { email: 'pp@scarletmail.rutgers.edu', publicHandle: 'pp', status: 'active' } });
+      await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: p.id, role: 'participant', status: 'active' } });
+      const pSession = await sessions.create({ userId: p.id, tenantId: 'ten_rutgers' }, 3600);
+
+      const before = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'idempotency-key': 'lc1', 'content-type': 'application/json', cookie: `quad_session=${pSession}` },
+        payload: { at: { x: 0, y: 0 }, color: 0 },
+      });
+      expect(before.statusCode).toBe(201);
+
+      const frozen = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas/lifecycle',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { status: 'frozen' },
+      });
+      expect(frozen.statusCode).toBe(200);
+      expect((frozen.json() as { status: string }).status).toBe('frozen');
+      const audits = await prisma.moderationAction.findMany({ where: { actionType: 'canvas_lifecycle' } });
+      expect(audits).toHaveLength(1);
+
+      const after = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'idempotency-key': 'lc2', 'content-type': 'application/json', cookie: `quad_session=${pSession}` },
+        payload: { at: { x: 1, y: 1 }, color: 1 },
+      });
+      expect(after.statusCode).toBe(404); // no active canvas → placement rejected
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('reports queue (HTTP)', () => {

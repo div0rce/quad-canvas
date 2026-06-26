@@ -179,3 +179,8 @@ export interface RosterEntry {
 
 /** Cursor-paginated tenant roster (admin). */
 export type RosterResponse = Paginated<RosterEntry>;
+
+/** Admin canvas lifecycle transition (activate/freeze/archive); destructive deletion is never offered. */
+export interface CanvasLifecycleCommand {
+  readonly status: string;
+}
