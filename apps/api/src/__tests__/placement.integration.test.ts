@@ -5,6 +5,7 @@ import { InMemoryRealtimeBus } from '@quad/realtime';
 import { buildApp } from '../app.js';
 import { placePixel } from '../services/placement.js';
 import type { PlacementDeps } from '../services/placement.js';
+import { InMemorySessionStore } from '../auth/session-store.js';
 
 // Requires the local Docker Compose Postgres, migrated (see vitest.integration.config.ts).
 const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgresql://quad:quad@127.0.0.1:5432/quad';
@@ -292,6 +293,77 @@ describe('canvas read endpoints (HTTP)', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/api/v1/canvas/current', headers: { host: 'unknown.example' } });
       expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('authenticated placement (HTTP)', () => {
+  it('accepts a placement carrying a valid session cookie', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sessionId = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: {
+          host: 'rutgers.localhost',
+          'idempotency-key': 'k1',
+          'content-type': 'application/json',
+          cookie: `quad_session=${sessionId}`,
+        },
+        payload: { at: { x: 1, y: 1 }, color: 2 },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json() as { at: { x: number; y: number }; color: number };
+      expect(body.at).toEqual({ x: 1, y: 1 });
+      expect(body.color).toBe(2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('still rejects placement with no session (401)', async () => {
+    await seed({ tenantId: 'ten_rutgers' });
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'idempotency-key': 'k', 'content-type': 'application/json' },
+        payload: { at: { x: 0, y: 0 }, color: 0 },
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a session whose user has no active membership (401)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'Test', status: 'active' } });
+    const user = await prisma.user.create({
+      data: { email: 'nomember@scarletmail.rutgers.edu', publicHandle: 'nm', displayName: 'NM', status: 'active' },
+    });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const sessions = new InMemorySessionStore();
+    const sessionId = await sessions.create({ userId: user.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: {
+          host: 'rutgers.localhost',
+          'idempotency-key': 'k',
+          'content-type': 'application/json',
+          cookie: `quad_session=${sessionId}`,
+        },
+        payload: { at: { x: 0, y: 0 }, color: 0 },
+      });
+      expect(res.statusCode).toBe(401);
     } finally {
       await app.close();
     }

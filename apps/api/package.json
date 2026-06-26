@@ -5,13 +5,15 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
+    "@fastify/cookie": "^11",
     "@fastify/websocket": "^11",
     "@quad/config": "workspace:*",
     "@quad/core": "workspace:*",
     "@quad/db": "workspace:*",
     "@quad/realtime": "workspace:*",
     "fastify": "^5",
-    "fastify-plugin": "^5"
+    "fastify-plugin": "^5",
+    "ioredis": "^5"
   },
   "devDependencies": {
     "@types/node": "^22",
@@ -23,6 +25,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
+    "test": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "clean": "rm -rf dist *.tsbuildinfo"
   }

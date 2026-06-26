@@ -89,6 +89,8 @@ export interface PlacementRepository {
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
+  /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
+  findActiveMembership(tenantId: string, userId: string): Promise<{ role: string } | null>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -119,6 +121,15 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
       });
       return c ?? null;
+    },
+
+    async findActiveMembership(tenantId, userId) {
+      const m = await prisma.membership.findUnique({
+        where: { tenantId_userId: { tenantId, userId } },
+        select: { role: true, status: true },
+      });
+      if (!m || m.status !== 'active') return null;
+      return { role: m.role };
     },
 
     async getSnapshot(canvasId) {

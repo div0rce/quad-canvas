@@ -4,8 +4,10 @@
 import { buildApp } from './app.js';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
 import { InMemoryRealtimeBus, RedisRealtimeBus, type RealtimeBus } from '@quad/realtime';
+import { Redis } from 'ioredis';
 import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
+import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './auth/session-store.js';
 
 const PORT = Number(process.env['PORT'] ?? 3000);
 const HOST = process.env['HOST'] ?? '127.0.0.1';
@@ -21,6 +23,8 @@ const COOLDOWN_MS = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? par
 async function main(): Promise<void> {
   let placement: PlacementDeps | undefined;
   let bus: RealtimeBus | undefined;
+  let sessionStore: SessionStore | undefined;
+  let sessionRedis: Redis | undefined;
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
     // Redis-backed fan-out (cross-node) when REDIS_URL is set; otherwise in-memory (single node).
@@ -33,9 +37,21 @@ async function main(): Promise<void> {
       now: () => new Date(),
       bus,
     };
+    // Server-side sessions (Redis where available). The verification front-door that issues
+    // sessions is a follow-on; until then this validates sessions only (none exist yet → 401).
+    if (REDIS_URL) {
+      sessionRedis = new Redis(REDIS_URL);
+      sessionStore = new RedisSessionStore(sessionRedis);
+    } else {
+      sessionStore = new InMemorySessionStore();
+    }
   }
 
-  const app = await buildApp({ logger: true, ...(placement ? { placement } : {}) });
+  const app = await buildApp({
+    logger: true,
+    ...(placement ? { placement } : {}),
+    ...(sessionStore ? { auth: { sessionStore } } : {}),
+  });
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
   }
@@ -43,6 +59,7 @@ async function main(): Promise<void> {
   const shutdown = async (): Promise<void> => {
     await app.close();
     if (bus) await bus.close();
+    if (sessionRedis) await sessionRedis.quit();
     process.exit(0);
   };
   process.on('SIGTERM', () => void shutdown());
