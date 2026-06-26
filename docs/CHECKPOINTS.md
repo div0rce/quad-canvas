@@ -58,9 +58,10 @@ Checkpoints are the **gates between phases/milestone-groups**: each defines what
 
 - **Identity** is injected as a verified `Principal` at the service layer (`BE-INV-6`, `PRIN-NO-ANON`); the HTTP request→principal step (sessions) is owned by `AUTHENTICATION.md` / `ADR-0006` and deferred to the auth milestone, so write routes return **401** until then — no anonymous writes, no header bypass.
 - **Cooldown** is a minimal fixed, fail-closed boundary derived from the event log; the dynamic load algorithm + Redis fast-path are deferred (`COOLDOWN.md`).
+- **Realtime (M14):** `@quad/realtime` holds a tenant-scoped subscription registry; `apps/api` serves a `@fastify/websocket` endpoint at `GET /api/v1/canvas/current/ws` — connect (tenant-resolved; unknown host → `WS_TENANT_MISMATCH` + close), `SubscribeCanvas` (tenant-scoped, acked; cross-tenant → `WS_FORBIDDEN`), and a server heartbeat. **No fan-out yet** — M15 broadcasts `PixelPlaced` to subscribers (cross-node via Redis pub/sub).
 - Verified with Docker-backed integration tests (`pnpm --filter api test:integration`, 16/16): append+projection, bounds/palette/non-active/cooldown/idempotency/tenant-isolation rejections, unknown-host→404, write-without-principal→401, and the read surface (metadata, snapshot reflects placements, paginated DC2 history with no email leak).
 
-**Remaining for G2:** WS server + fan-out broadcast (M14–M15), `@quad/render` + `apps/web` canvas (M16–M17), reconnect convergence + live end-to-end (M18–M19). **G2 is not yet reached.**
+**Remaining for G2:** WS **fan-out broadcast** (M15 — a placement on one node reaches subscribers via Redis pub/sub), `@quad/render` + `apps/web` canvas (M16–M17), reconnect convergence + live end-to-end (M18–M19). **G2 is not yet reached.**
 
 **Deferred (own milestones):** moderation, leaderboards, profiles, archives, heatmaps, full session auth, and **read visibility gating** (tenant `readOnlyViewing` / `archiveVisibility` on the public read endpoints) — visibility pairs with auth/membership, so reads are currently open per the documented public-read surface.
 

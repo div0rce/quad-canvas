@@ -1,2 +1,3 @@
-// @quad/realtime — skeleton (T3). No real contracts/behavior yet; see docs/CONSISTENCY_AUDIT.md §14.
-export {};
+// @quad/realtime — realtime helpers for the WebSocket layer (live distribution only; never
+// authoritative writes — placement is REST, WS-INV-1).
+export * from './subscription-registry.js';

@@ -5,15 +5,19 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
+    "@fastify/websocket": "^11",
     "@quad/config": "workspace:*",
     "@quad/core": "workspace:*",
     "@quad/db": "workspace:*",
+    "@quad/realtime": "workspace:*",
     "fastify": "^5",
     "fastify-plugin": "^5"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "vitest": "^3"
+    "@types/ws": "^8",
+    "vitest": "^3",
+    "ws": "^8"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
