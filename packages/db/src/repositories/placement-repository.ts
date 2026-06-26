@@ -221,6 +221,12 @@ export interface ArchivePage {
   readonly nextCursor: string | null;
 }
 
+export interface ReplayMetaRow {
+  readonly eventCount: number;
+  readonly fromSeq: number;
+  readonly toSeq: number;
+}
+
 export interface ProfileRow {
   readonly handle: string;
   readonly displayName: string | null;
@@ -242,6 +248,8 @@ export interface PlacementRepository {
   listArchives(tenantId: string, query: { cursor?: string; limit: number }): Promise<ArchivePage>;
   /** A single archived canvas by term label, or null if none/not archived. */
   findArchiveByTerm(tenantId: string, term: string): Promise<ArchiveRow | null>;
+  /** Replay derivation metadata (event count + seq range) for an archived term, or null. */
+  getReplayMeta(tenantId: string, term: string): Promise<ReplayMetaRow | null>;
   /** A member's public profile (DC2 + placement count) by handle, scoped to the tenant. */
   getProfileByHandle(tenantId: string, handle: string): Promise<ProfileRow | null>;
   /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
@@ -351,6 +359,21 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       if (!c || c.status !== 'archived') return null; // only archived canvases are public archives
       return { id: c.id, term: c.termLabel, status: c.status, width: c.width, height: c.height, createdAt: c.createdAt };
+    },
+
+    async getReplayMeta(tenantId, term) {
+      const c = await prisma.canvas.findUnique({
+        where: { tenantId_termLabel: { tenantId, termLabel: term } },
+        select: { id: true, status: true },
+      });
+      if (!c || c.status !== 'archived') return null;
+      const agg = await prisma.pixelEvent.aggregate({
+        where: { canvasId: c.id },
+        _count: { _all: true },
+        _min: { seq: true },
+        _max: { seq: true },
+      });
+      return { eventCount: agg._count._all, fromSeq: agg._min.seq ?? 0, toSeq: agg._max.seq ?? 0 };
     },
 
     async getProfileByHandle(tenantId, handle) {
