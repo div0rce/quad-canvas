@@ -1,2 +1,4 @@
-// @quad/render — skeleton (T3). No real contracts/behavior yet; see docs/CONSISTENCY_AUDIT.md §14.
-export {};
+// @quad/render — canvas rendering helpers. Consumes the REST snapshot + live WS deltas into a
+// drawable model; the view layer (apps/web) draws dirty regions from it.
+export * from './canvas-buffer.js';
+export * from './viewport.js';
