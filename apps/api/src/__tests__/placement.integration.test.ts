@@ -603,6 +603,38 @@ describe('moderation actions (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('a moderator rolls back a region (reverts every cell + one audit)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'rr1' });
+    await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 2, idempotencyKey: 'rr2' });
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 1, color: 3, idempotencyKey: 'rr3' });
+    const mod = await prisma.user.create({ data: { email: 'modg@scarletmail.rutgers.edu', publicHandle: 'modg', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'region_rollback', targetRef: '0,0,1,1', reason: 'cleanup' },
+      });
+      expect(res.statusCode).toBe(200);
+
+      // All three first-placements in the rect revert to empty; (1,1) had no pixel.
+      for (const [x, y] of [[0, 0], [1, 0], [0, 1]]) {
+        const p = await app.inject({ method: 'GET', url: `/api/v1/canvas/current/pixels/${x}/${y}`, headers: { host: 'rutgers.localhost' } });
+        expect(p.statusCode).toBe(404);
+      }
+      expect(await prisma.moderationAction.findMany({ where: { actionType: 'region_rollback' } })).toHaveLength(1);
+      expect(await prisma.pixelEvent.findMany({ where: { type: 'PixelRolledBack' } })).toHaveLength(3);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('admin role assignment (HTTP)', () => {

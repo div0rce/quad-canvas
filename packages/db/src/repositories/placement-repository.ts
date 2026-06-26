@@ -181,7 +181,31 @@ export type RollbackResult =
       readonly auditId: string;
       readonly createdAt: Date;
     }
-  | { readonly kind: 'absent' };
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'archived' };
+
+export interface RollbackRegionInput {
+  readonly tenantId: string;
+  readonly canvasId: string;
+  readonly actorUserId: string;
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+  readonly reason: string;
+}
+
+export type RegionRollbackResult =
+  | {
+      readonly kind: 'rolledBack';
+      /** Cells that were reverted (each to its prior color, or null if emptied). */
+      readonly cells: ReadonlyArray<{ readonly x: number; readonly y: number; readonly color: number | null }>;
+      /** Highest per-canvas seq assigned across the region's compensating events. */
+      readonly seq: number;
+      readonly auditId: string;
+      readonly createdAt: Date;
+    }
+  | { readonly kind: 'archived' };
 
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
@@ -214,6 +238,8 @@ export interface PlacementRepository {
   setCanvasLifecycle(input: CanvasLifecycleInput): Promise<ApplyMemberModerationResult>;
   /** Roll a cell back to its prior placement (or empty): compensating event + projection + audit. */
   rollbackPixel(input: RollbackPixelInput): Promise<RollbackResult>;
+  /** Roll back every placed cell in a rectangle (one DC4 audit for the region). */
+  rollbackRegion(input: RollbackRegionInput): Promise<RegionRollbackResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -507,6 +533,9 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const { tenantId, canvasId, actorUserId, x, y, reason } = input;
       return prisma.$transaction(async (tx): Promise<RollbackResult> => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
+        // Re-check status under the lock — a freeze→archive may have committed since the route read it.
+        const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
+        if (canvasState?.status === 'archived') return { kind: 'archived' };
         const pixel = await tx.pixel.findUnique({ where: { canvasId_x_y: { canvasId, x, y } }, select: { color: true } });
         if (!pixel) return { kind: 'absent' };
         // Replay the cell's FULL history (placements + prior rollbacks) to find the state to revert
@@ -557,6 +586,69 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           select: { id: true, createdAt: true },
         });
         return { kind: 'rolledBack', x, y, color: revertedColor, seq, auditId: audit.id, createdAt: audit.createdAt };
+      });
+    },
+
+    async rollbackRegion(input) {
+      const { tenantId, canvasId, actorUserId, x1, y1, x2, y2, reason } = input;
+      return prisma.$transaction(async (tx): Promise<RegionRollbackResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
+        // Re-check status under the lock — an archive may have committed since the route read it.
+        const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
+        if (canvasState?.status === 'archived') return { kind: 'archived' };
+        const last = await tx.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
+        let seq = last?.seq ?? 0;
+        const cells: Array<{ x: number; y: number; color: number | null }> = [];
+        for (let y = y1; y <= y2; y++) {
+          for (let x = x1; x <= x2; x++) {
+            const pixel = await tx.pixel.findUnique({ where: { canvasId_x_y: { canvasId, x, y } }, select: { color: true } });
+            if (!pixel) continue; // skip empty cells
+            // Same replay as the single-cell rollback — honor intervening rollbacks per cell.
+            const events = await tx.pixelEvent.findMany({
+              where: { canvasId, x, y },
+              orderBy: { seq: 'asc' },
+              select: { type: true, newColor: true, actorUserId: true },
+            });
+            const stack: Array<{ color: number; owner: string }> = [];
+            for (const e of events) {
+              if (e.type === 'PixelPlaced' && e.newColor !== null) stack.push({ color: e.newColor, owner: e.actorUserId });
+              else if (e.type === 'PixelRolledBack') stack.pop();
+            }
+            const revertTo = stack.length >= 2 ? stack[stack.length - 2] : null;
+            const revertedColor = revertTo?.color ?? null;
+            seq += 1;
+            const event = await tx.pixelEvent.create({
+              data: {
+                tenantId,
+                canvasId,
+                actorUserId,
+                type: 'PixelRolledBack',
+                seq,
+                x,
+                y,
+                prevColor: pixel.color,
+                newColor: revertedColor,
+                idempotencyKey: `rollback:${randomBytes(16).toString('hex')}`,
+                schemaVersion: 1,
+              },
+              select: { id: true, createdAt: true },
+            });
+            if (revertTo) {
+              await tx.pixel.update({
+                where: { canvasId_x_y: { canvasId, x, y } },
+                data: { color: revertTo.color, ownerUserId: revertTo.owner, lastEventId: event.id, seq, placedAt: event.createdAt },
+              });
+            } else {
+              await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x, y } } });
+            }
+            cells.push({ x, y, color: revertedColor });
+          }
+        }
+        const audit = await tx.moderationAction.create({
+          data: { tenantId, actorUserId, actionType: 'region_rollback', targetRef: `${x1},${y1},${x2},${y2}`, reason },
+          select: { id: true, createdAt: true },
+        });
+        return { kind: 'rolledBack', cells, seq, auditId: audit.id, createdAt: audit.createdAt };
       });
     },
 

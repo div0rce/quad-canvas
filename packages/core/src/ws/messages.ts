@@ -29,6 +29,8 @@ export interface PixelRolledBack {
 }
 export interface RegionRolledBack {
   readonly type: 'RegionRolledBack';
+  /** The reverted rectangle (inclusive). Clients resync the snapshot for the region. */
+  readonly region: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number };
 }
 export interface ArtworkRemoved {
   readonly type: 'ArtworkRemoved';

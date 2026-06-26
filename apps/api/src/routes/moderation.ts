@@ -18,6 +18,18 @@ function parseCoords(targetRef: string): { x: number; y: number } | null {
   return { x, y };
 }
 
+// Bounded so the per-cell rollback loop holds the per-canvas advisory lock only briefly (a larger
+// sweep is several calls, or a future batched implementation). Each cell does a few queries.
+const MAX_REGION_CELLS = 1024;
+
+function parseRegion(targetRef: string): { x1: number; y1: number; x2: number; y2: number } | null {
+  const parts = targetRef.split(',').map(Number);
+  if (parts.length !== 4 || !parts.every(Number.isInteger)) return null;
+  const [x1, y1, x2, y2] = parts as [number, number, number, number];
+  if (x1 < 0 || y1 < 0 || x2 < x1 || y2 < y1) return null;
+  return { x1, y1, x2, y2 };
+}
+
 const MEMBER_ACTIONS: Record<string, { status: 'suspended' | 'banned' | 'active'; minRole: domain.Role }> = {
   suspend_member: { status: 'suspended', minRole: 'moderator' },
   ban_member: { status: 'banned', minRole: 'admin' },
@@ -113,6 +125,7 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           y: coords.y,
           reason: body.reason,
         });
+        if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
         if (result.kind === 'absent') return err(reply, request, 404, 'NOT_FOUND', 'No pixel at that coordinate to roll back.');
         const message: ws.PixelRolledBack = {
           type: 'PixelRolledBack',
@@ -120,6 +133,42 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           seq: result.seq as domain.PerCanvasSequence,
           ...(result.color !== null ? { color: result.color as domain.ColorIndex } : {}),
         };
+        try {
+          await bus.publish(request.tenant.id, canvas.id, message);
+        } catch {
+          // best-effort broadcast
+        }
+        const response: dto.ModerationActionResponse = {
+          id: result.auditId,
+          actionType: body.actionType,
+          createdAt: result.createdAt.toISOString(),
+        };
+        return reply.status(200).send(response);
+      }
+
+      if (body.actionType === 'region_rollback') {
+        const region = parseRegion(body.targetRef);
+        if (!region) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x1,y1,x2,y2" with x1≤x2, y1≤y2.');
+        const area = (region.x2 - region.x1 + 1) * (region.y2 - region.y1 + 1);
+        if (area > MAX_REGION_CELLS) return err(reply, request, 422, 'VALIDATION_ERROR', `Region too large (max ${MAX_REGION_CELLS} cells).`);
+        const canvas = await repo.findViewableCanvas(request.tenant.id);
+        if (!canvas) return err(reply, request, 404, 'NOT_FOUND', 'No canvas for this tenant.');
+        if (canvas.status === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
+        if (region.x2 >= canvas.width || region.y2 >= canvas.height) {
+          return err(reply, request, 422, 'VALIDATION_ERROR', 'Region is out of canvas bounds.');
+        }
+        const result = await repo.rollbackRegion({
+          tenantId: request.tenant.id,
+          canvasId: canvas.id,
+          actorUserId: principal.userId,
+          x1: region.x1,
+          y1: region.y1,
+          x2: region.x2,
+          y2: region.y2,
+          reason: body.reason,
+        });
+        if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
+        const message: ws.RegionRolledBack = { type: 'RegionRolledBack', region };
         try {
           await bus.publish(request.tenant.id, canvas.id, message);
         } catch {
