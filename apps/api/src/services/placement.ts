@@ -7,9 +7,10 @@
 // client claims and never reads a session. The HTTP→Principal step (session validation) is owned by
 // AUTHENTICATION.md / ADR-0006 and lands with the auth milestone; until then no production identity
 // source exists and the route rejects writes (401).
-import type { domain, dto } from '@quad/core';
+import type { domain, dto, ws } from '@quad/core';
 import { getPaletteByKey } from '@quad/config';
 import type { PlacementRepository, PlacedRow } from '@quad/db';
+import type { RealtimeBus } from '@quad/realtime';
 
 export interface PlacementDeps {
   readonly repo: PlacementRepository;
@@ -18,6 +19,8 @@ export interface PlacementDeps {
   readonly cooldownMs: number;
   /** Injectable clock (tests). */
   readonly now: () => Date;
+  /** Fan-out bus — a new placement is published so WS subscribers (any node) receive it. */
+  readonly bus: RealtimeBus;
 }
 
 /** Resolved tenant context the service needs (DC2 config only). */
@@ -118,6 +121,22 @@ export async function placePixel(
 
   if (outcome.kind === 'cooldown') {
     return fail('COOLDOWN_ACTIVE', 'Placement is on cooldown.', { retryAfterMs: outcome.retryAfterMs });
+  }
+  // Broadcast only genuinely-new placements (a duplicate replay was already broadcast originally).
+  if (outcome.kind === 'placed') {
+    const broadcast: ws.PixelPlaced = {
+      type: 'PixelPlaced',
+      at: { x: outcome.row.x, y: outcome.row.y },
+      color: outcome.row.color as domain.ColorIndex,
+      seq: outcome.row.seq as domain.PerCanvasSequence,
+    };
+    // Best-effort fan-out: the placement is already durably committed in Postgres, so a transport
+    // failure must NOT fail it — clients reconcile from the snapshot (watermark) on next connect.
+    try {
+      await deps.bus.publish(principal.tenantId, canvas.id, broadcast);
+    } catch {
+      // swallow — broadcast is best-effort, never authoritative
+    }
   }
   return success(outcome.row, deps.cooldownMs);
 }

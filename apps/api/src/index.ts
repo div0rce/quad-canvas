@@ -3,12 +3,14 @@
 // driver adapter in @quad/db; placement routes are wired only when a database is configured.
 import { buildApp } from './app.js';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
+import { InMemoryRealtimeBus, RedisRealtimeBus, type RealtimeBus } from '@quad/realtime';
 import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
 
 const PORT = Number(process.env['PORT'] ?? 3000);
 const HOST = process.env['HOST'] ?? '127.0.0.1';
 const DATABASE_URL = process.env['DATABASE_URL'];
+const REDIS_URL = process.env['REDIS_URL'];
 // Fail-closed: an unset/empty/non-numeric/negative override falls back to the default cooldown
 // (never to 0 by accident). An explicit non-negative number is honoured.
 const DEFAULT_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;
@@ -18,15 +20,34 @@ const COOLDOWN_MS = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? par
 
 async function main(): Promise<void> {
   let placement: PlacementDeps | undefined;
+  let bus: RealtimeBus | undefined;
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
-    placement = { repo: createPlacementRepository(prisma), cooldownMs: COOLDOWN_MS, now: () => new Date() };
+    // Redis-backed fan-out (cross-node) when REDIS_URL is set; otherwise in-memory (single node).
+    // Both implement the same RealtimeBus interface, so nothing else changes.
+    bus = REDIS_URL ? new RedisRealtimeBus(REDIS_URL) : new InMemoryRealtimeBus();
+    await bus.ready();
+    placement = {
+      repo: createPlacementRepository(prisma),
+      cooldownMs: COOLDOWN_MS,
+      now: () => new Date(),
+      bus,
+    };
   }
 
   const app = await buildApp({ logger: true, ...(placement ? { placement } : {}) });
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
   }
+
+  const shutdown = async (): Promise<void> => {
+    await app.close();
+    if (bus) await bus.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
+
   try {
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {
