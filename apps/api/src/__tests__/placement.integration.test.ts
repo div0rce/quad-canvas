@@ -696,6 +696,33 @@ describe('admin role assignment (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('returns the tenant config for an admin (config/DC2 only)', async () => {
+    const { app, cookie } = await seedAdmin();
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/admin/tenant/config', headers: { host: 'rutgers.localhost', cookie } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { slug: string; palette: string; domains: string[] };
+      expect(body.slug).toBe('rutgers');
+      expect(body.palette).toBe('default');
+      expect(body.domains).toContain('scarletmail.rutgers.edu');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects tenant config for a non-admin (403)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/admin/tenant/config', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('reports queue (HTTP)', () => {

@@ -184,3 +184,14 @@ export type RosterResponse = Paginated<RosterEntry>;
 export interface CanvasLifecycleCommand {
   readonly status: string;
 }
+
+/** Tenant configuration as seen by a tenant admin (DC2/config only — no secrets, no DC3). */
+export interface TenantConfigResponse {
+  readonly id: string;
+  readonly slug: string;
+  readonly publicTitle: string;
+  readonly status: string;
+  readonly palette: string;
+  readonly termCadence: string;
+  readonly domains: readonly string[];
+}
