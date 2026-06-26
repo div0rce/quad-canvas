@@ -14,6 +14,8 @@ import { makePixelRoutes } from './routes/pixels.js';
 import { makeWsRoutes } from './routes/ws.js';
 import type { PlacementDeps } from './services/placement.js';
 import type { SessionStore } from './auth/session-store.js';
+import type { AuthService } from './auth/auth-service.js';
+import { makeAuthRoutes } from './routes/auth.js';
 
 export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions['logger'];
@@ -25,6 +27,10 @@ export interface BuildAppOptions {
    *  that issues sessions is a follow-on; this is the validation + placement-gating half. */
   readonly auth?: {
     readonly sessionStore: SessionStore;
+    /** The verification front-door service. When present, the /auth endpoints are registered. */
+    readonly service?: AuthService;
+    readonly sessionTtlSeconds?: number;
+    readonly cookieSecure?: boolean;
   };
 }
 
@@ -64,6 +70,15 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(tenantPlugin);
   await app.register(makeIdentityPlugin(resolver));
   await app.register(healthRoutes);
+
+  if (opts.auth?.service) {
+    await app.register(
+      makeAuthRoutes(opts.auth.service, opts.auth.sessionStore, {
+        sessionTtlSeconds: opts.auth.sessionTtlSeconds ?? 60 * 60 * 12,
+        cookieSecure: opts.auth.cookieSecure ?? true,
+      }),
+    );
+  }
 
   if (opts.placement) {
     await app.register(makePixelRoutes(opts.placement));
