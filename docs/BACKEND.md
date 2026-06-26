@@ -369,7 +369,7 @@ Backend test layers (tooling → `TECH_BASELINE.md`; strategy → `TESTING.md`).
 
 ## 24a. Implementation Status (M10–M12)
 
-The pixel-placement command path is implemented in `apps/api` (validate → server-enforced cooldown → atomic append + projection + idempotency via `@quad/db`). Per `BE-INV-6` / `PRIN-NO-ANON`, the placement **domain service takes a verified `Principal` as a typed input** and never trusts client claims; the request→principal step (session validation) is owned by `AUTHENTICATION.md` / `ADR-0006` and **deferred to the auth milestone**, so write routes return `401` until sessions land (no anonymous writes, no header bypass). The read path (`GET …/pixels/{x}/{y}`) returns DC2 attribution only. See `CHECKPOINTS.md` §4b.
+The pixel-placement command path is implemented in `apps/api` (validate → server-enforced cooldown → atomic append + projection + idempotency via `@quad/db`). Per `BE-INV-6` / `PRIN-NO-ANON`, the placement **domain service takes a verified `Principal` as a typed input** and never trusts client claims. The request→principal step is now implemented (M20): the identity plugin validates the opaque **session cookie** against the server-side session store and the user's **active membership**, setting `request.principal` — anything short of that stays null, so writes reject `401` (no anonymous writes, no header bypass; a ban/suspension drops the membership and cuts access even on a still-valid session). Session **issuance** (the domain-allowlisted magic-link front-door, per `AUTHENTICATION.md` / `ADR-0006`) is the follow-on. The read path (`GET …/pixels/{x}/{y}`) returns DC2 attribution only. See `CHECKPOINTS.md` §4b.
 
 ## 25. Document Control
 

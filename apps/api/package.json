@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
+    "@fastify/cookie": "^11",
     "@fastify/websocket": "^11",
     "@quad/config": "workspace:*",
     "@quad/core": "workspace:*",

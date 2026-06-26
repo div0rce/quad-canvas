@@ -27,6 +27,14 @@ export function newSessionId(): string {
   return randomBytes(32).toString('hex');
 }
 
+// Redis `SET ... EX` requires a positive integer; enforce the same in-memory so an invalid TTL is a
+// consistent error in dev, not a silent never-expire that crashes only against Redis in production.
+function assertValidTtl(ttlSeconds: number): void {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new RangeError('ttlSeconds must be a positive integer');
+  }
+}
+
 /** In-memory store for single-node dev and unit tests. Production uses Redis (cross-node + restart-safe). */
 export class InMemorySessionStore implements SessionStore {
   readonly #sessions = new Map<string, { session: Session; expiresAt: number }>();
@@ -37,6 +45,7 @@ export class InMemorySessionStore implements SessionStore {
   }
 
   create(session: Session, ttlSeconds: number): Promise<string> {
+    assertValidTtl(ttlSeconds);
     const id = newSessionId();
     this.#sessions.set(id, { session, expiresAt: this.#now() + ttlSeconds * 1000 });
     return Promise.resolve(id);
@@ -69,6 +78,7 @@ export class RedisSessionStore implements SessionStore {
   }
 
   async create(session: Session, ttlSeconds: number): Promise<string> {
+    assertValidTtl(ttlSeconds);
     const id = newSessionId();
     await this.#redis.set(KEY_PREFIX + id, JSON.stringify(session), 'EX', ttlSeconds);
     return id;

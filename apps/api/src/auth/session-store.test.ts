@@ -24,4 +24,11 @@ describe('InMemorySessionStore', () => {
     const store = new InMemorySessionStore();
     expect(await store.get(newSessionId())).toBeNull();
   });
+
+  it('rejects an invalid TTL (consistent with the Redis backend)', () => {
+    const store = new InMemorySessionStore();
+    expect(() => store.create({ userId: 'u', tenantId: 't' }, 0)).toThrow(RangeError);
+    expect(() => store.create({ userId: 'u', tenantId: 't' }, -5)).toThrow();
+    expect(() => store.create({ userId: 'u', tenantId: 't' }, 1.5)).toThrow();
+  });
 });
