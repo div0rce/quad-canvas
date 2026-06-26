@@ -9,6 +9,8 @@ import { SubscriptionRegistry } from '@quad/realtime';
 import errorsPlugin from './plugins/errors.js';
 import securityHeadersPlugin from './plugins/security-headers.js';
 import accessLogPlugin from './plugins/access-log.js';
+import { makeMetricsPlugin } from './plugins/metrics.js';
+import { MetricsRegistry } from './metrics/registry.js';
 import tenantPlugin from './plugins/tenant.js';
 import { makeIdentityPlugin, type IdentityResolver } from './plugins/identity.js';
 import healthRoutes from './routes/health.js';
@@ -60,6 +62,8 @@ export interface BuildAppOptions {
   readonly trustProxy?: boolean | string | number;
   /** Max request body size in bytes (defense-in-depth — every endpoint takes tiny JSON). Default 16 KiB. */
   readonly bodyLimitBytes?: number;
+  /** Request-metrics registry (default a fresh one). Inject to read counters in tests. */
+  readonly metrics?: MetricsRegistry;
 }
 
 const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
@@ -110,8 +114,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const authRateLimit = makeRateLimit(limiter, { ...authBudget, bucket: 'auth' });
   const reportRateLimit = makeRateLimit(limiter, { ...reportBudget, bucket: 'report' });
 
+  const metrics = opts.metrics ?? new MetricsRegistry();
+
   await app.register(securityHeadersPlugin);
   await app.register(accessLogPlugin);
+  await app.register(makeMetricsPlugin(metrics));
   await app.register(errorsPlugin);
   await app.register(cookiePlugin);
   await app.register(tenantPlugin);
