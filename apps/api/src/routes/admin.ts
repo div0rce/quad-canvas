@@ -127,5 +127,20 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
       };
       return reply.send(response);
     });
+
+    app.get('/api/v1/admin/tenant/config', { preHandler: requireRole('admin') }, async (request, reply) => {
+      const tenant = request.tenant;
+      if (!tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const config: dto.TenantConfigResponse = {
+        id: tenant.id,
+        slug: tenant.slug,
+        publicTitle: tenant.publicTitle,
+        status: tenant.status,
+        palette: tenant.palette,
+        termCadence: tenant.termCadence,
+        domains: tenant.domains,
+      };
+      return reply.send(config);
+    });
   };
 }
