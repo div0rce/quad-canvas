@@ -102,6 +102,20 @@ CREATE TABLE "moderation_actions" (
     CONSTRAINT "moderation_actions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "reports" (
+    "id" TEXT NOT NULL,
+    "tenant_id" TEXT NOT NULL,
+    "canvas_id" TEXT,
+    "reporter_user_id" TEXT NOT NULL,
+    "target_ref" TEXT NOT NULL,
+    "reason" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "reports_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Tenant_slug_key" ON "Tenant"("slug");
 
@@ -144,6 +158,9 @@ CREATE INDEX "pixels_tenant_id_idx" ON "pixels"("tenant_id");
 -- CreateIndex
 CREATE INDEX "moderation_actions_tenant_id_created_at_idx" ON "moderation_actions"("tenant_id", "created_at");
 
+-- CreateIndex
+CREATE INDEX "reports_tenant_id_status_created_at_idx" ON "reports"("tenant_id", "status", "created_at");
+
 -- AddForeignKey
 ALTER TABLE "Membership" ADD CONSTRAINT "Membership_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -179,3 +196,12 @@ ALTER TABLE "moderation_actions" ADD CONSTRAINT "moderation_actions_tenant_id_fk
 
 -- AddForeignKey
 ALTER TABLE "moderation_actions" ADD CONSTRAINT "moderation_actions_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reports" ADD CONSTRAINT "reports_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reports" ADD CONSTRAINT "reports_reporter_user_id_fkey" FOREIGN KEY ("reporter_user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reports" ADD CONSTRAINT "reports_canvas_id_fkey" FOREIGN KEY ("canvas_id") REFERENCES "Canvas"("id") ON DELETE SET NULL ON UPDATE CASCADE;
