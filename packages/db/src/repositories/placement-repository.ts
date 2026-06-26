@@ -83,7 +83,8 @@ export interface AppendPlacementInput {
 export type AppendResult =
   | { readonly kind: 'placed'; readonly row: PlacedRow }
   | { readonly kind: 'duplicate'; readonly row: PlacedRow }
-  | { readonly kind: 'cooldown'; readonly retryAfterMs: number };
+  | { readonly kind: 'cooldown'; readonly retryAfterMs: number }
+  | { readonly kind: 'inactive' };
 
 export interface ApplyMemberModerationInput {
   readonly tenantId: string;
@@ -153,6 +154,13 @@ export interface RosterPage {
   readonly nextCursor: string | null;
 }
 
+export interface CanvasLifecycleInput {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+  readonly canvasId: string;
+  readonly status: string;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -180,6 +188,8 @@ export interface PlacementRepository {
   resolveReport(input: ResolveReportInput): Promise<ApplyMemberModerationResult>;
   /** Cursor-paginated tenant roster (members with DC2 identity, role, status). */
   listRoster(tenantId: string, query: { cursor?: string; limit: number }): Promise<RosterPage>;
+  /** Atomically set a canvas's lifecycle status + write the DC4 audit record. */
+  setCanvasLifecycle(input: CanvasLifecycleInput): Promise<ApplyMemberModerationResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -357,6 +367,11 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           return { kind: 'duplicate', row: { x: existing.x, y: existing.y, color: existing.newColor, seq: existing.seq, placedAt: existing.createdAt } };
         }
 
+        // Re-check the canvas is still active INSIDE the lock — a freeze that committed between the
+        // service's canvas lookup and here must reject the placement (lifecycle/append serialize).
+        const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
+        if (!canvasState || canvasState.status !== 'active') return { kind: 'inactive' };
+
         const lastByActor = await tx.pixelEvent.findFirst({
           // Cooldown is gated on the actor's last PLACEMENT, not moderation/compensating events.
           where: { canvasId, actorUserId, type: 'PixelPlaced' },
@@ -467,6 +482,30 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         items: page.map((m) => ({ userId: m.userId, handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, status: m.status })),
         nextCursor,
       };
+    },
+
+    async setCanvasLifecycle(input) {
+      return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        // Same per-canvas lock as placement — a freeze and an in-flight append serialize, so no
+        // pixel is accepted after the freeze commits (with appendPlacement's in-tx status re-check).
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.canvasId})::bigint)`;
+        const result = await tx.canvas.updateMany({
+          where: { id: input.canvasId, tenantId: input.tenantId },
+          data: { status: input.status },
+        });
+        if (result.count === 0) return { updated: false };
+        const action = await tx.moderationAction.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            actionType: 'canvas_lifecycle',
+            targetRef: input.canvasId,
+            reason: `status set to ${input.status}`,
+          },
+          select: { id: true, createdAt: true },
+        });
+        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
     },
   };
 }

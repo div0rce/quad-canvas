@@ -122,6 +122,10 @@ export async function placePixel(
   if (outcome.kind === 'cooldown') {
     return fail('COOLDOWN_ACTIVE', 'Placement is on cooldown.', { retryAfterMs: outcome.retryAfterMs });
   }
+  if (outcome.kind === 'inactive') {
+    // The canvas was frozen/archived between resolution and the append (raced a lifecycle change).
+    return fail('NOT_FOUND', 'The current canvas is not open for placement.');
+  }
   // Broadcast only genuinely-new placements (a duplicate replay was already broadcast originally).
   if (outcome.kind === 'placed') {
     const broadcast: ws.PixelPlaced = {
