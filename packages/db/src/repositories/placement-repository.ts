@@ -98,6 +98,13 @@ export type ApplyMemberModerationResult =
   | { readonly updated: true; readonly auditId: string; readonly createdAt: Date }
   | { readonly updated: false };
 
+export interface AssignRoleInput {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+  readonly targetUserId: string;
+  readonly role: string;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -115,6 +122,8 @@ export interface PlacementRepository {
   getMembershipRole(tenantId: string, userId: string): Promise<string | null>;
   /** Atomically set a member's status + write the DC4 audit record. `updated:false` if not a member. */
   applyMemberModeration(input: ApplyMemberModerationInput): Promise<ApplyMemberModerationResult>;
+  /** Atomically set a member's role + write the DC4 audit record. `updated:false` if not a member. */
+  assignMembershipRole(input: AssignRoleInput): Promise<ApplyMemberModerationResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -205,6 +214,27 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             actionType: input.actionType,
             targetRef: input.targetUserId,
             reason: input.reason,
+          },
+          select: { id: true, createdAt: true },
+        });
+        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
+    },
+
+    async assignMembershipRole(input) {
+      return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        const result = await tx.membership.updateMany({
+          where: { tenantId: input.tenantId, userId: input.targetUserId },
+          data: { role: input.role },
+        });
+        if (result.count === 0) return { updated: false };
+        const action = await tx.moderationAction.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            actionType: 'assign_role',
+            targetRef: input.targetUserId,
+            reason: `role set to ${input.role}`,
           },
           select: { id: true, createdAt: true },
         });

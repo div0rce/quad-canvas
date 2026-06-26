@@ -536,3 +536,96 @@ describe('moderation actions (HTTP)', () => {
     }
   });
 });
+
+describe('admin role assignment (HTTP)', () => {
+  async function seedAdmin(): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; cookie: string; sessions: InMemorySessionStore }> {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    const admin = await prisma.user.create({ data: { email: 'a@scarletmail.rutgers.edu', publicHandle: 'a', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: admin.id, role: 'admin', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: admin.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    return { app, cookie: `quad_session=${sid}`, sessions };
+  }
+
+  it('an admin promotes a member, audited, and rotates their session', async () => {
+    const { app, cookie, sessions } = await seedAdmin();
+    try {
+      const target = await prisma.user.create({ data: { email: 'p@scarletmail.rutgers.edu', publicHandle: 'p', status: 'active' } });
+      await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: target.id, role: 'participant', status: 'active' } });
+      const targetSession = await sessions.create({ userId: target.id, tenantId: 'ten_rutgers' }, 3600);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { targetRef: target.id, role: 'moderator' },
+      });
+      expect(res.statusCode).toBe(200);
+      const membership = await prisma.membership.findFirst({ where: { tenantId: 'ten_rutgers', userId: target.id } });
+      expect(membership?.role).toBe('moderator');
+      expect(await sessions.get(targetSession)).toBeNull(); // privilege change rotated the session
+      const audits = await prisma.moderationAction.findMany({ where: { actionType: 'assign_role' } });
+      expect(audits).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a non-admin (403)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    const mod = await prisma.user.create({ data: { email: 'm@scarletmail.rutgers.edu', publicHandle: 'm', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${sid}` },
+        payload: { targetRef: 'x', role: 'moderator' },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a non-tenant role like operator (422)', async () => {
+    const { app, cookie } = await seedAdmin();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { targetRef: 'x', role: 'operator' },
+      });
+      expect(res.statusCode).toBe(422);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not rotate sessions or audit for a no-op (same role)', async () => {
+    const { app, cookie, sessions } = await seedAdmin();
+    try {
+      const target = await prisma.user.create({ data: { email: 'q@scarletmail.rutgers.edu', publicHandle: 'q', status: 'active' } });
+      await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: target.id, role: 'participant', status: 'active' } });
+      const targetSession = await sessions.create({ userId: target.id, tenantId: 'ten_rutgers' }, 3600);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { targetRef: target.id, role: 'participant' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(await sessions.get(targetSession)).not.toBeNull(); // unchanged role → session NOT rotated
+      const audits = await prisma.moderationAction.findMany({ where: { actionType: 'assign_role' } });
+      expect(audits).toHaveLength(0); // no-op → no audit
+    } finally {
+      await app.close();
+    }
+  });
+});

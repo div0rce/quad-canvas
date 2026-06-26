@@ -130,3 +130,15 @@ export interface ModerationActionResponse {
   /** Display-only ISO-8601 timestamp. */
   readonly createdAt: string;
 }
+
+/** Assign a tenant-scoped role to a member (admin). `operator` is platform-level, not assignable here. */
+export interface AssignRoleCommand {
+  readonly targetRef: string;
+  readonly role: Role;
+}
+
+/** Result of a role assignment (audited; the target's sessions are rotated on a privilege change). */
+export interface RoleAssignmentResponse {
+  readonly targetRef: string;
+  readonly role: Role;
+}
