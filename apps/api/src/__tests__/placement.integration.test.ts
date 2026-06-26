@@ -204,3 +204,95 @@ describe('placement routes (HTTP)', () => {
     }
   });
 });
+
+describe('canvas read endpoints (HTTP)', () => {
+  it('returns canvas metadata', async () => {
+    await seed({ tenantId: 'ten_rutgers' });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/canvas/current', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ term: 'F26', status: 'active', width: 10, height: 10, palette: 'default' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns a snapshot reflecting placements', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers', palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 1, y: 1, color: 2, idempotencyKey: 'a' });
+    await placePixel(deps(0), principal(s), t, { x: 4, y: 5, color: 3, idempotencyKey: 'b' });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/snapshot', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const snap = res.json() as { width: number; seq: number; cells: { x: number; y: number; color: number }[] };
+      expect(snap.width).toBe(10);
+      expect(snap.seq).toBe(2);
+      expect(snap.cells).toHaveLength(2);
+      expect(snap.cells).toContainEqual({ x: 1, y: 1, color: 2 });
+      expect(snap.cells).toContainEqual({ x: 4, y: 5, color: 3 });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('serves reads for a non-active (frozen) canvas', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers', canvasStatus: 'active' });
+    await placePixel(deps(0), principal(s), { id: 'ten_rutgers', palette: 'default' }, { x: 0, y: 0, color: 0, idempotencyKey: 'k' });
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'frozen' } });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const meta = await app.inject({ method: 'GET', url: '/api/v1/canvas/current', headers: { host: 'rutgers.localhost' } });
+      expect(meta.statusCode).toBe(200);
+      expect((meta.json() as { status: string }).status).toBe('frozen');
+      const snap = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/snapshot', headers: { host: 'rutgers.localhost' } });
+      expect(snap.statusCode).toBe(200);
+      expect((snap.json() as { cells: unknown[] }).cells).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns per-cell history as DC2, paginated (oldest first)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers', handle: 'historian', email: 'h-dc3@scarletmail.rutgers.edu' });
+    const t = { id: 'ten_rutgers', palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 0, idempotencyKey: 'h1' });
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'h2' });
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 2, idempotencyKey: 'h3' });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/0/0/history?limit=2', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const page = res.json() as { data: { color: number; owner?: { handle: string } }[]; page: { nextCursor: string | null } };
+      expect(page.data).toHaveLength(2);
+      expect(page.data[0]?.color).toBe(0);
+      expect(page.data[0]?.owner?.handle).toBe('historian');
+      expect(page.page.nextCursor).not.toBeNull();
+      expect(res.body).not.toContain('@scarletmail.rutgers.edu');
+
+      const res2 = await app.inject({
+        method: 'GET',
+        url: `/api/v1/canvas/current/pixels/0/0/history?limit=2&cursor=${page.page.nextCursor}`,
+        headers: { host: 'rutgers.localhost' },
+      });
+      const page2 = res2.json() as { data: { color: number }[]; page: { nextCursor: string | null } };
+      expect(page2.data).toHaveLength(1);
+      expect(page2.data[0]?.color).toBe(2);
+      expect(page2.page.nextCursor).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('unknown host gets no canvas metadata (404)', async () => {
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/canvas/current', headers: { host: 'unknown.example' } });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+});

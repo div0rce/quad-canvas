@@ -114,6 +114,7 @@ model PixelEvent {
   @@unique([canvasId, seq]) // per-canvas authoritative order
   @@unique([tenantId, idempotencyKey]) // duplicate-safe, tenant-scoped
   @@index([canvasId, actorUserId]) // per-user last placement (cooldown derivation)
+  @@index([canvasId, x, y, seq]) // per-cell history (ordered)
   @@index([tenantId])
   @@map("pixel_events")
 }

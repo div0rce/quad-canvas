@@ -113,6 +113,9 @@ CREATE UNIQUE INDEX "Canvas_tenantId_termLabel_key" ON "Canvas"("tenantId", "ter
 CREATE INDEX "pixel_events_canvas_id_user_id_idx" ON "pixel_events"("canvas_id", "user_id");
 
 -- CreateIndex
+CREATE INDEX "pixel_events_canvas_id_x_y_seq_idx" ON "pixel_events"("canvas_id", "x", "y", "seq");
+
+-- CreateIndex
 CREATE INDEX "pixel_events_tenant_id_idx" ON "pixel_events"("tenant_id");
 
 -- CreateIndex

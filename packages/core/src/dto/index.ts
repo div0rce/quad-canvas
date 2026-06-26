@@ -64,3 +64,45 @@ export interface PixelResponse {
   /** Display-only ISO-8601 timestamp. */
   readonly placedAt?: string;
 }
+
+/** Live canvas metadata for the initial client load (no attribution; DC2-safe). */
+export interface CanvasMetaResponse {
+  readonly term: string;
+  readonly status: string;
+  readonly width: number;
+  readonly height: number;
+  /** The tenant's active palette key (colors resolved client-side from @quad/config). */
+  readonly palette: string;
+}
+
+/** A single placed cell in a snapshot (compact; attribution is fetched per-cell, not here). */
+export interface SnapshotCell {
+  readonly x: number;
+  readonly y: number;
+  readonly color: ColorIndex;
+}
+
+/**
+ * Current-canvas projection for initial paint — the client fetches this once, then receives live
+ * deltas over WebSockets (no polling). A compact/binary encoding is a documented future option;
+ * this JSON form lists only placed cells.
+ */
+export interface CanvasSnapshotResponse {
+  readonly width: number;
+  readonly height: number;
+  /** Per-canvas sequence high-water at snapshot time — the resume point for live WS deltas. */
+  readonly seq: PerCanvasSequence;
+  readonly cells: readonly SnapshotCell[];
+}
+
+/** One entry in a cell's placement history (DC2 attribution only). */
+export interface PixelHistoryEntry {
+  readonly color: ColorIndex;
+  readonly seq: PerCanvasSequence;
+  readonly owner?: PublicIdentity;
+  /** Display-only ISO-8601 timestamp. */
+  readonly placedAt: string;
+}
+
+/** Cursor-paginated per-cell placement history (oldest→newest). */
+export type PixelHistoryListResponse = Paginated<PixelHistoryEntry>;

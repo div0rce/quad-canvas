@@ -9,9 +9,41 @@ import type { PrismaClient } from '../client.js';
 export interface CurrentCanvasRow {
   readonly id: string;
   readonly tenantId: string;
+  readonly termLabel: string;
   readonly status: string;
   readonly width: number;
   readonly height: number;
+}
+
+/** A placed cell in a snapshot. */
+export interface SnapshotCellRow {
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+}
+
+/** A canvas snapshot: placed cells + the per-canvas sequence high-water (WS resume point). */
+export interface Snapshot {
+  readonly cells: readonly SnapshotCellRow[];
+  readonly seq: number;
+}
+
+/** One per-cell history entry (DC2: `ownerHandle`, never the email). */
+export interface HistoryEntryRow {
+  readonly color: number;
+  readonly seq: number;
+  readonly ownerHandle: string | null;
+  readonly placedAt: Date;
+}
+
+export interface HistoryPage {
+  readonly entries: readonly HistoryEntryRow[];
+  readonly nextCursor: number | null;
+}
+
+export interface HistoryQuery {
+  readonly cursor?: number;
+  readonly limit: number;
 }
 
 /** A projected cell. `ownerHandle` is DC2 (public) — the owner's email (DC3) is never read here. */
@@ -55,8 +87,14 @@ export type AppendResult =
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
+  /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
+  findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
+  /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
+  getSnapshot(canvasId: string): Promise<Snapshot>;
+  /** Cursor-paginated placement history for one cell (oldest→newest), DC2 attribution. */
+  getPixelHistory(canvasId: string, x: number, y: number, query: HistoryQuery): Promise<HistoryPage>;
   /** The persisted result for an idempotency key (tenant-scoped), or null — for replay. */
   findByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PlacedRow | null>;
   /** Atomically enforce idempotency + cooldown, then append the event + update the projection. */
@@ -69,9 +107,46 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const c = await prisma.canvas.findFirst({
         where: { tenantId, status: 'active' },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, tenantId: true, status: true, width: true, height: true },
+        select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
       });
       return c ?? null;
+    },
+
+    async findViewableCanvas(tenantId) {
+      const c = await prisma.canvas.findFirst({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
+      });
+      return c ?? null;
+    },
+
+    async getSnapshot(canvasId) {
+      const cells = await prisma.pixel.findMany({
+        where: { canvasId },
+        select: { x: true, y: true, color: true },
+        orderBy: [{ y: 'asc' }, { x: 'asc' }],
+      });
+      const last = await prisma.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
+      return { cells, seq: last?.seq ?? 0 };
+    },
+
+    async getPixelHistory(canvasId, x, y, query) {
+      const take = query.limit + 1;
+      const rows = await prisma.pixelEvent.findMany({
+        // Only placements — exclude future moderation/compensating events from public history.
+        where: { canvasId, x, y, type: 'PixelPlaced', ...(query.cursor !== undefined ? { seq: { gt: query.cursor } } : {}) },
+        orderBy: { seq: 'asc' },
+        take,
+        select: { newColor: true, seq: true, createdAt: true, actor: { select: { publicHandle: true } } },
+      });
+      const hasMore = rows.length > query.limit;
+      const page = hasMore ? rows.slice(0, query.limit) : rows;
+      const nextCursor = hasMore ? (page[page.length - 1]?.seq ?? null) : null;
+      return {
+        entries: page.map((r) => ({ color: r.newColor, seq: r.seq, ownerHandle: r.actor.publicHandle, placedAt: r.createdAt })),
+        nextCursor,
+      };
     },
 
     async getPixel(canvasId, x, y) {
@@ -106,7 +181,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         }
 
         const lastByActor = await tx.pixelEvent.findFirst({
-          where: { canvasId, actorUserId },
+          // Cooldown is gated on the actor's last PLACEMENT, not moderation/compensating events.
+          where: { canvasId, actorUserId, type: 'PixelPlaced' },
           orderBy: { createdAt: 'desc' },
           select: { createdAt: true },
         });
