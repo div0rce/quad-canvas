@@ -31,4 +31,15 @@ describe('InMemorySessionStore', () => {
     expect(() => store.create({ userId: 'u', tenantId: 't' }, -5)).toThrow();
     expect(() => store.create({ userId: 'u', tenantId: 't' }, 1.5)).toThrow();
   });
+
+  it('revokes all of a user’s sessions at once, leaving other users untouched', async () => {
+    const store = new InMemorySessionStore();
+    const a = await store.create({ userId: 'u1', tenantId: 't1' }, 3600);
+    const b = await store.create({ userId: 'u1', tenantId: 't1' }, 3600);
+    const other = await store.create({ userId: 'u2', tenantId: 't1' }, 3600);
+    await store.revokeAllForUser('u1');
+    expect(await store.get(a)).toBeNull();
+    expect(await store.get(b)).toBeNull();
+    expect(await store.get(other)).not.toBeNull();
+  });
 });

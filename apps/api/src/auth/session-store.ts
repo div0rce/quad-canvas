@@ -1,9 +1,9 @@
 // apps/api — server-authoritative session store. Per AUTHENTICATION.md, sessions are OPAQUE,
 // high-entropy tokens whose state lives server-side (Redis for fast validation; durable account +
 // membership state stays in Postgres). Server-side state is what makes **immediate revocation**
-// possible (AUTH-INV-8) — a ban/suspension/signout deletes the session and access is cut at once.
-// This module is the session lifecycle only; the verification front-door (domain-allowlisted magic
-// link) and the request→principal plugin build on it.
+// possible (AUTH-INV-8) — signout deletes one session; a ban/suspension deletes ALL of the user's
+// sessions at once via a per-user index. This module is the session lifecycle only; the verification
+// front-door and the request→principal plugin build on it.
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 
@@ -18,8 +18,10 @@ export interface SessionStore {
   create(session: Session, ttlSeconds: number): Promise<string>;
   /** Resolve a session id to its session, or null if absent/expired. */
   get(sessionId: string): Promise<Session | null>;
-  /** Destroy a session (signout / revocation). Idempotent. */
+  /** Destroy a single session (signout / revocation). Idempotent. */
   revoke(sessionId: string): Promise<void>;
+  /** Destroy ALL of a user's sessions at once (ban/suspension — AUTH-INV-8). Idempotent. */
+  revokeAllForUser(userId: string): Promise<void>;
 }
 
 /** 256 bits of entropy, hex-encoded — not guessable, not enumerable. */
@@ -38,6 +40,7 @@ function assertValidTtl(ttlSeconds: number): void {
 /** In-memory store for single-node dev and unit tests. Production uses Redis (cross-node + restart-safe). */
 export class InMemorySessionStore implements SessionStore {
   readonly #sessions = new Map<string, { session: Session; expiresAt: number }>();
+  readonly #byUser = new Map<string, Set<string>>();
   readonly #now: () => number;
 
   constructor(now: () => number = () => Date.now()) {
@@ -48,6 +51,12 @@ export class InMemorySessionStore implements SessionStore {
     assertValidTtl(ttlSeconds);
     const id = newSessionId();
     this.#sessions.set(id, { session, expiresAt: this.#now() + ttlSeconds * 1000 });
+    let set = this.#byUser.get(session.userId);
+    if (!set) {
+      set = new Set();
+      this.#byUser.set(session.userId, set);
+    }
+    set.add(id);
     return Promise.resolve(id);
   }
 
@@ -56,18 +65,37 @@ export class InMemorySessionStore implements SessionStore {
     if (!entry) return Promise.resolve(null);
     if (entry.expiresAt <= this.#now()) {
       this.#sessions.delete(sessionId);
+      const set = this.#byUser.get(entry.session.userId);
+      set?.delete(sessionId);
+      if (set && set.size === 0) this.#byUser.delete(entry.session.userId);
       return Promise.resolve(null);
     }
     return Promise.resolve(entry.session);
   }
 
   revoke(sessionId: string): Promise<void> {
+    const entry = this.#sessions.get(sessionId);
     this.#sessions.delete(sessionId);
+    if (entry) {
+      const set = this.#byUser.get(entry.session.userId);
+      set?.delete(sessionId);
+      if (set && set.size === 0) this.#byUser.delete(entry.session.userId);
+    }
+    return Promise.resolve();
+  }
+
+  revokeAllForUser(userId: string): Promise<void> {
+    const set = this.#byUser.get(userId);
+    if (set) {
+      for (const id of set) this.#sessions.delete(id);
+      this.#byUser.delete(userId);
+    }
     return Promise.resolve();
   }
 }
 
 const KEY_PREFIX = 'quad:session:';
+const USER_PREFIX = 'quad:user-sessions:';
 
 /** Redis-backed store: opaque id → session JSON with a TTL; deletion is immediate revocation. */
 export class RedisSessionStore implements SessionStore {
@@ -80,7 +108,17 @@ export class RedisSessionStore implements SessionStore {
   async create(session: Session, ttlSeconds: number): Promise<string> {
     assertValidTtl(ttlSeconds);
     const id = newSessionId();
-    await this.#redis.set(KEY_PREFIX + id, JSON.stringify(session), 'EX', ttlSeconds);
+    const userKey = USER_PREFIX + session.userId;
+    // Session + the user→sessions index, atomically. The index TTL only ever EXTENDS (NX sets it on
+    // first use; GT grows it for a longer-lived session) — it must never shrink below a still-valid
+    // session, or revokeAllForUser could miss one and break the revocation guarantee (AUTH-INV-8).
+    await this.#redis
+      .multi()
+      .set(KEY_PREFIX + id, JSON.stringify(session), 'EX', ttlSeconds)
+      .sadd(userKey, id)
+      .expire(userKey, ttlSeconds, 'NX')
+      .expire(userKey, ttlSeconds, 'GT')
+      .exec();
     return id;
   }
 
@@ -95,6 +133,24 @@ export class RedisSessionStore implements SessionStore {
   }
 
   async revoke(sessionId: string): Promise<void> {
+    const raw = await this.#redis.get(KEY_PREFIX + sessionId);
     await this.#redis.del(KEY_PREFIX + sessionId);
+    if (raw !== null) {
+      try {
+        const session = JSON.parse(raw) as Session;
+        await this.#redis.srem(USER_PREFIX + session.userId, sessionId);
+      } catch {
+        // malformed entry — nothing to unindex
+      }
+    }
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    const userKey = USER_PREFIX + userId;
+    const ids = await this.#redis.smembers(userKey);
+    if (ids.length > 0) {
+      await this.#redis.del(...ids.map((id) => KEY_PREFIX + id));
+    }
+    await this.#redis.del(userKey);
   }
 }
