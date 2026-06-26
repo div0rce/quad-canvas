@@ -185,6 +185,23 @@ export interface CanvasLifecycleCommand {
   readonly status: string;
 }
 
+/** A past-term canvas archive (immutable; public metadata only). */
+export interface ArchiveSummary {
+  readonly id: string;
+  readonly term: string;
+  readonly status: string;
+  readonly width: number;
+  readonly height: number;
+  /** ISO-8601 creation timestamp. */
+  readonly createdAt: string;
+}
+
+/** Cursor-paginated list of a tenant's archives (newest term first). */
+export type ArchiveListResponse = Paginated<ArchiveSummary>;
+
+/** A single archive's metadata (artifact/replay pointers are a follow-on). */
+export type ArchiveResponse = ArchiveSummary;
+
 /** Tenant configuration as seen by a tenant admin (DC2/config only — no secrets, no DC3). */
 export interface TenantConfigResponse {
   readonly id: string;

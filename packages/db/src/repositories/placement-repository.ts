@@ -207,9 +207,27 @@ export type RegionRollbackResult =
     }
   | { readonly kind: 'archived' };
 
+export interface ArchiveRow {
+  readonly id: string;
+  readonly term: string;
+  readonly status: string;
+  readonly width: number;
+  readonly height: number;
+  readonly createdAt: Date;
+}
+
+export interface ArchivePage {
+  readonly items: readonly ArchiveRow[];
+  readonly nextCursor: string | null;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
+  /** Cursor-paginated past-term archives (status archived), newest first. */
+  listArchives(tenantId: string, query: { cursor?: string; limit: number }): Promise<ArchivePage>;
+  /** A single archived canvas by term label, or null if none/not archived. */
+  findArchiveByTerm(tenantId: string, term: string): Promise<ArchiveRow | null>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
@@ -270,6 +288,49 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
       });
       return c ?? null;
+    },
+
+    async listArchives(tenantId, query) {
+      // Compound keyset cursor `"<iso>|<id>"` — ordering by (createdAt, id) is stable even when several
+      // archives share a createdAt (e.g. a bulk import), so no row is skipped or repeated across pages.
+      let cursorDate: Date | undefined;
+      let cursorId: string | undefined;
+      if (query.cursor !== undefined) {
+        const sep = query.cursor.lastIndexOf('|');
+        if (sep > 0) {
+          cursorDate = new Date(query.cursor.slice(0, sep));
+          cursorId = query.cursor.slice(sep + 1);
+        }
+      }
+      const rows = await prisma.canvas.findMany({
+        where: {
+          tenantId,
+          status: 'archived',
+          ...(cursorDate && cursorId
+            ? { OR: [{ createdAt: { lt: cursorDate } }, { AND: [{ createdAt: cursorDate }, { id: { lt: cursorId } }] }] }
+            : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: query.limit + 1,
+        select: { id: true, termLabel: true, status: true, width: true, height: true, createdAt: true },
+      });
+      const hasMore = rows.length > query.limit;
+      const page = hasMore ? rows.slice(0, query.limit) : rows;
+      const last = page[page.length - 1];
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}|${last.id}` : null;
+      return {
+        items: page.map((c) => ({ id: c.id, term: c.termLabel, status: c.status, width: c.width, height: c.height, createdAt: c.createdAt })),
+        nextCursor,
+      };
+    },
+
+    async findArchiveByTerm(tenantId, term) {
+      const c = await prisma.canvas.findUnique({
+        where: { tenantId_termLabel: { tenantId, termLabel: term } },
+        select: { id: true, termLabel: true, status: true, width: true, height: true, createdAt: true },
+      });
+      if (!c || c.status !== 'archived') return null; // only archived canvases are public archives
+      return { id: c.id, term: c.termLabel, status: c.status, width: c.width, height: c.height, createdAt: c.createdAt };
     },
 
     async findActiveMembership(tenantId, userId) {

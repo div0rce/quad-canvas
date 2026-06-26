@@ -931,3 +931,32 @@ describe('reports queue (HTTP)', () => {
     }
   });
 });
+
+describe('archives (HTTP)', () => {
+  it('lists archived canvases and fetches one by term (active terms are not archives)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F25', status: 'archived', width: 8, height: 8 } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'S26', status: 'active', width: 10, height: 10 } });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const list = await app.inject({ method: 'GET', url: '/api/v1/archives', headers: { host: 'rutgers.localhost' } });
+      expect(list.statusCode).toBe(200);
+      const body = list.json() as { data: Array<{ term: string; status: string }> };
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({ term: 'F25', status: 'archived' });
+      expect(list.headers['cache-control']).toContain('public');
+
+      const one = await app.inject({ method: 'GET', url: '/api/v1/archives/F25', headers: { host: 'rutgers.localhost' } });
+      expect(one.statusCode).toBe(200);
+      expect((one.json() as { term: string }).term).toBe('F25');
+
+      const missing = await app.inject({ method: 'GET', url: '/api/v1/archives/NOPE', headers: { host: 'rutgers.localhost' } });
+      expect(missing.statusCode).toBe(404);
+
+      const active = await app.inject({ method: 'GET', url: '/api/v1/archives/S26', headers: { host: 'rutgers.localhost' } });
+      expect(active.statusCode).toBe(404); // an active term is not an archive
+    } finally {
+      await app.close();
+    }
+  });
+});

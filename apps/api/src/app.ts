@@ -16,6 +16,7 @@ import { makeSessionRoutes } from './routes/session.js';
 import { makeModerationRoutes } from './routes/moderation.js';
 import { makeAdminRoutes } from './routes/admin.js';
 import { makeReportRoutes } from './routes/reports.js';
+import { makeArchiveRoutes } from './routes/archives.js';
 import type { PlacementDeps } from './services/placement.js';
 import type { SessionStore } from './auth/session-store.js';
 import type { AuthService } from './auth/auth-service.js';
@@ -93,6 +94,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   if (opts.placement) {
     await app.register(makePixelRoutes(opts.placement));
     await app.register(makeSessionRoutes(opts.placement.repo));
+    await app.register(makeArchiveRoutes(opts.placement.repo));
     const registry = new SubscriptionRegistry();
     const unsubscribeBus = opts.placement.bus.subscribe((m) => registry.broadcast(m.tenantId, m.canvasId, m.message));
     app.addHook('onClose', async () => {
