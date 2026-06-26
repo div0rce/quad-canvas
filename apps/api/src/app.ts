@@ -4,10 +4,16 @@ import Fastify from 'fastify';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import errorsPlugin from './plugins/errors.js';
 import tenantPlugin from './plugins/tenant.js';
+import identityPlugin from './plugins/identity.js';
 import healthRoutes from './routes/health.js';
+import { makePixelRoutes } from './routes/pixels.js';
+import type { PlacementDeps } from './services/placement.js';
 
 export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions['logger'];
+  /** Placement dependencies (repository + cooldown policy). When provided, the pixel routes are
+   *  registered. Wired from the DB driver adapter at the composition root, or injected in tests. */
+  readonly placement?: PlacementDeps;
 }
 
 /** Build a configured (but not-yet-listening) Fastify instance. */
@@ -18,7 +24,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   await app.register(errorsPlugin);
   await app.register(tenantPlugin);
+  await app.register(identityPlugin);
   await app.register(healthRoutes);
+
+  if (opts.placement) {
+    await app.register(makePixelRoutes(opts.placement));
+  }
 
   return app;
 }

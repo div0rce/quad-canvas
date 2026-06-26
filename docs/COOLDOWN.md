@@ -347,6 +347,10 @@ flowchart TB
 
 ---
 
+## 24a. Implementation Status (M10–M12)
+
+A **minimal, fail-closed cooldown boundary** is enforced server-side for the placement loop: a fixed cooldown value within the documented 5–20-minute bounds, with each user's next-allowed time derived from the durable event log. The full dynamic load-score algorithm and the Redis live-state fast-path (§5/§6) are **deferred** to a later milestone — this boundary is the correctness floor (server-authoritative, no client authority, fail-closed on read failure). See `CHECKPOINTS.md` §4b.
+
 ## 25. Document Control
 
 - **Path:** `docs/COOLDOWN.md`

@@ -1,7 +1,8 @@
-// @quad/db — Prisma schema (T6 skeleton). FOUNDATION TABLES ONLY.
-// NO event log / pixel / placement / replay / moderation tables — those land in later
-// milestones (event sourcing is append-only; see docs/EVENT_SOURCING.md, DATABASE.md).
-// Tenant isolation first; tenant-scoped uniqueness; NO default tenant.
+// @quad/db — Prisma schema. Foundation tables + the pixel-placement event log/projection.
+// `pixel_events` is the append-only source of truth; `pixels` is the derived current-canvas
+// projection (rebuildable from the log). Append + projection + idempotency commit atomically
+// (see docs/EVENT_SOURCING.md §9, docs/DATABASE.md). Replay/moderation/stat tables land later.
+// Tenant isolation first; tenant-scoped uniqueness; NO default tenant. Events are never mutated.
 
 generator client {
   provider = "prisma-client"
@@ -24,6 +25,8 @@ model Tenant {
 
   memberships Membership[]
   canvases    Canvas[]
+  pixelEvents PixelEvent[]
+  pixels      Pixel[]
 }
 
 model User {
@@ -39,6 +42,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   memberships Membership[]
+  pixelEvents PixelEvent[]
+  pixels      Pixel[]
 }
 
 model Membership {
@@ -73,9 +78,64 @@ model Canvas {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pixelEvents PixelEvent[]
+  pixels      Pixel[]
 
   // One canvas per term per tenant (tenant-scoped).
   @@unique([tenantId, termLabel])
   @@index([tenantId])
+}
+
+// Append-only event log — the source of truth (DC1, tenant-scoped). Never updated or deleted.
+// `seq` is the authoritative per-canvas order assigned at append (NOT a timestamp).
+model PixelEvent {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  canvasId       String   @map("canvas_id")
+  actorUserId    String   @map("user_id")
+  type           String
+  seq            Int
+  x              Int
+  y              Int
+  prevColor      Int?     @map("prev_color")
+  newColor       Int      @map("new_color")
+  idempotencyKey String   @map("idempotency_key")
+  schemaVersion  Int      @default(1) @map("schema_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Restrict (not Cascade): the append-only log is permanent truth — a tenant/canvas/user with
+  // events cannot be hard-deleted out from under it (PRIN-PERMANENCE, ES-INV-2).
+  tenant          Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  canvas          Canvas  @relation(fields: [canvasId], references: [id], onDelete: Restrict)
+  actor           User    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  latestForPixels Pixel[]
+
+  @@unique([canvasId, seq]) // per-canvas authoritative order
+  @@unique([tenantId, idempotencyKey]) // duplicate-safe, tenant-scoped
+  @@index([canvasId, actorUserId]) // per-user last placement (cooldown derivation)
+  @@index([tenantId])
+  @@map("pixel_events")
+}
+
+// Current-canvas projection (derived from pixel_events; rebuildable). One row per cell.
+model Pixel {
+  tenantId    String   @map("tenant_id")
+  canvasId    String   @map("canvas_id")
+  x           Int
+  y           Int
+  color       Int
+  ownerUserId String   @map("owner_user_id")
+  lastEventId String   @map("last_event_id")
+  seq         Int
+  placedAt    DateTime @map("placed_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  canvas    Canvas     @relation(fields: [canvasId], references: [id], onDelete: Cascade)
+  owner     User       @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  lastEvent PixelEvent @relation(fields: [lastEventId], references: [id], onDelete: Restrict)
+
+  @@id([canvasId, x, y]) // exactly one row per (canvas, x, y)
+  @@index([tenantId])
+  @@map("pixels")
 }

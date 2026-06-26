@@ -35,3 +35,14 @@ export interface Membership {
   readonly role: Role;
   readonly status: MembershipStatus;
 }
+
+/**
+ * A verified, tenant-scoped actor authorized to issue commands. Resolved at the auth boundary
+ * (the session mechanism is owned by AUTHENTICATION.md / ADR-0006) and passed INTO domain
+ * services, which never trust client-supplied identity claims (`BE-INV-6`, `PRIN-NO-ANON`).
+ */
+export interface Principal {
+  readonly userId: UserId;
+  readonly tenantId: TenantId;
+  readonly role: Role;
+}

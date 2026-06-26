@@ -367,6 +367,10 @@ Backend test layers (tooling → `TECH_BASELINE.md`; strategy → `TESTING.md`).
 
 ---
 
+## 24a. Implementation Status (M10–M12)
+
+The pixel-placement command path is implemented in `apps/api` (validate → server-enforced cooldown → atomic append + projection + idempotency via `@quad/db`). Per `BE-INV-6` / `PRIN-NO-ANON`, the placement **domain service takes a verified `Principal` as a typed input** and never trusts client claims; the request→principal step (session validation) is owned by `AUTHENTICATION.md` / `ADR-0006` and **deferred to the auth milestone**, so write routes return `401` until sessions land (no anonymous writes, no header bypass). The read path (`GET …/pixels/{x}/{y}`) returns DC2 attribution only. See `CHECKPOINTS.md` §4b.
+
 ## 25. Document Control
 
 - **Path:** `docs/BACKEND.md`

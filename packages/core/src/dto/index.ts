@@ -1,6 +1,6 @@
 // @quad/core — REST DTO contracts (T4 skeleton). The single source of shared shapes
 // (no duplicate DTOs elsewhere). Public/participant responses expose DC2 only — never DC3.
-import type { Coordinate, ColorIndex } from '../domain/ids.js';
+import type { Coordinate, ColorIndex, PerCanvasSequence } from '../domain/ids.js';
 import type { PublicIdentity } from '../domain/identity.js';
 
 /**
@@ -40,6 +40,20 @@ export interface Paginated<T> {
 export interface PlacePixelCommand {
   readonly at: Coordinate;
   readonly color: ColorIndex;
+}
+
+/**
+ * Result of a successful placement (DC2-safe — no owner identity, no DC3). `seq` is the
+ * authoritative per-canvas order of the appended `PixelPlaced` event; `cooldownMs` is how long
+ * the caller must now wait before the next placement (server-authoritative).
+ */
+export interface PlacePixelResultResponse {
+  readonly at: Coordinate;
+  readonly color: ColorIndex;
+  readonly seq: PerCanvasSequence;
+  /** Display-only ISO-8601 timestamp. */
+  readonly placedAt: string;
+  readonly cooldownMs: number;
 }
 
 /** Current state of a single cell (DC2 attribution only). */

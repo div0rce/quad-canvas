@@ -26,7 +26,7 @@ Checkpoints are the **gates between phases/milestone-groups**: each defines what
 | **Phase 3 — Engineering/process** | security/perf/deploy/workflow/milestones/support complete + consistent | `SPEC_PLAN.md` §8 ✅ |
 | **Phase 4 — Scaffolding** | templates/specs/engineers/ADRs/root config present | `SPEC_PLAN.md` §8 ✅ |
 | **G1 Foundation** | workspace/CI/packages/app shells/db schema/testing harness green | **PASS** — §4a (2026-06-25) ✅ |
-| **G2 Placement loop** | M10–M19 (place→event→projection→broadcast→render; reconnect converges) | impl |
+| **G2 Placement loop** | M10–M19 (place→event→projection→broadcast→render; reconnect converges) | **in progress** — backend placement (M10–M12) landed; WS/render/frontend (M14–M19) remain (§4b) ⏳ |
 | **G3 Auth/tenant/fairness** | M20–M29 (verified membership, isolation, cooldown enforced+fair) | impl |
 | **G4 Moderation** | M30–M39 (reversible+audited moderation; sanitized public surfaces) | impl |
 | **G5 Replay/archive** | M40–M45 (archive dry-run + faithful replay proven) | impl |
@@ -53,9 +53,16 @@ Checkpoints are the **gates between phases/milestone-groups**: each defines what
 
 **Local services available:** Docker + Compose with **Postgres 17** and **Redis 8** from `docker-compose.yml` (local-only creds; ports 5432 / 6379).
 
-**Do not implement yet:** any product behaviour — pixel placement, event-log writes, projections, auth, WebSockets, the frontend canvas, or moderation. G1 verifies the **foundation**, not product features.
+## 4b. G2 Placement Loop — in progress
+**Landed (backend placement, M10–M12).** Server-authoritative `POST /api/v1/canvas/current/pixels`: validate (tenant → current **active** canvas → bounds → palette), then **one per-canvas-serialized transaction** (Postgres advisory lock) that enforces **idempotency replay + cooldown** and appends `PixelPlaced` + updates the projection atomically → `PlacePixelResultResponse`; plus `GET …/pixels/{x}/{y}` projection read (DC2 attribution only). Backed by `pixel_events` (append-only truth, FK-`RESTRICT`ed against deletion) + `pixels` (projection) tables (the repo's **first Prisma migration**).
 
-**Next:** product milestones begin at **M10** (placement loop, gate **G2**), built milestone-by-milestone on dedicated work-descriptive branches.
+- **Identity** is injected as a verified `Principal` at the service layer (`BE-INV-6`, `PRIN-NO-ANON`); the HTTP request→principal step (sessions) is owned by `AUTHENTICATION.md` / `ADR-0006` and deferred to the auth milestone, so write routes return **401** until then — no anonymous writes, no header bypass.
+- **Cooldown** is a minimal fixed, fail-closed boundary derived from the event log; the dynamic load algorithm + Redis fast-path are deferred (`COOLDOWN.md`).
+- Verified with Docker-backed integration tests (`pnpm --filter api test:integration`): append+projection, bounds/palette/non-active/cooldown/idempotency/tenant-isolation rejections, unknown-host→404, write-without-principal→401, DC2-only read.
+
+**Remaining for G2:** WS server + fan-out broadcast (M14–M15), `@quad/render` + `apps/web` canvas (M16–M17), reconnect convergence + live end-to-end (M18–M19). **G2 is not yet reached.**
+
+**Do not implement ahead of milestone:** moderation, leaderboards, profiles, archives, heatmaps, or full session auth — each has its own milestone.
 
 ## 5. Checkpoint Template
 Each checkpoint records: **scope · files/milestones covered · required evidence · tests/commands · risks · contradictions found · pass/fail decision · fix-forward actions.** (Phase checkpoints live in `SPEC_PLAN.md` §8; implementation gates G1–G6 are recorded against their milestone group.)
