@@ -37,6 +37,15 @@ function sendError(
   return reply.status(STATUS[code]).send(body);
 }
 
+const DEFAULT_HISTORY_LIMIT = 50;
+const MAX_HISTORY_LIMIT = 200;
+
+function clampLimit(raw: unknown): number {
+  const n = typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_HISTORY_LIMIT;
+  return Math.min(n, MAX_HISTORY_LIMIT);
+}
+
 export function makePixelRoutes(placement: PlacementDeps): FastifyPluginAsync {
   return async (app) => {
     // Placement command (write). Tenant + verified principal required.
@@ -73,7 +82,7 @@ export function makePixelRoutes(placement: PlacementDeps): FastifyPluginAsync {
       if (!Number.isInteger(x) || !Number.isInteger(y)) {
         return sendError(reply, request, 'VALIDATION_ERROR', 'Coordinates must be integers.');
       }
-      const canvas = await placement.repo.findCurrentCanvas(request.tenant.id);
+      const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
       if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
       if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
         return sendError(reply, request, 'NOT_FOUND', 'Coordinate is out of canvas bounds.');
@@ -86,6 +95,70 @@ export function makePixelRoutes(placement: PlacementDeps): FastifyPluginAsync {
         color: pixel.color as domain.ColorIndex,
         ...(pixel.ownerHandle ? { owner: { handle: pixel.ownerHandle } } : {}),
         placedAt: pixel.placedAt.toISOString(),
+      };
+      return reply.send(response);
+    });
+
+    // Current-canvas metadata (public): term/status/dimensions/palette for the initial load.
+    app.get('/api/v1/canvas/current', async (request, reply) => {
+      if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
+      const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
+      if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
+      const meta: dto.CanvasMetaResponse = {
+        term: canvas.termLabel,
+        status: canvas.status,
+        width: canvas.width,
+        height: canvas.height,
+        palette: request.tenant.palette,
+      };
+      return reply.send(meta);
+    });
+
+    // Current-canvas snapshot (public): the projection for initial paint (deltas come over WS).
+    app.get('/api/v1/canvas/current/snapshot', async (request, reply) => {
+      if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
+      const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
+      if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
+      const snap = await placement.repo.getSnapshot(canvas.id);
+      const snapshot: dto.CanvasSnapshotResponse = {
+        width: canvas.width,
+        height: canvas.height,
+        seq: snap.seq as domain.PerCanvasSequence,
+        cells: snap.cells.map((c) => ({ x: c.x, y: c.y, color: c.color as domain.ColorIndex })),
+      };
+      return reply.send(snapshot);
+    });
+
+    // Per-cell placement history (public; DC2 attribution; cursor-paginated, oldest→newest).
+    app.get('/api/v1/canvas/current/pixels/:x/:y/history', async (request, reply) => {
+      if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
+      const params = request.params as { x: string; y: string };
+      const x = Number(params.x);
+      const y = Number(params.y);
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return sendError(reply, request, 'VALIDATION_ERROR', 'Coordinates must be integers.');
+      }
+      const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
+      if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
+      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
+        return sendError(reply, request, 'NOT_FOUND', 'Coordinate is out of canvas bounds.');
+      }
+      const query = request.query as { cursor?: string; limit?: string };
+      const limit = clampLimit(query.limit);
+      const rawCursor = typeof query.cursor === 'string' ? Number(query.cursor) : NaN;
+      const cursor = Number.isInteger(rawCursor) ? rawCursor : undefined;
+      const pageData = await placement.repo.getPixelHistory(canvas.id, x, y, {
+        limit,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      const response: dto.PixelHistoryListResponse = {
+        data: pageData.entries.map((e) => ({
+          color: e.color as domain.ColorIndex,
+          seq: e.seq as domain.PerCanvasSequence,
+          ...(e.ownerHandle ? { owner: { handle: e.ownerHandle } } : {}),
+          placedAt: e.placedAt.toISOString(),
+        })),
+        page: { nextCursor: pageData.nextCursor !== null ? String(pageData.nextCursor) : null, limit },
       };
       return reply.send(response);
     });

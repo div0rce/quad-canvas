@@ -54,15 +54,15 @@ Checkpoints are the **gates between phases/milestone-groups**: each defines what
 **Local services available:** Docker + Compose with **Postgres 17** and **Redis 8** from `docker-compose.yml` (local-only creds; ports 5432 / 6379).
 
 ## 4b. G2 Placement Loop — in progress
-**Landed (backend placement, M10–M12).** Server-authoritative `POST /api/v1/canvas/current/pixels`: validate (tenant → current **active** canvas → bounds → palette), then **one per-canvas-serialized transaction** (Postgres advisory lock) that enforces **idempotency replay + cooldown** and appends `PixelPlaced` + updates the projection atomically → `PlacePixelResultResponse`; plus `GET …/pixels/{x}/{y}` projection read (DC2 attribution only). Backed by `pixel_events` (append-only truth, FK-`RESTRICT`ed against deletion) + `pixels` (projection) tables (the repo's **first Prisma migration**).
+**Landed (backend placement + read surface, M10–M13).** Server-authoritative `POST /api/v1/canvas/current/pixels`: validate (tenant → current **active** canvas → bounds → palette), then **one per-canvas-serialized transaction** (Postgres advisory lock) that enforces **idempotency replay + cooldown** and appends `PixelPlaced` + updates the projection atomically → `PlacePixelResultResponse`. **Read surface (M13):** `GET /api/v1/canvas/current` (metadata), `/snapshot` (projection for initial paint), `/pixels/{x}/{y}` (cell), and `/pixels/{x}/{y}/history` (cursor-paginated, oldest→newest) — all public, **DC2 attribution only**. Backed by `pixel_events` (append-only truth, FK-`RESTRICT`ed against deletion) + `pixels` (projection) tables (the repo's **first Prisma migration**).
 
 - **Identity** is injected as a verified `Principal` at the service layer (`BE-INV-6`, `PRIN-NO-ANON`); the HTTP request→principal step (sessions) is owned by `AUTHENTICATION.md` / `ADR-0006` and deferred to the auth milestone, so write routes return **401** until then — no anonymous writes, no header bypass.
 - **Cooldown** is a minimal fixed, fail-closed boundary derived from the event log; the dynamic load algorithm + Redis fast-path are deferred (`COOLDOWN.md`).
-- Verified with Docker-backed integration tests (`pnpm --filter api test:integration`): append+projection, bounds/palette/non-active/cooldown/idempotency/tenant-isolation rejections, unknown-host→404, write-without-principal→401, DC2-only read.
+- Verified with Docker-backed integration tests (`pnpm --filter api test:integration`, 16/16): append+projection, bounds/palette/non-active/cooldown/idempotency/tenant-isolation rejections, unknown-host→404, write-without-principal→401, and the read surface (metadata, snapshot reflects placements, paginated DC2 history with no email leak).
 
 **Remaining for G2:** WS server + fan-out broadcast (M14–M15), `@quad/render` + `apps/web` canvas (M16–M17), reconnect convergence + live end-to-end (M18–M19). **G2 is not yet reached.**
 
-**Do not implement ahead of milestone:** moderation, leaderboards, profiles, archives, heatmaps, or full session auth — each has its own milestone.
+**Deferred (own milestones):** moderation, leaderboards, profiles, archives, heatmaps, full session auth, and **read visibility gating** (tenant `readOnlyViewing` / `archiveVisibility` on the public read endpoints) — visibility pairs with auth/membership, so reads are currently open per the documented public-read surface.
 
 ## 5. Checkpoint Template
 Each checkpoint records: **scope · files/milestones covered · required evidence · tests/commands · risks · contradictions found · pass/fail decision · fix-forward actions.** (Phase checkpoints live in `SPEC_PLAN.md` §8; implementation gates G1–G6 are recorded against their milestone group.)
