@@ -959,6 +959,30 @@ describe('archives (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('returns replay derivation metadata for an archived term', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'rp1' });
+    await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 2, idempotencyKey: 'rp2' });
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'archived' } });
+    const canvas = await prisma.canvas.findUnique({ where: { id: s.canvasId }, select: { termLabel: true } });
+    const term = canvas!.termLabel;
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/replay`, headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { eventCount: number; fromSeq: number; toSeq: number; available: boolean };
+      expect(body.eventCount).toBe(2);
+      expect(body.toSeq).toBeGreaterThanOrEqual(body.fromSeq);
+      expect(body.available).toBe(false);
+
+      const missing = await app.inject({ method: 'GET', url: '/api/v1/archives/NOPE/replay', headers: { host: 'rutgers.localhost' } });
+      expect(missing.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('profiles (HTTP)', () => {

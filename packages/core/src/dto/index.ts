@@ -231,6 +231,19 @@ export type ArchiveListResponse = Paginated<ArchiveSummary>;
 /** A single archive's metadata (artifact/replay pointers are a follow-on). */
 export type ArchiveResponse = ArchiveSummary;
 
+/**
+ * Replay derivation metadata for an archived term. The seq range is what a replay would cover;
+ * `available` is false until rendered assets are generated into object storage (a follow-on).
+ */
+export interface ReplayMetaResponse {
+  readonly term: string;
+  readonly eventCount: number;
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  /** Whether pre-rendered replay assets exist (object storage); false until generated. */
+  readonly available: boolean;
+}
+
 /** Tenant configuration as seen by a tenant admin (DC2/config only — no secrets, no DC3). */
 export interface TenantConfigResponse {
   readonly id: string;

@@ -61,5 +61,21 @@ export function makeArchiveRoutes(repo: PlacementRepository): FastifyPluginAsync
       void reply.header('Cache-Control', CACHE);
       return reply.send(response);
     });
+
+    app.get('/api/v1/archives/:term/replay', async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const { term } = request.params as { term: string };
+      const meta = await repo.getReplayMeta(request.tenant.id, term);
+      if (!meta) return err(reply, request, 404, 'NOT_FOUND', 'No archive for that term.');
+      const response: dto.ReplayMetaResponse = {
+        term,
+        eventCount: meta.eventCount,
+        fromSeq: meta.fromSeq,
+        toSeq: meta.toSeq,
+        available: false, // pre-rendered assets (object storage) are a follow-on
+      };
+      void reply.header('Cache-Control', CACHE);
+      return reply.send(response);
+    });
   };
 }
