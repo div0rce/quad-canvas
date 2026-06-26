@@ -28,6 +28,7 @@ model Tenant {
   pixelEvents       PixelEvent[]
   pixels            Pixel[]
   moderationActions ModerationAction[]
+  reports           Report[]
 }
 
 model User {
@@ -46,6 +47,7 @@ model User {
   pixelEvents       PixelEvent[]
   pixels            Pixel[]
   moderationActions ModerationAction[]
+  reports           Report[]
 }
 
 model Membership {
@@ -83,6 +85,7 @@ model Canvas {
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pixelEvents PixelEvent[]
   pixels      Pixel[]
+  reports     Report[]
 
   // One canvas per term per tenant (tenant-scoped).
   @@unique([tenantId, termLabel])
@@ -160,4 +163,23 @@ model ModerationAction {
 
   @@index([tenantId, createdAt])
   @@map("moderation_actions")
+}
+
+// User reports feeding the moderation queue (DC4 truth). Status transitions open → resolved/dismissed.
+model Report {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  canvasId       String?  @map("canvas_id")
+  reporterUserId String   @map("reporter_user_id")
+  targetRef      String   @map("target_ref")
+  reason         String
+  status         String   @default("open")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  reporter User    @relation(fields: [reporterUserId], references: [id], onDelete: Restrict)
+  canvas   Canvas? @relation(fields: [canvasId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@map("reports")
 }

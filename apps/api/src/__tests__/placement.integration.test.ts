@@ -629,3 +629,73 @@ describe('admin role assignment (HTTP)', () => {
     }
   });
 });
+
+describe('reports queue (HTTP)', () => {
+  it('a participant files a report; a moderator sees it in the queue', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const reporter = await prisma.user.create({ data: { email: 'r@scarletmail.rutgers.edu', publicHandle: 'r', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: reporter.id, role: 'participant', status: 'active' } });
+    const mod = await prisma.user.create({ data: { email: 'mod2@scarletmail.rutgers.edu', publicHandle: 'mod2', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+
+    const sessions = new InMemorySessionStore();
+    const reporterSession = await sessions.create({ userId: reporter.id, tenantId: 'ten_rutgers' }, 3600);
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const filed = await app.inject({
+        method: 'POST',
+        url: '/api/v1/reports',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${reporterSession}` },
+        payload: { targetRef: 'pixel:3,4', reason: 'offensive' },
+      });
+      expect(filed.statusCode).toBe(201);
+
+      const queue = await app.inject({
+        method: 'GET',
+        url: '/api/v1/moderation/reports',
+        headers: { host: 'rutgers.localhost', cookie: `quad_session=${modSession}` },
+      });
+      expect(queue.statusCode).toBe(200);
+      const body = queue.json() as { data: Array<{ targetRef: string; reason: string; status: string }> };
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({ targetRef: 'pixel:3,4', reason: 'offensive', status: 'open' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects anonymous report filing (401)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/reports',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json' },
+        payload: { targetRef: 'x', reason: 'y' },
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a non-moderator listing the queue (403)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/moderation/reports',
+        headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
