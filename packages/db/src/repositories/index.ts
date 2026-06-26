@@ -1,2 +1,3 @@
-// @quad/db — repository contracts barrel (T6 skeleton).
+// @quad/db — repository barrel.
 export * from './tenant-repository.js';
+export * from './placement-repository.js';
