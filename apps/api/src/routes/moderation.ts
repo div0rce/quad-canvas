@@ -3,10 +3,20 @@
 // P-MOD-4); there is no hard delete (MODERATION.md / API.md §19). Destructive actions need a higher
 // role (ban → admin), a moderator can only act on members of a LOWER role, and a reason is required.
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-import type { domain, dto } from '@quad/core';
+import type { domain, dto, ws } from '@quad/core';
 import type { PlacementRepository } from '@quad/db';
+import type { RealtimeBus } from '@quad/realtime';
 import type { SessionStore } from '../auth/session-store.js';
 import { requireRole, hasMinRole } from '../auth/roles.js';
+
+function parseCoords(targetRef: string): { x: number; y: number } | null {
+  const parts = targetRef.split(',');
+  if (parts.length !== 2) return null;
+  const x = Number(parts[0]);
+  const y = Number(parts[1]);
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
+  return { x, y };
+}
 
 const MEMBER_ACTIONS: Record<string, { status: 'suspended' | 'banned' | 'active'; minRole: domain.Role }> = {
   suspend_member: { status: 'suspended', minRole: 'moderator' },
@@ -25,7 +35,7 @@ function err(reply: FastifyReply, request: FastifyRequest, status: number, code:
   return reply.status(status).send(body);
 }
 
-export function makeModerationRoutes(repo: PlacementRepository, sessions: SessionStore): FastifyPluginAsync {
+export function makeModerationRoutes(repo: PlacementRepository, sessions: SessionStore, bus: RealtimeBus): FastifyPluginAsync {
   return async (app) => {
     app.post('/api/v1/moderation/actions', { preHandler: requireRole('moderator') }, async (request, reply) => {
       const principal = request.principal;
@@ -80,6 +90,41 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           actionType: body.actionType,
         });
         if (!result.updated) return err(reply, request, 404, 'NOT_FOUND', 'Report not found in this tenant.');
+        const response: dto.ModerationActionResponse = {
+          id: result.auditId,
+          actionType: body.actionType,
+          createdAt: result.createdAt.toISOString(),
+        };
+        return reply.status(200).send(response);
+      }
+
+      if (body.actionType === 'pixel_rollback') {
+        const coords = parseCoords(body.targetRef);
+        if (!coords) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x,y" for a pixel rollback.');
+        const canvas = await repo.findViewableCanvas(request.tenant.id);
+        if (!canvas) return err(reply, request, 404, 'NOT_FOUND', 'No canvas for this tenant.');
+        // An archived canvas is sealed — no new events may mutate it, even via moderation.
+        if (canvas.status === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
+        const result = await repo.rollbackPixel({
+          tenantId: request.tenant.id,
+          canvasId: canvas.id,
+          actorUserId: principal.userId,
+          x: coords.x,
+          y: coords.y,
+          reason: body.reason,
+        });
+        if (result.kind === 'absent') return err(reply, request, 404, 'NOT_FOUND', 'No pixel at that coordinate to roll back.');
+        const message: ws.PixelRolledBack = {
+          type: 'PixelRolledBack',
+          at: { x: coords.x, y: coords.y },
+          seq: result.seq as domain.PerCanvasSequence,
+          ...(result.color !== null ? { color: result.color as domain.ColorIndex } : {}),
+        };
+        try {
+          await bus.publish(request.tenant.id, canvas.id, message);
+        } catch {
+          // best-effort broadcast
+        }
         const response: dto.ModerationActionResponse = {
           id: result.auditId,
           actionType: body.actionType,

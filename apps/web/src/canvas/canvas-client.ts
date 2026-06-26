@@ -42,7 +42,7 @@ export class CanvasClient {
   #canvasId: string | null = null;
   #palette = 'default';
   #snapshotLoaded = false;
-  #pending: ws.PixelPlaced[] = [];
+  #pending: Array<ws.PixelPlaced | ws.PixelRolledBack> = [];
   #stopped = false;
 
   constructor(options: CanvasClientOptions) {
@@ -103,7 +103,7 @@ export class CanvasClient {
     if (this.#stopped || !this.#buffer) return;
     this.#buffer.loadSnapshot(snapshot);
     this.#snapshotLoaded = true;
-    for (const delta of this.#pending) this.#buffer.applyDelta(delta);
+    for (const delta of this.#pending) this.#applyLive(delta);
     this.#pending = [];
     this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
   }
@@ -116,14 +116,19 @@ export class CanvasClient {
     } catch {
       return;
     }
-    if (message.type !== 'PixelPlaced') return; // Heartbeat / Error / others ignored this milestone
+    if (message.type !== 'PixelPlaced' && message.type !== 'PixelRolledBack') return; // others ignored
     if (!this.#snapshotLoaded || !this.#buffer) {
       this.#pending.push(message); // arrived before the snapshot — apply after it loads
       return;
     }
-    if (this.#buffer.applyDelta(message)) {
+    if (this.#applyLive(message)) {
       this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
     }
+  }
+
+  #applyLive(message: ws.PixelPlaced | ws.PixelRolledBack): boolean {
+    if (!this.#buffer) return false;
+    return message.type === 'PixelPlaced' ? this.#buffer.applyDelta(message) : this.#buffer.applyRollback(message);
   }
 
   /** Stop the live connection (component unmount). No further reconnects. */

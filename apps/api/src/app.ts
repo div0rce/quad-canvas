@@ -85,7 +85,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   }
 
   if (opts.auth && opts.placement) {
-    await app.register(makeModerationRoutes(opts.placement.repo, opts.auth.sessionStore));
+    await app.register(makeModerationRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
     await app.register(makeAdminRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
     await app.register(makeReportRoutes(opts.placement.repo));
   }

@@ -104,7 +104,7 @@ model PixelEvent {
   x              Int
   y              Int
   prevColor      Int?     @map("prev_color")
-  newColor       Int      @map("new_color")
+  newColor       Int?     @map("new_color")
   idempotencyKey String   @map("idempotency_key")
   schemaVersion  Int      @default(1) @map("schema_version")
   createdAt      DateTime @default(now()) @map("created_at")

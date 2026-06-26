@@ -25,6 +25,15 @@ function placed(x: number, y: number, color: number, seq?: number): ws.PixelPlac
   };
 }
 
+function rolledBack(x: number, y: number, seq: number, color?: number): ws.PixelRolledBack {
+  return {
+    type: 'PixelRolledBack',
+    at: { x, y },
+    seq: seq as domain.PerCanvasSequence,
+    ...(color !== undefined ? { color: color as domain.ColorIndex } : {}),
+  };
+}
+
 describe('CanvasBuffer', () => {
   it('starts empty', () => {
     const b = new CanvasBuffer(4, 4);
@@ -88,5 +97,27 @@ describe('CanvasBuffer', () => {
     const b = new CanvasBuffer(4, 4);
     expect(b.applyDelta(placed(1, 1, 9))).toBe(true);
     expect(b.colorAt(1, 1)).toBe(9);
+  });
+
+  it('applies a rollback: reverts to a prior color', () => {
+    const b = new CanvasBuffer(4, 4);
+    b.applyDelta(placed(1, 1, 7, 5));
+    expect(b.applyRollback(rolledBack(1, 1, 6, 3))).toBe(true);
+    expect(b.colorAt(1, 1)).toBe(3);
+    expect(b.seq).toBe(6);
+  });
+
+  it('applies a rollback with no color: clears the cell', () => {
+    const b = new CanvasBuffer(4, 4);
+    b.applyDelta(placed(2, 2, 4, 5));
+    expect(b.applyRollback(rolledBack(2, 2, 6))).toBe(true);
+    expect(b.colorAt(2, 2)).toBe(EMPTY_CELL);
+  });
+
+  it('ignores a stale rollback (seq ≤ watermark)', () => {
+    const b = new CanvasBuffer(4, 4);
+    b.applyDelta(placed(0, 0, 1, 5));
+    expect(b.applyRollback(rolledBack(0, 0, 5))).toBe(false);
+    expect(b.colorAt(0, 0)).toBe(1);
   });
 });

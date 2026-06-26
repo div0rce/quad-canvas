@@ -22,6 +22,10 @@ export interface PixelPlaced {
 export interface PixelRolledBack {
   readonly type: 'PixelRolledBack';
   readonly at: Coordinate;
+  /** The color the cell reverted to; omitted when the cell is now empty. */
+  readonly color?: ColorIndex;
+  /** Per-canvas order of the compensating event (clients dedupe by seq, like PixelPlaced). */
+  readonly seq?: PerCanvasSequence;
 }
 export interface RegionRolledBack {
   readonly type: 'RegionRolledBack';
