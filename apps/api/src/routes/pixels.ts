@@ -105,6 +105,7 @@ export function makePixelRoutes(placement: PlacementDeps): FastifyPluginAsync {
       const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
       if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
       const meta: dto.CanvasMetaResponse = {
+        id: canvas.id as domain.CanvasId,
         term: canvas.termLabel,
         status: canvas.status,
         width: canvas.width,

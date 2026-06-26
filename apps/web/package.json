@@ -6,6 +6,7 @@
   "dependencies": {
     "@quad/config": "workspace:*",
     "@quad/core": "workspace:*",
+    "@quad/render": "workspace:*",
     "next": "^16",
     "react": "^19",
     "react-dom": "^19"
@@ -13,13 +14,15 @@
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "@types/react-dom": "^19",
+    "vitest": "^3"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "clean": "rm -rf .next dist *.tsbuildinfo"
   }
 }
