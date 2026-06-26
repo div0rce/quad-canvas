@@ -1042,3 +1042,33 @@ describe('leaderboards (HTTP)', () => {
     }
   });
 });
+
+describe('rate limiting (HTTP)', () => {
+  it('blocks placement writes past the budget with 429 RATE_LIMITED', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({
+      placement: deps(0),
+      auth: { sessionStore: sessions },
+      placementRateLimit: { limit: 2, windowSec: 60 },
+    });
+    try {
+      const place = (k: string, x: number) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/canvas/current/pixels',
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': k, cookie: `quad_session=${sid}` },
+          payload: { at: { x, y: 0 }, color: 0 },
+        });
+      expect((await place('rl1', 0)).statusCode).toBe(201);
+      expect((await place('rl2', 1)).statusCode).toBe(201);
+      const blocked = await place('rl3', 2);
+      expect(blocked.statusCode).toBe(429);
+      expect((blocked.json() as { error: { code: string } }).error.code).toBe('RATE_LIMITED');
+      expect(blocked.headers['retry-after']).toBeDefined();
+    } finally {
+      await app.close();
+    }
+  });
+});
