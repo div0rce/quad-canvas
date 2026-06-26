@@ -414,3 +414,125 @@ describe('session reflection (HTTP)', () => {
     }
   });
 });
+
+describe('moderation actions (HTTP)', () => {
+  it('a moderator suspends a member: audited, sessions revoked, access cut', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const mod = await prisma.user.create({ data: { email: 'mod@scarletmail.rutgers.edu', publicHandle: 'mod', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const target = await prisma.user.create({ data: { email: 'target@scarletmail.rutgers.edu', publicHandle: 'target', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: target.id, role: 'participant', status: 'active' } });
+
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const targetSession = await sessions.create({ userId: target.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const before = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'idempotency-key': 't1', 'content-type': 'application/json', cookie: `quad_session=${targetSession}` },
+        payload: { at: { x: 0, y: 0 }, color: 0 },
+      });
+      expect(before.statusCode).toBe(201);
+
+      const action = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'suspend_member', targetRef: target.id, reason: 'spam' },
+      });
+      expect(action.statusCode).toBe(200);
+      const audits = await prisma.moderationAction.findMany({ where: { tenantId: 'ten_rutgers' } });
+      expect(audits).toHaveLength(1);
+      expect(audits[0]?.actionType).toBe('suspend_member');
+
+      const after = await app.inject({
+        method: 'POST',
+        url: '/api/v1/canvas/current/pixels',
+        headers: { host: 'rutgers.localhost', 'idempotency-key': 't2', 'content-type': 'application/json', cookie: `quad_session=${targetSession}` },
+        payload: { at: { x: 1, y: 1 }, color: 1 },
+      });
+      expect(after.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a non-moderator (403)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${sid}` },
+        payload: { actionType: 'suspend_member', targetRef: 'whoever' },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects an unauthenticated request (401)', async () => {
+    await seed({ tenantId: 'ten_rutgers' });
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json' },
+        payload: { actionType: 'suspend_member', targetRef: 'whoever' },
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  async function seedModerator(): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; cookie: string }> {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    const mod = await prisma.user.create({ data: { email: 'm@scarletmail.rutgers.edu', publicHandle: 'm', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    return { app, cookie: `quad_session=${sid}` };
+  }
+
+  it('requires a reason (422)', async () => {
+    const { app, cookie } = await seedModerator();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { actionType: 'suspend_member', targetRef: 'whoever' },
+      });
+      expect(res.statusCode).toBe(422);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('a moderator cannot ban — ban requires admin (403)', async () => {
+    const { app, cookie } = await seedModerator();
+    try {
+      const target = await prisma.user.create({ data: { email: 't@scarletmail.rutgers.edu', publicHandle: 't', status: 'active' } });
+      await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: target.id, role: 'participant', status: 'active' } });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { actionType: 'ban_member', targetRef: target.id, reason: 'x' },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});

@@ -85,6 +85,19 @@ export type AppendResult =
   | { readonly kind: 'duplicate'; readonly row: PlacedRow }
   | { readonly kind: 'cooldown'; readonly retryAfterMs: number };
 
+export interface ApplyMemberModerationInput {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+  readonly targetUserId: string;
+  readonly actionType: string;
+  readonly status: string;
+  readonly reason: string;
+}
+
+export type ApplyMemberModerationResult =
+  | { readonly updated: true; readonly auditId: string; readonly createdAt: Date }
+  | { readonly updated: false };
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -98,6 +111,10 @@ export interface PlacementRepository {
   ensureActiveMembership(tenantId: string, userId: string, role: string): Promise<void>;
   /** A user's public identity (DC2 handle/displayName) for session reflection, or null. */
   getPublicIdentity(userId: string): Promise<{ handle: string; displayName?: string } | null>;
+  /** A member's role regardless of status (active/suspended/banned), or null if not a member. */
+  getMembershipRole(tenantId: string, userId: string): Promise<string | null>;
+  /** Atomically set a member's status + write the DC4 audit record. `updated:false` if not a member. */
+  applyMemberModeration(input: ApplyMemberModerationInput): Promise<ApplyMemberModerationResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -166,6 +183,33 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const u = await prisma.user.findUnique({ where: { id: userId }, select: { publicHandle: true, displayName: true } });
       if (!u || u.publicHandle === null) return null; // no public handle → no public identity
       return u.displayName !== null ? { handle: u.publicHandle, displayName: u.displayName } : { handle: u.publicHandle };
+    },
+
+    async getMembershipRole(tenantId, userId) {
+      const m = await prisma.membership.findUnique({ where: { tenantId_userId: { tenantId, userId } }, select: { role: true } });
+      return m?.role ?? null;
+    },
+
+    async applyMemberModeration(input) {
+      // Status change + audit commit together — there is no action without an audit entry (P-MOD-4).
+      return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        const result = await tx.membership.updateMany({
+          where: { tenantId: input.tenantId, userId: input.targetUserId },
+          data: { status: input.status },
+        });
+        if (result.count === 0) return { updated: false };
+        const action = await tx.moderationAction.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            actionType: input.actionType,
+            targetRef: input.targetUserId,
+            reason: input.reason,
+          },
+          select: { id: true, createdAt: true },
+        });
+        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
     },
 
     async getSnapshot(canvasId) {

@@ -115,3 +115,18 @@ export interface SessionResponse {
   readonly user?: PublicIdentity;
   readonly role?: Role;
 }
+
+/** Moderation/admin action command (moderator+). `targetRef` identifies the target (e.g. a user id). */
+export interface ModerationActionCommand {
+  readonly actionType: string;
+  readonly targetRef: string;
+  readonly reason?: string;
+}
+
+/** Result of a recorded (audited, append-only) moderation action. */
+export interface ModerationActionResponse {
+  readonly id: string;
+  readonly actionType: string;
+  /** Display-only ISO-8601 timestamp. */
+  readonly createdAt: string;
+}
