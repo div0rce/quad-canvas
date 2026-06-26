@@ -116,6 +116,15 @@ export class CanvasClient {
     } catch {
       return;
     }
+    if (message.type === 'RegionRolledBack') {
+      // A region changed at once — resync the snapshot. Queue deltas during the refetch (clear the
+      // loaded flag) so none are lost or applied to the stale buffer; the watermark dedupes the rest.
+      if (this.#snapshotLoaded && !this.#stopped) {
+        this.#snapshotLoaded = false;
+        void this.#loadSnapshotAndFlush();
+      }
+      return;
+    }
     if (message.type !== 'PixelPlaced' && message.type !== 'PixelRolledBack') return; // others ignored
     if (!this.#snapshotLoaded || !this.#buffer) {
       this.#pending.push(message); // arrived before the snapshot — apply after it loads
