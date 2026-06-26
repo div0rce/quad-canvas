@@ -23,10 +23,11 @@ model Tenant {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  memberships Membership[]
-  canvases    Canvas[]
-  pixelEvents PixelEvent[]
-  pixels      Pixel[]
+  memberships       Membership[]
+  canvases          Canvas[]
+  pixelEvents       PixelEvent[]
+  pixels            Pixel[]
+  moderationActions ModerationAction[]
 }
 
 model User {
@@ -41,9 +42,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships Membership[]
-  pixelEvents PixelEvent[]
-  pixels      Pixel[]
+  memberships       Membership[]
+  pixelEvents       PixelEvent[]
+  pixels            Pixel[]
+  moderationActions ModerationAction[]
 }
 
 model Membership {
@@ -139,4 +141,23 @@ model Pixel {
   @@id([canvasId, x, y]) // exactly one row per (canvas, x, y)
   @@index([tenantId])
   @@map("pixels")
+}
+
+// Append-only audit of moderation/admin actions (DC4). Never updated or deleted — every action is
+// a permanent, attributed record (actor, action, target, reason, time). FK-RESTRICTed like the log.
+model ModerationAction {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  actorUserId    String   @map("actor_user_id")
+  actionType     String   @map("action_type")
+  targetRef      String   @map("target_ref")
+  reason         String?
+  relatedEventId String?  @map("related_event_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actor  User   @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@map("moderation_actions")
 }
