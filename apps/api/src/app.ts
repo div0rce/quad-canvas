@@ -33,6 +33,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   if (opts.placement) {
     await app.register(makePixelRoutes(opts.placement));
     const registry = new SubscriptionRegistry();
+    const unsubscribeBus = opts.placement.bus.subscribe((m) => registry.broadcast(m.tenantId, m.canvasId, m.message));
+    app.addHook('onClose', async () => {
+      unsubscribeBus();
+    });
     await app.register(websocketPlugin, { options: { maxPayload: 1_048_576 } });
     await app.register(makeWsRoutes(registry, opts.placement.repo));
   }

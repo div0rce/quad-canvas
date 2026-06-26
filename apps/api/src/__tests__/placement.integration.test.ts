@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { domain } from '@quad/core';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
+import { InMemoryRealtimeBus } from '@quad/realtime';
 import { buildApp } from '../app.js';
 import { placePixel } from '../services/placement.js';
 import type { PlacementDeps } from '../services/placement.js';
@@ -11,7 +12,7 @@ const prisma = createPrismaClient({ connectionString: DATABASE_URL });
 const repo = createPlacementRepository(prisma);
 
 function deps(cooldownMs = 0, now: () => Date = () => new Date()): PlacementDeps {
-  return { repo, cooldownMs, now };
+  return { repo, cooldownMs, now, bus: new InMemoryRealtimeBus() };
 }
 
 async function reset(): Promise<void> {

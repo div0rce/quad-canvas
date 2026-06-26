@@ -3,6 +3,7 @@
 // driver adapter in @quad/db; placement routes are wired only when a database is configured.
 import { buildApp } from './app.js';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
+import { InMemoryRealtimeBus } from '@quad/realtime';
 import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
 
@@ -20,7 +21,14 @@ async function main(): Promise<void> {
   let placement: PlacementDeps | undefined;
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
-    placement = { repo: createPlacementRepository(prisma), cooldownMs: COOLDOWN_MS, now: () => new Date() };
+    // In-memory fan-out (single node). A Redis-backed bus (cross-node) plugs into the same
+    // RealtimeBus interface when horizontal scale is configured.
+    placement = {
+      repo: createPlacementRepository(prisma),
+      cooldownMs: COOLDOWN_MS,
+      now: () => new Date(),
+      bus: new InMemoryRealtimeBus(),
+    };
   }
 
   const app = await buildApp({ logger: true, ...(placement ? { placement } : {}) });
