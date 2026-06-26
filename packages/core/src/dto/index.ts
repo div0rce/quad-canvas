@@ -142,3 +142,28 @@ export interface RoleAssignmentResponse {
   readonly targetRef: string;
   readonly role: Role;
 }
+
+/** A participant report (feeds the moderation queue). `targetRef` identifies what is reported. */
+export interface SubmitReportCommand {
+  readonly targetRef: string;
+  readonly reason: string;
+}
+
+/** Acknowledgement of a filed report. */
+export interface ReportResponse {
+  readonly id: string;
+  readonly status: string;
+}
+
+/** One report in the moderation queue (DC2 — no reporter identity exposed at this level). */
+export interface ReportItem {
+  readonly id: string;
+  readonly targetRef: string;
+  readonly reason: string;
+  readonly status: string;
+  /** Display-only ISO-8601 timestamp. */
+  readonly createdAt: string;
+}
+
+/** Cursor-paginated moderation report queue (oldest→newest). */
+export type ReportQueueResponse = Paginated<ReportItem>;

@@ -105,6 +105,33 @@ export interface AssignRoleInput {
   readonly role: string;
 }
 
+export interface CreateReportInput {
+  readonly tenantId: string;
+  readonly canvasId: string | null;
+  readonly reporterUserId: string;
+  readonly targetRef: string;
+  readonly reason: string;
+}
+
+export interface ReportRow {
+  readonly id: string;
+  readonly targetRef: string;
+  readonly reason: string;
+  readonly status: string;
+  readonly createdAt: Date;
+}
+
+export interface ListReportsQuery {
+  readonly status?: string;
+  readonly cursor?: string;
+  readonly limit: number;
+}
+
+export interface ReportPage {
+  readonly items: readonly ReportRow[];
+  readonly nextCursor: string | null;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -124,6 +151,10 @@ export interface PlacementRepository {
   applyMemberModeration(input: ApplyMemberModerationInput): Promise<ApplyMemberModerationResult>;
   /** Atomically set a member's role + write the DC4 audit record. `updated:false` if not a member. */
   assignMembershipRole(input: AssignRoleInput): Promise<ApplyMemberModerationResult>;
+  /** File a user report (DC4); returns its id + initial status. */
+  createReport(input: CreateReportInput): Promise<{ id: string; status: string }>;
+  /** Cursor-paginated report queue for a tenant (oldest→newest), optionally filtered by status. */
+  listReports(tenantId: string, query: ListReportsQuery): Promise<ReportPage>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -340,6 +371,38 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         });
         return { kind: 'placed', row: { x, y, color, seq, placedAt: event.createdAt } };
       });
+    },
+
+    async createReport(input) {
+      const report = await prisma.report.create({
+        data: {
+          tenantId: input.tenantId,
+          canvasId: input.canvasId,
+          reporterUserId: input.reporterUserId,
+          targetRef: input.targetRef,
+          reason: input.reason,
+        },
+        select: { id: true, status: true },
+      });
+      return { id: report.id, status: report.status };
+    },
+
+    async listReports(tenantId, query) {
+      const rows = await prisma.report.findMany({
+        where: {
+          tenantId,
+          ...(query.status !== undefined ? { status: query.status } : {}),
+          ...(query.cursor !== undefined ? { createdAt: { gt: new Date(query.cursor) } } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+        take: query.limit + 1,
+        select: { id: true, targetRef: true, reason: true, status: true, createdAt: true },
+      });
+      const hasMore = rows.length > query.limit;
+      const items = hasMore ? rows.slice(0, query.limit) : rows;
+      const last = items[items.length - 1];
+      const nextCursor = hasMore && last ? last.createdAt.toISOString() : null;
+      return { items, nextCursor };
     },
   };
 }
