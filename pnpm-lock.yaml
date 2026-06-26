@@ -97,7 +97,18 @@ importers:
 
   packages/eslint-config: {}
 
-  packages/realtime: {}
+  packages/realtime:
+    dependencies:
+      '@quad/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.0
+      vitest:
+        specifier: ^3
+        version: 3.2.6(@types/node@22.20.0)(jiti@2.7.0)
 
   packages/render: {}
 
