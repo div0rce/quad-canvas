@@ -96,6 +96,8 @@ export interface PlacementRepository {
   findOrCreateUserByEmail(email: string): Promise<{ id: string }>;
   /** Ensure a membership exists (active for new users); NEVER re-activates a suspended/banned one. */
   ensureActiveMembership(tenantId: string, userId: string, role: string): Promise<void>;
+  /** A user's public identity (DC2 handle/displayName) for session reflection, or null. */
+  getPublicIdentity(userId: string): Promise<{ handle: string; displayName?: string } | null>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -158,6 +160,12 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         create: { tenantId, userId, role, status: 'active' },
         update: {},
       });
+    },
+
+    async getPublicIdentity(userId) {
+      const u = await prisma.user.findUnique({ where: { id: userId }, select: { publicHandle: true, displayName: true } });
+      if (!u || u.publicHandle === null) return null; // no public handle → no public identity
+      return u.displayName !== null ? { handle: u.publicHandle, displayName: u.displayName } : { handle: u.publicHandle };
     },
 
     async getSnapshot(canvasId) {

@@ -1,7 +1,7 @@
 // @quad/core — REST DTO contracts (T4 skeleton). The single source of shared shapes
 // (no duplicate DTOs elsewhere). Public/participant responses expose DC2 only — never DC3.
 import type { Coordinate, ColorIndex, PerCanvasSequence, CanvasId } from '../domain/ids.js';
-import type { PublicIdentity } from '../domain/identity.js';
+import type { PublicIdentity, Role } from '../domain/identity.js';
 
 /**
  * Canonical REST error codes. `COOLDOWN_ACTIVE` (the fairness throttle) is DISTINCT from
@@ -108,3 +108,10 @@ export interface PixelHistoryEntry {
 
 /** Cursor-paginated per-cell placement history (oldest→newest). */
 export type PixelHistoryListResponse = Paginated<PixelHistoryEntry>;
+
+/** Current auth state for the resolved tenant — DC2 only. `authenticated:false` for anonymous. */
+export interface SessionResponse {
+  readonly authenticated: boolean;
+  readonly user?: PublicIdentity;
+  readonly role?: Role;
+}
