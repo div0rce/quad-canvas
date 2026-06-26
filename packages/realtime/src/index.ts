@@ -2,3 +2,4 @@
 // authoritative writes — placement is REST, WS-INV-1).
 export * from './subscription-registry.js';
 export * from './realtime-bus.js';
+export * from './redis-bus.js';

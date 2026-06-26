@@ -1,7 +1,7 @@
 // @quad/core — WebSocket message catalog (T4 skeleton). WS broadcasts live updates ONLY;
 // no authoritative writes over WS. Payloads typed; DC2 only (never DC3). Names are canonical
 // (namespaced under `ws` in the barrel, so ws.PixelPlaced ≠ events.PixelPlaced — no collision).
-import type { Coordinate, ColorIndex, CanvasId } from '../domain/ids.js';
+import type { Coordinate, ColorIndex, CanvasId, PerCanvasSequence } from '../domain/ids.js';
 import type { PublicIdentity } from '../domain/identity.js';
 
 // --- Server → client ---
@@ -15,6 +15,8 @@ export interface PixelPlaced {
   readonly type: 'PixelPlaced';
   readonly at: Coordinate;
   readonly color: ColorIndex;
+  /** Per-canvas order of this placement — clients apply deltas with `seq` beyond the snapshot. */
+  readonly seq?: PerCanvasSequence;
   readonly by?: PublicIdentity;
 }
 export interface PixelRolledBack {

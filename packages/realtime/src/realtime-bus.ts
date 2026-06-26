@@ -14,6 +14,8 @@ export interface BusMessage {
 export type BusHandler = (message: BusMessage) => void;
 
 export interface RealtimeBus {
+  /** Resolve once the bus is ready to deliver (e.g. the subscription is active). */
+  ready(): Promise<void>;
   /** Publish a tenant+canvas-scoped message to all nodes (including this one). */
   publish(tenantId: string, canvasId: string, message: ws.ServerToClientMessage): Promise<void>;
   /** Subscribe to delivered messages; returns an unsubscribe function. */
@@ -29,6 +31,10 @@ export interface RealtimeBus {
  */
 export class InMemoryRealtimeBus implements RealtimeBus {
   readonly #handlers = new Set<BusHandler>();
+
+  ready(): Promise<void> {
+    return Promise.resolve();
+  }
 
   publish(tenantId: string, canvasId: string, message: ws.ServerToClientMessage): Promise<void> {
     const busMessage: BusMessage = { tenantId, canvasId, message };

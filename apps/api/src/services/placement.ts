@@ -128,8 +128,15 @@ export async function placePixel(
       type: 'PixelPlaced',
       at: { x: outcome.row.x, y: outcome.row.y },
       color: outcome.row.color as domain.ColorIndex,
+      seq: outcome.row.seq as domain.PerCanvasSequence,
     };
-    await deps.bus.publish(principal.tenantId, canvas.id, broadcast);
+    // Best-effort fan-out: the placement is already durably committed in Postgres, so a transport
+    // failure must NOT fail it — clients reconcile from the snapshot (watermark) on next connect.
+    try {
+      await deps.bus.publish(principal.tenantId, canvas.id, broadcast);
+    } catch {
+      // swallow — broadcast is best-effort, never authoritative
+    }
   }
   return success(outcome.row, deps.cooldownMs);
 }
