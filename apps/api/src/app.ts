@@ -58,6 +58,8 @@ export interface BuildAppOptions {
    * Set to a trusted proxy IP/CIDR (or hop count) rather than `true` when not solely behind the LB.
    */
   readonly trustProxy?: boolean | string | number;
+  /** Max request body size in bytes (defense-in-depth — every endpoint takes tiny JSON). Default 16 KiB. */
+  readonly bodyLimitBytes?: number;
 }
 
 const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
@@ -77,6 +79,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     // Behind the production LB, resolve the real client IP from X-Forwarded-For so per-IP rate
     // limiting of anonymous traffic doesn't lump every client under the proxy socket IP.
     trustProxy: opts.trustProxy ?? false,
+    // Every endpoint takes a tiny JSON body; cap it well below Fastify's 1 MiB default so an
+    // oversized payload is rejected (413) before it's buffered (memory-exhaustion defense).
+    bodyLimit: opts.bodyLimitBytes ?? 16 * 1024,
   });
 
   // Resolve principals from sessions only when both a session store and the repository (for the
