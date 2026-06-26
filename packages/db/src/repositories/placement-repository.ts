@@ -229,6 +229,12 @@ export interface ProfileRow {
   readonly pixelsPlaced: number;
 }
 
+export interface LeaderboardRow {
+  readonly handle: string;
+  readonly displayName: string | null;
+  readonly pixelsPlaced: number;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -240,6 +246,8 @@ export interface PlacementRepository {
   getProfileByHandle(tenantId: string, handle: string): Promise<ProfileRow | null>;
   /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
   getProfileByUserId(tenantId: string, userId: string): Promise<ProfileRow | null>;
+  /** Top placers in the tenant (active members, DC2), ordered by placement count desc. */
+  getLeaderboard(tenantId: string, limit: number): Promise<readonly LeaderboardRow[]>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
@@ -366,6 +374,41 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       if (!m || m.status !== 'active' || m.user.publicHandle === null) return null;
       const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced' } });
       return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced };
+    },
+
+    async getLeaderboard(tenantId, limit) {
+      // Rank by placement count, ties broken deterministically by user id. Page the grouped counts
+      // until `limit` ELIGIBLE members (active + public handle, DC2) are collected — so a run of
+      // suspended/handle-less top placers can't truncate the board while eligible members remain.
+      const rows: LeaderboardRow[] = [];
+      const batch = Math.max(limit, 1) * 2;
+      let skip = 0;
+      for (let guard = 0; guard < 50 && rows.length < limit; guard++) {
+        const grouped = await prisma.pixelEvent.groupBy({
+          by: ['actorUserId'],
+          where: { tenantId, type: 'PixelPlaced' },
+          _count: { _all: true },
+          orderBy: [{ _count: { actorUserId: 'desc' } }, { actorUserId: 'asc' }],
+          take: batch,
+          skip,
+        });
+        if (grouped.length === 0) break;
+        const ids = grouped.map((g) => g.actorUserId);
+        const memberships = await prisma.membership.findMany({
+          where: { tenantId, status: 'active', userId: { in: ids } },
+          select: { userId: true, user: { select: { publicHandle: true, displayName: true } } },
+        });
+        const byUser = new Map(memberships.map((m) => [m.userId, m.user]));
+        for (const g of grouped) {
+          const u = byUser.get(g.actorUserId);
+          if (!u || u.publicHandle === null) continue; // inactive/banned or no handle → omit
+          rows.push({ handle: u.publicHandle, displayName: u.displayName, pixelsPlaced: g._count._all });
+          if (rows.length >= limit) break;
+        }
+        if (grouped.length < batch) break; // exhausted all groups
+        skip += batch;
+      }
+      return rows;
     },
 
     async findActiveMembership(tenantId, userId) {

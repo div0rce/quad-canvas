@@ -990,3 +990,31 @@ describe('profiles (HTTP)', () => {
     }
   });
 });
+
+describe('leaderboards (HTTP)', () => {
+  it('ranks members by placement count and rejects an unknown category', async () => {
+    const a = await seed({ tenantId: 'ten_rutgers', handle: 'alice', email: 'alice@scarletmail.rutgers.edu' });
+    const bob = await prisma.user.create({ data: { email: 'bob@scarletmail.rutgers.edu', publicHandle: 'bob', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: bob.id, role: 'participant', status: 'active' } });
+    const bobP = { userId: bob.id as domain.UserId, tenantId: 'ten_rutgers' as domain.TenantId, role: 'participant' as const };
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(a), t, { x: 0, y: 0, color: 1, idempotencyKey: 'la1' });
+    await placePixel(deps(0), bobP, t, { x: 1, y: 0, color: 2, idempotencyKey: 'lb1' });
+    await placePixel(deps(0), bobP, t, { x: 2, y: 0, color: 3, idempotencyKey: 'lb2' });
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/leaderboards', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { category: string; entries: Array<{ rank: number; handle: string; pixelsPlaced: number }> };
+      expect(body.category).toBe('placements');
+      expect(body.entries[0]).toMatchObject({ rank: 1, handle: 'bob', pixelsPlaced: 2 });
+      expect(body.entries[1]).toMatchObject({ rank: 2, handle: 'alice', pixelsPlaced: 1 });
+      expect(res.body).not.toContain('@'); // no DC3 email
+
+      const bad = await app.inject({ method: 'GET', url: '/api/v1/leaderboards?category=nope', headers: { host: 'rutgers.localhost' } });
+      expect(bad.statusCode).toBe(422);
+    } finally {
+      await app.close();
+    }
+  });
+});
