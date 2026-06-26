@@ -1071,4 +1071,29 @@ describe('rate limiting (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('blocks report filing past the budget with 429 RATE_LIMITED', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const u = await prisma.user.create({ data: { email: 'rlr@scarletmail.rutgers.edu', publicHandle: 'rlr', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: u.id, role: 'participant', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: u.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions }, reportRateLimit: { limit: 1, windowSec: 60 } });
+    try {
+      const file = (n: string) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/reports',
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${sid}` },
+          payload: { targetRef: `pixel:${n}`, reason: 'spam' },
+        });
+      expect((await file('1')).statusCode).toBe(201);
+      const blocked = await file('2');
+      expect(blocked.statusCode).toBe(429);
+      expect((blocked.json() as { error: { code: string } }).error.code).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
+  });
 });
