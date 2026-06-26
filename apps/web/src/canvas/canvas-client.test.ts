@@ -95,4 +95,59 @@ describe('CanvasClient', () => {
 
     expect(client.buffer?.colorAt(2, 2)).toBe(5);
   });
+
+  it('reconnects and re-subscribes after an unexpected close', async () => {
+    const sockets: Array<ReturnType<typeof fakeSocket>> = [];
+    const client = new CanvasClient({
+      fetchMeta: () => Promise.resolve(meta),
+      fetchSnapshot: () => Promise.resolve(emptySnapshot),
+      openSocket: () => {
+        const s = fakeSocket();
+        sockets.push(s);
+        return s;
+      },
+      onUpdate: () => undefined,
+      schedule: (fn) => {
+        fn(); // run the reconnect immediately
+      },
+    });
+
+    await client.start();
+    expect(sockets).toHaveLength(1);
+    sockets[0]?.onopen?.();
+    expect(sockets[0]?.sent[0]).toContain('SubscribeCanvas');
+
+    // The connection drops → the client reconnects and re-subscribes.
+    sockets[0]?.onclose?.();
+    await new Promise((r) => setTimeout(r, 0)); // let the reconnect's snapshot fetch resolve
+    expect(sockets).toHaveLength(2);
+    sockets[1]?.onopen?.();
+    expect(sockets[1]?.sent[0]).toContain('SubscribeCanvas');
+
+    // After re-sync, deltas apply again.
+    sockets[1]?.onmessage?.({ data: JSON.stringify({ type: 'PixelPlaced', at: { x: 0, y: 0 }, color: 1, seq: 1 }) });
+    expect(client.buffer?.colorAt(0, 0)).toBe(1);
+  });
+
+  it('does not reconnect after stop()', async () => {
+    const sockets: Array<ReturnType<typeof fakeSocket>> = [];
+    const client = new CanvasClient({
+      fetchMeta: () => Promise.resolve(meta),
+      fetchSnapshot: () => Promise.resolve(emptySnapshot),
+      openSocket: () => {
+        const s = fakeSocket();
+        sockets.push(s);
+        return s;
+      },
+      onUpdate: () => undefined,
+      schedule: (fn) => {
+        fn();
+      },
+    });
+    await client.start();
+    client.stop();
+    sockets[0]?.onclose?.();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sockets).toHaveLength(1); // no reconnect
+  });
 });

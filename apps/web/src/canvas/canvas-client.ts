@@ -1,8 +1,10 @@
 // apps/web — canvas controller. Framework-agnostic orchestration of the live view: open the
 // WebSocket and subscribe FIRST (queuing deltas), then fetch the REST snapshot, load a @quad/render
 // CanvasBuffer, and flush the queued deltas — so no delta is lost in the gap between snapshot and
-// subscription (the buffer's seq watermark drops any that the snapshot already covers). Network +
-// socket are injected so this is unit-testable in Node. Read/view only — placement is gated (M20).
+// subscription (the buffer's seq watermark drops any that the snapshot already covers). On an
+// unexpected disconnect it reconnects, re-fetches the snapshot (fresh watermark), resubscribes, and
+// resumes — convergent by construction (ARCHITECTURE §11). Network + socket are injected so this is
+// unit-testable in Node. Read/view only — placement is gated (M20).
 import { CanvasBuffer } from '@quad/render';
 import type { dto, ws } from '@quad/core';
 
@@ -27,6 +29,10 @@ export interface CanvasClientOptions {
   readonly openSocket: () => SocketLike;
   /** Called after the snapshot loads and after each applied delta — repaint from the buffer. */
   readonly onUpdate: (buffer: CanvasBuffer, context: CanvasUpdateContext) => void;
+  /** Backoff before a reconnect attempt (ms). Default 1000. */
+  readonly reconnectDelayMs?: number;
+  /** Scheduler for the reconnect backoff (injectable for tests). Default `setTimeout`. */
+  readonly schedule?: (fn: () => void, ms: number) => void;
 }
 
 export class CanvasClient {
@@ -53,16 +59,9 @@ export class CanvasClient {
     this.#canvasId = meta.id;
     this.#palette = meta.palette;
     this.#buffer = new CanvasBuffer(meta.width, meta.height);
-    // Subscribe BEFORE fetching the snapshot so any delta in the gap is queued, not lost.
-    if (!this.#stopped) this.#connect();
-
-    const snapshot = await this.#opts.fetchSnapshot();
-    if (this.#stopped || !this.#buffer) return;
-    this.#buffer.loadSnapshot(snapshot);
-    this.#snapshotLoaded = true;
-    for (const delta of this.#pending) this.#buffer.applyDelta(delta);
-    this.#pending = [];
-    this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
+    if (this.#stopped) return;
+    this.#connect();
+    await this.#loadSnapshotAndFlush();
   }
 
   #connect(): void {
@@ -76,6 +75,37 @@ export class CanvasClient {
     socket.onmessage = (event) => {
       this.#onMessage(event.data);
     };
+    socket.onclose = () => {
+      this.#onClose();
+    };
+  }
+
+  #onClose(): void {
+    this.#socket = null;
+    if (this.#stopped) return;
+    // Queue deltas until we have re-synced against a fresh snapshot.
+    this.#snapshotLoaded = false;
+    const delay = this.#opts.reconnectDelayMs ?? 1000;
+    const schedule = this.#opts.schedule ?? ((fn, ms) => setTimeout(fn, ms));
+    schedule(() => {
+      void this.#reconnect();
+    }, delay);
+  }
+
+  async #reconnect(): Promise<void> {
+    if (this.#stopped || !this.#buffer) return;
+    this.#connect();
+    await this.#loadSnapshotAndFlush();
+  }
+
+  async #loadSnapshotAndFlush(): Promise<void> {
+    const snapshot = await this.#opts.fetchSnapshot();
+    if (this.#stopped || !this.#buffer) return;
+    this.#buffer.loadSnapshot(snapshot);
+    this.#snapshotLoaded = true;
+    for (const delta of this.#pending) this.#buffer.applyDelta(delta);
+    this.#pending = [];
+    this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
   }
 
   #onMessage(data: unknown): void {
@@ -96,7 +126,7 @@ export class CanvasClient {
     }
   }
 
-  /** Stop the live connection (component unmount). */
+  /** Stop the live connection (component unmount). No further reconnects. */
   stop(): void {
     this.#stopped = true;
     this.#socket?.close();
