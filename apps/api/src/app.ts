@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import type { domain } from '@quad/core';
 import { SubscriptionRegistry } from '@quad/realtime';
 import errorsPlugin from './plugins/errors.js';
+import securityHeadersPlugin from './plugins/security-headers.js';
 import tenantPlugin from './plugins/tenant.js';
 import { makeIdentityPlugin, type IdentityResolver } from './plugins/identity.js';
 import healthRoutes from './routes/health.js';
@@ -78,6 +79,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     };
   }
 
+  await app.register(securityHeadersPlugin);
   await app.register(errorsPlugin);
   await app.register(cookiePlugin);
   await app.register(tenantPlugin);
