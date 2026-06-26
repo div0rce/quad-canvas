@@ -140,6 +140,19 @@ export interface ResolveReportInput {
   readonly actionType: string;
 }
 
+export interface RosterRow {
+  readonly userId: string;
+  readonly handle: string | null;
+  readonly displayName: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+export interface RosterPage {
+  readonly items: readonly RosterRow[];
+  readonly nextCursor: string | null;
+}
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -165,6 +178,8 @@ export interface PlacementRepository {
   listReports(tenantId: string, query: ListReportsQuery): Promise<ReportPage>;
   /** Atomically set a report's status + write the DC4 audit record. `updated:false` if not found. */
   resolveReport(input: ResolveReportInput): Promise<ApplyMemberModerationResult>;
+  /** Cursor-paginated tenant roster (members with DC2 identity, role, status). */
+  listRoster(tenantId: string, query: { cursor?: string; limit: number }): Promise<RosterPage>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -435,6 +450,23 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         });
         return { updated: true, auditId: action.id, createdAt: action.createdAt };
       });
+    },
+
+    async listRoster(tenantId, query) {
+      const rows = await prisma.membership.findMany({
+        where: { tenantId, ...(query.cursor !== undefined ? { createdAt: { gt: new Date(query.cursor) } } : {}) },
+        orderBy: { createdAt: 'asc' },
+        take: query.limit + 1,
+        select: { userId: true, role: true, status: true, createdAt: true, user: { select: { publicHandle: true, displayName: true } } },
+      });
+      const hasMore = rows.length > query.limit;
+      const page = hasMore ? rows.slice(0, query.limit) : rows;
+      const last = page[page.length - 1];
+      const nextCursor = hasMore && last ? last.createdAt.toISOString() : null;
+      return {
+        items: page.map((m) => ({ userId: m.userId, handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, status: m.status })),
+        nextCursor,
+      };
     },
   };
 }

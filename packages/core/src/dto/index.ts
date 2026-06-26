@@ -167,3 +167,15 @@ export interface ReportItem {
 
 /** Cursor-paginated moderation report queue (oldest→newest). */
 export type ReportQueueResponse = Paginated<ReportItem>;
+
+/** One member in the admin roster (DC2 only — public handle/display, never email). */
+export interface RosterEntry {
+  readonly userId: string;
+  readonly handle?: string;
+  readonly displayName?: string;
+  readonly role: Role;
+  readonly status: string;
+}
+
+/** Cursor-paginated tenant roster (admin). */
+export type RosterResponse = Paginated<RosterEntry>;
