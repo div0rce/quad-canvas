@@ -369,3 +369,48 @@ describe('authenticated placement (HTTP)', () => {
     }
   });
 });
+
+describe('session reflection (HTTP)', () => {
+  it('reflects the authenticated identity (DC2 only)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers', handle: 'scarlet', email: 'private@scarletmail.rutgers.edu' });
+    const sessions = new InMemorySessionStore();
+    const sessionId = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/session',
+        headers: { host: 'rutgers.localhost', cookie: `quad_session=${sessionId}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { authenticated: boolean; user?: { handle: string }; role?: string };
+      expect(body.authenticated).toBe(true);
+      expect(body.user?.handle).toBe('scarlet');
+      expect(body.role).toBe('participant');
+      expect(res.body).not.toContain('@'); // no DC3 email
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reflects anonymous when there is no session', async () => {
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/session', headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      expect((res.json() as { authenticated: boolean }).authenticated).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 404 for an unknown host (no tenant)', async () => {
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/session', headers: { host: 'unknown.example' } });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+});
