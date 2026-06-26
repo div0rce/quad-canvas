@@ -75,6 +75,18 @@ export class CanvasBuffer {
     return true;
   }
 
+  /** Apply a moderation rollback: revert the cell to its prior color, or empty. Seq-deduped. */
+  applyRollback(rollback: ws.PixelRolledBack): boolean {
+    if (rollback.seq !== undefined && rollback.seq <= this.#seq) return false;
+    const { x, y } = rollback.at;
+    if (!this.#inBounds(x, y)) return false;
+    const i = this.#index(x, y);
+    this.#cells[i] = rollback.color ?? EMPTY_CELL;
+    this.#dirty.add(i);
+    if (rollback.seq !== undefined) this.#seq = rollback.seq;
+    return true;
+  }
+
   /** Color index at a cell, or `EMPTY_CELL`. */
   colorAt(x: number, y: number): number {
     return this.#inBounds(x, y) ? (this.#cells[this.#index(x, y)] ?? EMPTY_CELL) : EMPTY_CELL;

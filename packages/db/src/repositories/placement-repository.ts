@@ -161,6 +161,28 @@ export interface CanvasLifecycleInput {
   readonly status: string;
 }
 
+export interface RollbackPixelInput {
+  readonly tenantId: string;
+  readonly canvasId: string;
+  readonly actorUserId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly reason: string;
+}
+
+export type RollbackResult =
+  | {
+      readonly kind: 'rolledBack';
+      readonly x: number;
+      readonly y: number;
+      /** The color the cell reverted to, or null if it is now empty. */
+      readonly color: number | null;
+      readonly seq: number;
+      readonly auditId: string;
+      readonly createdAt: Date;
+    }
+  | { readonly kind: 'absent' };
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -190,6 +212,8 @@ export interface PlacementRepository {
   listRoster(tenantId: string, query: { cursor?: string; limit: number }): Promise<RosterPage>;
   /** Atomically set a canvas's lifecycle status + write the DC4 audit record. */
   setCanvasLifecycle(input: CanvasLifecycleInput): Promise<ApplyMemberModerationResult>;
+  /** Roll a cell back to its prior placement (or empty): compensating event + projection + audit. */
+  rollbackPixel(input: RollbackPixelInput): Promise<RollbackResult>;
   /** Current projected state of one cell, or null if never placed. */
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
@@ -319,20 +343,30 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async getPixelHistory(canvasId, x, y, query) {
-      const take = query.limit + 1;
-      const rows = await prisma.pixelEvent.findMany({
-        // Only placements — exclude future moderation/compensating events from public history.
-        where: { canvasId, x, y, type: 'PixelPlaced', ...(query.cursor !== undefined ? { seq: { gt: query.cursor } } : {}) },
+      // Replay the cell's full event log so rolled-back placements drop out of the PUBLIC history —
+      // a moderated placement (popped by a PixelRolledBack) must never be re-exposed here. A cell's
+      // event count is small, so reading the whole cell and paginating in-memory is acceptable.
+      const events = await prisma.pixelEvent.findMany({
+        where: { canvasId, x, y },
         orderBy: { seq: 'asc' },
-        take,
-        select: { newColor: true, seq: true, createdAt: true, actor: { select: { publicHandle: true } } },
+        select: { type: true, newColor: true, seq: true, createdAt: true, actor: { select: { publicHandle: true } } },
       });
-      const hasMore = rows.length > query.limit;
-      const page = hasMore ? rows.slice(0, query.limit) : rows;
+      const stack: Array<{ color: number; seq: number; ownerHandle: string | null; placedAt: Date }> = [];
+      for (const e of events) {
+        if (e.type === 'PixelPlaced' && e.newColor !== null) {
+          stack.push({ color: e.newColor, seq: e.seq, ownerHandle: e.actor.publicHandle, placedAt: e.createdAt });
+        } else if (e.type === 'PixelRolledBack') {
+          stack.pop();
+        }
+      }
+      // The stack is seq-ascending (pushed in order, only the tail is popped) — paginate by seq cursor.
+      const cursor = query.cursor;
+      const visible = cursor !== undefined ? stack.filter((s) => s.seq > cursor) : stack;
+      const hasMore = visible.length > query.limit;
+      const page = hasMore ? visible.slice(0, query.limit) : visible;
       const nextCursor = hasMore ? (page[page.length - 1]?.seq ?? null) : null;
       return {
-        // PixelPlaced events always carry newColor (the filter excludes compensating events).
-        entries: page.map((r) => ({ color: r.newColor ?? 0, seq: r.seq, ownerHandle: r.actor.publicHandle, placedAt: r.createdAt })),
+        entries: page.map((s) => ({ color: s.color, seq: s.seq, ownerHandle: s.ownerHandle, placedAt: s.placedAt })),
         nextCursor,
       };
     },
@@ -466,6 +500,63 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           select: { id: true, createdAt: true },
         });
         return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
+    },
+
+    async rollbackPixel(input) {
+      const { tenantId, canvasId, actorUserId, x, y, reason } = input;
+      return prisma.$transaction(async (tx): Promise<RollbackResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
+        const pixel = await tx.pixel.findUnique({ where: { canvasId_x_y: { canvasId, x, y } }, select: { color: true } });
+        if (!pixel) return { kind: 'absent' };
+        // Replay the cell's FULL history (placements + prior rollbacks) to find the state to revert
+        // to — the placement just below the current visible one. This honors intervening rollbacks so
+        // a previously-moderated placement is never re-exposed (the visible "stack" pops on rollback).
+        const events = await tx.pixelEvent.findMany({
+          where: { canvasId, x, y },
+          orderBy: { seq: 'asc' },
+          select: { type: true, newColor: true, actorUserId: true },
+        });
+        const stack: Array<{ color: number; owner: string }> = [];
+        for (const e of events) {
+          if (e.type === 'PixelPlaced' && e.newColor !== null) stack.push({ color: e.newColor, owner: e.actorUserId });
+          else if (e.type === 'PixelRolledBack') stack.pop();
+        }
+        const revertTo = stack.length >= 2 ? stack[stack.length - 2] : null;
+        const revertedColor = revertTo?.color ?? null;
+        const last = await tx.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
+        const seq = (last?.seq ?? 0) + 1;
+        const event = await tx.pixelEvent.create({
+          data: {
+            tenantId,
+            canvasId,
+            actorUserId,
+            type: 'PixelRolledBack',
+            seq,
+            x,
+            y,
+            prevColor: pixel.color,
+            newColor: revertedColor,
+            // Server-generated, unguessable key in its own namespace — a client cannot pre-occupy it
+            // (client placement keys come from the request header) to block a rollback.
+            idempotencyKey: `rollback:${randomBytes(16).toString('hex')}`,
+            schemaVersion: 1,
+          },
+          select: { id: true, createdAt: true },
+        });
+        if (revertTo) {
+          await tx.pixel.update({
+            where: { canvasId_x_y: { canvasId, x, y } },
+            data: { color: revertTo.color, ownerUserId: revertTo.owner, lastEventId: event.id, seq, placedAt: event.createdAt },
+          });
+        } else {
+          await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x, y } } });
+        }
+        const audit = await tx.moderationAction.create({
+          data: { tenantId, actorUserId, actionType: 'pixel_rollback', targetRef: `${x},${y}`, reason },
+          select: { id: true, createdAt: true },
+        });
+        return { kind: 'rolledBack', x, y, color: revertedColor, seq, auditId: audit.id, createdAt: audit.createdAt };
       });
     },
 

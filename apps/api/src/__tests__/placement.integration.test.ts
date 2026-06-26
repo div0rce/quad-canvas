@@ -535,6 +535,74 @@ describe('moderation actions (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('a moderator rolls back a pixel (reverts projection + compensating event + audit)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    await placePixel(deps(0), principal(s), { id: 'ten_rutgers', palette: 'default' }, { x: 2, y: 2, color: 5, idempotencyKey: 'rb1' });
+    const mod = await prisma.user.create({ data: { email: 'modr@scarletmail.rutgers.edu', publicHandle: 'modr', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const before = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/2/2', headers: { host: 'rutgers.localhost' } });
+      expect(before.statusCode).toBe(200);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'pixel_rollback', targetRef: '2,2', reason: 'offensive' },
+      });
+      expect(res.statusCode).toBe(200);
+
+      // First placement → reverts to empty → the cell is gone.
+      const after = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/2/2', headers: { host: 'rutgers.localhost' } });
+      expect(after.statusCode).toBe(404);
+      expect(await prisma.moderationAction.findMany({ where: { actionType: 'pixel_rollback' } })).toHaveLength(1);
+      expect(await prisma.pixelEvent.findMany({ where: { type: 'PixelRolledBack' } })).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rollback reverts to the prior placement and hides the moderated one from public history', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 3, y: 3, color: 1, idempotencyKey: 'rba' });
+    await placePixel(deps(0), principal(s), t, { x: 3, y: 3, color: 4, idempotencyKey: 'rbb' }); // overwrites
+    const mod = await prisma.user.create({ data: { email: 'modh@scarletmail.rutgers.edu', publicHandle: 'modh', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'pixel_rollback', targetRef: '3,3', reason: 'remove the overwrite' },
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Reverts to the PRIOR placement (color 1), not empty.
+      const pixel = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/3/3', headers: { host: 'rutgers.localhost' } });
+      expect(pixel.statusCode).toBe(200);
+      expect((pixel.json() as { color: number }).color).toBe(1);
+
+      // The reason is persisted (not a literal placeholder).
+      const audit = await prisma.moderationAction.findFirst({ where: { actionType: 'pixel_rollback' } });
+      expect(audit?.reason).toBe('remove the overwrite');
+
+      // Public history hides the moderated placement (color 9), keeps the legitimate one (color 1).
+      const hist = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/3/3/history', headers: { host: 'rutgers.localhost' } });
+      const colors = (hist.json() as { data: Array<{ color: number }> }).data.map((e) => e.color);
+      expect(colors).toContain(1);
+      expect(colors).not.toContain(4);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('admin role assignment (HTTP)', () => {

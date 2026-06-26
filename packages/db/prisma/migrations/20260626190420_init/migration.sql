@@ -65,7 +65,7 @@ CREATE TABLE "pixel_events" (
     "x" INTEGER NOT NULL,
     "y" INTEGER NOT NULL,
     "prev_color" INTEGER,
-    "new_color" INTEGER,
+    "new_color" INTEGER NOT NULL,
     "idempotency_key" TEXT NOT NULL,
     "schema_version" INTEGER NOT NULL DEFAULT 1,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
