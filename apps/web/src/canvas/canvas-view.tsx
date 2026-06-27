@@ -7,12 +7,16 @@
 // clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPaletteByKey } from '@quad/config';
-import type { CanvasBuffer } from '@quad/render';
-import { EMPTY_CELL } from '@quad/render';
+import type { CanvasBuffer, Viewport } from '@quad/render';
+import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, placementStatusMessage } from './placement';
 import { fetchCurrentPixel, quickLookLabel } from './quick-look-client';
+import { clampPan, pinchScale } from './gestures';
+
+const SCALE_MIN = 1; // fit-to-width
+const SCALE_MAX = 8;
 import { formatCountdown, remainingMs } from './cooldown';
 import { ReportControl } from './report-control';
 import { PixelInspector } from './pixel-inspector';
@@ -46,6 +50,14 @@ function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKe
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const clientRef = useRef<CanvasClient | null>(null);
+  // Pan/zoom (P-AC-11) — declared up here so the click/hover handlers below can read them.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<Viewport>({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 });
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<number | null>(null);
+  const dragMoved = useRef(false);
+  const dragStart = useRef<{ x: number; y: number } | null>(null); // pointer-down origin (cumulative-distance tap test)
+  const multiTouched = useRef(false); // a second pointer touched during this gesture → not a tap
   const [dims, setDims] = useState<Dims | null>(null);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
@@ -85,11 +97,13 @@ export function CanvasView(): React.ReactElement {
     };
   }, []);
 
-  const onCanvasClick = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
+  // Select the cell at a screen point. Driven by pointer-UP (a tap), not click — with pointer capture a
+  // click can target the capturing container rather than the canvas, which would break selection.
+  const selectAt = useCallback(
+    (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
-      if (!canvas || !dims || submitting) return; // ignore clicks while a placement is in flight
-      const cell = cellFromPoint(canvas.getBoundingClientRect(), event.clientX, event.clientY, dims.width, dims.height);
+      if (!canvas || !dims || submitting) return; // ignore while a placement is in flight
+      const cell = cellFromPoint(canvas.getBoundingClientRect(), clientX, clientY, dims.width, dims.height);
       if (cell) {
         setSelected(cell); // step 1 — select the cell
         setPendingColor(null);
@@ -134,8 +148,10 @@ export function CanvasView(): React.ReactElement {
       if (hoverTimer.current) clearTimeout(hoverTimer.current);
       setHover(null); // hide the previous cell's label at once — never show a stale one during the debounce
       if (!cell) return;
-      const left = event.clientX - rect.left;
-      const top = event.clientY - rect.top;
+      // Position the tooltip in the (non-transformed) container, relative to its top-left.
+      const crect = containerRef.current?.getBoundingClientRect();
+      const left = crect ? event.clientX - crect.left : event.clientX - rect.left;
+      const top = crect ? event.clientY - crect.top : event.clientY - rect.top;
       hoverTimer.current = setTimeout(() => {
         void fetchCurrentPixel(cell.x, cell.y).then((pixel) => {
           if (hoverCell.current === key) setHover({ label: quickLookLabel(pixel), left, top });
@@ -150,6 +166,102 @@ export function CanvasView(): React.ReactElement {
     hoverCell.current = '';
     setHover(null);
   }, []);
+
+  // --- Pan / zoom (P-AC-11). The canvas + selected highlight live in a transformed layer; the
+  // screen↔cell mapping (cellFromPoint) still works because getBoundingClientRect reflects the
+  // transform. Pointer events unify mouse + touch; two pointers pinch-zoom, one pointer drags. ---
+  const containerPoint = useCallback((clientX: number, clientY: number): { x: number; y: number } => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    return rect ? { x: clientX - rect.left, y: clientY - rect.top } : { x: clientX, y: clientY };
+  }, []);
+
+  // Re-clamp the offset (and pin scale ≥ fit) against the container's current size.
+  const settle = useCallback((vp: Viewport): Viewport => {
+    const el = containerRef.current;
+    if (!el) return vp;
+    const scale = clampScale(vp.scale, SCALE_MIN, SCALE_MAX);
+    const { offsetX, offsetY } = clampPan(scale, vp.offsetX, vp.offsetY, el.clientWidth, el.clientHeight);
+    return { scale, offsetX, offsetY };
+  }, []);
+
+  const resetView = useCallback(() => setViewport({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 }), []);
+
+  // Wheel zoom needs a non-passive listener so the page doesn't scroll.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const onWheel = (e: WheelEvent): void => {
+      e.preventDefault();
+      const anchor = containerPoint(e.clientX, e.clientY);
+      setViewport((vp) => settle(zoomAt(vp, anchor.x, anchor.y, clampScale(vp.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), SCALE_MIN, SCALE_MAX))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [containerPoint, settle]);
+
+  // Re-clamp the viewport when the container resizes (window resize / orientation change) — an old
+  // panned offset can fall outside the new valid range.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setViewport((vp) => settle(vp)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [settle]);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    try {
+      containerRef.current?.setPointerCapture?.(e.pointerId);
+    } catch {
+      // a non-active / synthetic pointer can't be captured — harmless
+    }
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    dragMoved.current = false;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    if (pointers.current.size === 2) {
+      multiTouched.current = true; // a pinch — the eventual pointer-up is never a tap
+      const [a, b] = [...pointers.current.values()];
+      if (a && b) pinchRef.current = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  }, []);
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const prev = pointers.current.get(e.pointerId);
+      if (!prev) return; // not dragging — let the hover handler run
+      const cur = { x: e.clientX, y: e.clientY };
+      pointers.current.set(e.pointerId, cur);
+      if (pointers.current.size >= 2) {
+        const [a, b] = [...pointers.current.values()];
+        if (!a || !b) return;
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        const prevDist = pinchRef.current ?? dist;
+        pinchRef.current = dist;
+        const mid = containerPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+        dragMoved.current = true;
+        setViewport((vp) => settle(zoomAt(vp, mid.x, mid.y, pinchScale(vp.scale, dist, prevDist, SCALE_MIN, SCALE_MAX))));
+        return;
+      }
+      // Cumulative distance from the press origin — a slow multi-step drag still counts as a drag, not a tap.
+      const start = dragStart.current;
+      if (start && Math.hypot(cur.x - start.x, cur.y - start.y) > 4) dragMoved.current = true;
+      if (!dragMoved.current) return; // still within the tap dead-zone — don't pan on jitter
+      setViewport((vp) => settle({ scale: vp.scale, offsetX: vp.offsetX + (cur.x - prev.x), offsetY: vp.offsetY + (cur.y - prev.y) }));
+    },
+    [containerPoint, settle],
+  );
+
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const wasSingle = pointers.current.size === 1;
+      pointers.current.delete(e.pointerId);
+      if (pointers.current.size < 2) pinchRef.current = null;
+      // A tap: the last pointer lifted, it never dragged, and no second pointer touched this gesture.
+      if (wasSingle && !dragMoved.current && !multiTouched.current) selectAt(e.clientX, e.clientY);
+      if (pointers.current.size === 0) multiTouched.current = false; // reset for the next gesture
+    },
+    [selectAt],
+  );
 
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
@@ -201,15 +313,44 @@ export function CanvasView(): React.ReactElement {
 
   return (
     <div>
-      <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
-        <canvas
-          ref={canvasRef}
-          onClick={onCanvasClick}
-          onMouseMove={onCanvasMove}
-          onMouseLeave={onCanvasLeave}
-          aria-label="Live canvas — click a cell to place a pixel"
-          style={{ imageRendering: 'pixelated', width: '100%', display: 'block', cursor: dims ? 'crosshair' : 'default' }}
-        />
+      <div
+        ref={containerRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        style={{ position: 'relative', overflow: 'hidden', touchAction: 'none', maxWidth: '100%' }}
+      >
+        <div
+          style={{
+            transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`,
+            transformOrigin: '0 0',
+            position: 'relative',
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            onMouseMove={onCanvasMove}
+            onMouseLeave={onCanvasLeave}
+            aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom"
+            style={{ imageRendering: 'pixelated', width: '100%', display: 'block', cursor: dims ? 'crosshair' : 'default' }}
+          />
+          {selected && dims && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: `${(selected.x / dims.width) * 100}%`,
+                top: `${(selected.y / dims.height) * 100}%`,
+                width: `${100 / dims.width}%`,
+                height: `${100 / dims.height}%`,
+                outline: '2px solid #CC0033',
+                boxSizing: 'border-box',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </div>
         {hover && (
           <div
             role="status"
@@ -231,22 +372,12 @@ export function CanvasView(): React.ReactElement {
             {hover.label}
           </div>
         )}
-        {selected && dims && (
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: `${(selected.x / dims.width) * 100}%`,
-              top: `${(selected.y / dims.height) * 100}%`,
-              width: `${100 / dims.width}%`,
-              height: `${100 / dims.height}%`,
-              outline: '2px solid #CC0033',
-              boxSizing: 'border-box',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
       </div>
+      {viewport.scale > SCALE_MIN && (
+        <button type="button" onClick={resetView} style={{ marginTop: '0.25rem' }}>
+          Reset view
+        </button>
+      )}
 
       {selected && (
         <div
