@@ -14,7 +14,8 @@
     "test:e2e": "turbo run test:e2e",
     "build": "turbo run build",
     "format": "turbo run format",
-    "check": "turbo run lint typecheck test build"
+    "check": "turbo run lint typecheck test build",
+    "load:gate": "node scripts/load-gate.mjs"
   },
   "devDependencies": {
     "turbo": "^2",

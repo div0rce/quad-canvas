@@ -47,3 +47,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Load gate: drive the built API over real HTTP at fixed concurrency and fail on a throughput,
+      # tail-latency, or error-rate regression. Thresholds carry large headroom over observed numbers
+      # so they catch real regressions without flaking on shared runners.
+      - name: Load gate
+        run: pnpm load:gate
