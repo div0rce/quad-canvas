@@ -24,3 +24,8 @@ export function dynamicCooldownMs(placementRatePerMin: number, config: CooldownC
   const value = config.minMs + (config.maxMs - config.minMs) * score;
   return Math.round(Math.max(config.minMs, Math.min(config.maxMs, value)));
 }
+
+/** Clamp a fixed cooldown to the allowed bounds — the enforced cooldown is ALWAYS within range (P-AC-3). */
+export function clampCooldownMs(ms: number, minMs: number, maxMs: number): number {
+  return Math.min(maxMs, Math.max(minMs, ms));
+}

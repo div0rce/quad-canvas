@@ -15,6 +15,7 @@ import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 import type { ReadinessCheck } from './routes/health.js';
 import { createGracefulShutdown } from './shutdown.js';
 import { RedisRateCounter, type RateCounter } from './services/rate-counter.js';
+import { clampCooldownMs } from './services/cooldown.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -31,10 +32,13 @@ const TRUST_PROXY: boolean | string =
   rawTrustProxy === '1' || rawTrustProxy === 'true' ? true : rawTrustProxy && rawTrustProxy !== '' ? rawTrustProxy : false;
 // Fail-closed: an unset/empty/non-numeric/negative override falls back to the default cooldown
 // (never to 0 by accident). An explicit non-negative number is honoured.
-const DEFAULT_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;
+const MIN_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;
+const MAX_COOLDOWN_MS = cooldown.COOLDOWN_MAX_MINUTES * 60_000;
 const rawCooldown = process.env['QUAD_COOLDOWN_MS'];
 const parsedCooldown = rawCooldown !== undefined && rawCooldown.trim() !== '' ? Number(rawCooldown) : Number.NaN;
-const COOLDOWN_MS = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MS;
+const requestedCooldown = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : MIN_COOLDOWN_MS;
+// P-AC-3: the enforced cooldown must ALWAYS be within 5–20 min — clamp any configured value into range.
+const COOLDOWN_MS = clampCooldownMs(requestedCooldown, MIN_COOLDOWN_MS, MAX_COOLDOWN_MS);
 // Load-based cooldown (opt-in): the value grows with the recent canvas-wide placement rate, bounded
 // by COOLDOWN.md's 5–20 min. Saturation rate (placements/min at which it hits the ceiling) is tunable.
 const DYNAMIC_COOLDOWN = process.env['QUAD_DYNAMIC_COOLDOWN'] === '1';
@@ -84,8 +88,8 @@ async function main(): Promise<void> {
       ...(DYNAMIC_COOLDOWN
         ? {
             dynamicCooldown: {
-              minMs: cooldown.COOLDOWN_MIN_MINUTES * 60_000,
-              maxMs: cooldown.COOLDOWN_MAX_MINUTES * 60_000,
+              minMs: MIN_COOLDOWN_MS,
+              maxMs: MAX_COOLDOWN_MS,
               saturationRatePerMin: COOLDOWN_SATURATION_RPM,
             },
           }
