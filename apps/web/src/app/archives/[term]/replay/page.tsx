@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchArchiveAt, fetchReplayMeta } from '@/archives/archives-client';
 import { paintSnapshot } from '@/archives/paint-snapshot';
-import { replayStep, nextReplaySeq } from '@/archives/replay';
+import { replayStep, nextReplaySeq, frameInterval } from '@/archives/replay';
 
 const CELL_PX = 8;
 const PALETTE = 'default';
@@ -21,6 +21,7 @@ export default function ReplayPage(): React.ReactElement {
   const [maxSeq, setMaxSeq] = useState<number | null>(null);
   const [seq, setSeq] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
   const [missing, setMissing] = useState(false);
 
   // Load the term's seq range; start at the final state.
@@ -65,9 +66,9 @@ export default function ReplayPage(): React.ReactElement {
         if (next >= maxSeq) setPlaying(false);
         return next;
       });
-    }, FRAME_MS);
+    }, frameInterval(FRAME_MS, speed));
     return () => clearInterval(id);
-  }, [playing, maxSeq]);
+  }, [playing, maxSeq, speed]);
 
   const togglePlay = useCallback(() => {
     setPlaying((p) => {
@@ -115,6 +116,17 @@ export default function ReplayPage(): React.ReactElement {
             <span style={{ color: '#666', minWidth: '6ch' }}>
               {seq}/{maxSeq}
             </span>
+            <label>
+              <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+                Playback speed
+              </span>
+              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                <option value={0.5}>0.5×</option>
+                <option value={1}>1×</option>
+                <option value={2}>2×</option>
+                <option value={4}>4×</option>
+              </select>
+            </label>
           </div>
         </>
       )}

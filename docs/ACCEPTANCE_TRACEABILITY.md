@@ -17,7 +17,7 @@
 | `P-AC-6` | Profile shows **term + lifetime** stats **and a heatmap** | ◑ | Profile returns a lifetime `pixelsPlaced` count + DC2 identity (integration) | Term-vs-lifetime split **and** a contribution heatmap |
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
 | `P-AC-8` | Term-end freeze + archive (**final image**, stats, replay), browsable | ◑ | Freeze/archive; final-**state** JSON snapshot; faithful replay; archives UI | A **rendered/downloadable final image** (snapshot is JSON cells, not a blob) + richer term stats |
-| `P-AC-9` | Replay reproduces the sequence; play/pause/scrub/**speed**/jump | ◑ | Point-in-time `reconstructAt` (faithful; integration); player play/pause/scrub/jump | A playback **speed** control |
+| `P-AC-9` | Replay reproduces the sequence; play/pause/scrub/speed/jump | ✅ | `reconstructAt` (faithful; integration); player play/pause/scrub/jump + **0.5×–4× speed** (`frameInterval`, unit-tested) | — |
 | `P-AC-10` | **Every** moderation action reversible, history intact, audited; no hard delete | ◑ | Content/member actions reversible (rollback, reinstate); all audited; append-only; no hard delete | Report triage (`resolve_report`/`dismiss_report`) has no reopen/reverse |
 | `P-AC-11` | Mobile flows (**touch place, pinch-zoom, drag-pan**) + desktop | ◑ | Tap-to-place works on touch; desktop flows complete | Pinch-zoom + drag-pan gestures |
 | `P-AC-12` | No Rutgers value hardcoded; tenant is configuration | ✅ | `@quad/config` registry; host→tenant resolution; no default tenant (tests; `CONSISTENCY_AUDIT.md`) | — |
@@ -25,9 +25,9 @@
 
 ## Summary
 
-**5 of 13 fully met and verified** (`P-AC-1, 2, 7, 12, 13`). **8 partial** — core implemented + verified,
+**6 of 13 fully met and verified** (`P-AC-1, 2, 7, 9, 12, 13`). **7 partial** — core implemented + verified,
 with one named sub-capability outstanding each (cooldown bound on the fixed path, cooldown smoothing,
-quick-look preview, term/lifetime stats + heatmap, downloadable final image + term stats, replay speed,
+quick-look preview, term/lifetime stats + heatmap, downloadable final image + term stats,
 report-triage reversal, mobile pinch-zoom/drag-pan).
 
 **`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
