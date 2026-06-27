@@ -42,6 +42,7 @@ async function seedPlacer(tenantId = 'ten_rutgers'): Promise<{ tenantId: string;
 interface WsMessage {
   readonly type: string;
   readonly code?: string;
+  readonly approximateActive?: number;
 }
 
 interface Conn {
@@ -154,8 +155,31 @@ describe('websocket server', () => {
       );
       expect(result.ok).toBe(true);
 
-      const msg = await next();
+      let msg = await next();
+      while (msg.type !== 'PixelPlaced') msg = await next(); // skip the presence broadcast / heartbeats
       expect(msg.type).toBe('PixelPlaced');
+    } finally {
+      socket.close();
+      await app.close();
+    }
+  });
+
+  it('reports presence on subscribe and answers PresencePing', async () => {
+    const canvasId = await seedCanvas();
+    const app = await buildApp({ placement: makeDeps() });
+    const port = await listen(app);
+    const { socket, next } = await connect(port);
+    try {
+      socket.send(JSON.stringify({ type: 'SubscribeCanvas', canvasId }));
+      expect((await next()).type).toBe('Heartbeat'); // subscription ack
+      const presence = await next();
+      expect(presence.type).toBe('PresenceUpdated');
+      expect(presence.approximateActive).toBe(1);
+
+      socket.send(JSON.stringify({ type: 'PresencePing' }));
+      const pinged = await next();
+      expect(pinged.type).toBe('PresenceUpdated');
+      expect(pinged.approximateActive).toBe(1);
     } finally {
       socket.close();
       await app.close();

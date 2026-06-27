@@ -30,9 +30,23 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
         return;
       }
 
-      const conn: RealtimeConnection = { id: randomUUID(), tenantId: tenant.id, send };
+      // Establish the principal on the connection when the handshake carried a valid session (the
+      // identity plugin set request.principal); anonymous connections are still allowed — viewing is
+      // public, like the snapshot/read endpoints.
+      const conn: RealtimeConnection = {
+        id: randomUUID(),
+        tenantId: tenant.id,
+        ...(request.principal ? { userId: request.principal.userId } : {}),
+        send,
+      };
       registry.add(conn);
+      let subscribedCanvasId: string | null = null;
       const heartbeat = setInterval(() => send({ type: 'Heartbeat' }), HEARTBEAT_MS);
+
+      // Presence: broadcast the canvas's approximate active (subscribed) count to its subscribers.
+      const broadcastPresence = (canvasId: string): void => {
+        registry.broadcast(tenant.id, canvasId, { type: 'PresenceUpdated', approximateActive: registry.subscriberCount(canvasId) });
+      };
 
       const handle = async (message: wsmsg.ClientToServerMessage): Promise<void> => {
         if (message.type === 'SubscribeCanvas') {
@@ -42,11 +56,19 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
             return;
           }
           registry.subscribe(conn.id, message.canvasId);
+          subscribedCanvasId = message.canvasId;
           send({ type: 'Heartbeat' }); // subscription acknowledgement
+          broadcastPresence(message.canvasId); // everyone on the canvas sees the new active count
         } else if (message.type === 'UnsubscribeCanvas') {
           registry.unsubscribe(conn.id, message.canvasId);
+          if (subscribedCanvasId === message.canvasId) subscribedCanvasId = null;
+          broadcastPresence(message.canvasId);
+        } else if (message.type === 'PresencePing') {
+          if (subscribedCanvasId) {
+            send({ type: 'PresenceUpdated', approximateActive: registry.subscriberCount(subscribedCanvasId) });
+          }
         }
-        // 'Pong' / 'PresencePing' — no-op for this milestone.
+        // 'Pong' — no-op.
       };
 
       // Process one message at a time per connection (no interleaving), and never let a handler
@@ -68,7 +90,9 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
 
       const cleanup = (): void => {
         clearInterval(heartbeat);
+        const wasSubscribed = subscribedCanvasId;
         registry.remove(conn.id);
+        if (wasSubscribed) broadcastPresence(wasSubscribed); // remaining subscribers see the lower count
       };
       socket.on('close', cleanup);
       socket.on('error', cleanup);
