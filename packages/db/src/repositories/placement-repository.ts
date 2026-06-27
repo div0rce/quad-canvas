@@ -248,6 +248,12 @@ export interface ReplayMetaRow {
   readonly toSeq: number;
 }
 
+export interface ArchiveStatsRow {
+  readonly totalPlacements: number;
+  readonly participants: number;
+  readonly topPlacers: ReadonlyArray<{ readonly handle: string; readonly displayName: string | null; readonly pixelsPlaced: number }>;
+}
+
 export interface ProfileRow {
   readonly handle: string;
   readonly displayName: string | null;
@@ -273,6 +279,8 @@ export interface PlacementRepository {
   findArchiveByTerm(tenantId: string, term: string): Promise<ArchiveRow | null>;
   /** Replay derivation metadata (event count + seq range) for an archived term, or null. */
   getReplayMeta(tenantId: string, term: string): Promise<ReplayMetaRow | null>;
+  /** Term statistics (total placements, distinct participants, top placers) for an archive, or null. */
+  getArchiveStats(tenantId: string, term: string): Promise<ArchiveStatsRow | null>;
   /** A member's public profile (DC2 + placement count) by handle, scoped to the tenant. */
   getProfileByHandle(tenantId: string, handle: string): Promise<ProfileRow | null>;
   /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
@@ -434,6 +442,36 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         _max: { seq: true },
       });
       return { eventCount: agg._count._all, fromSeq: agg._min.seq ?? 0, toSeq: agg._max.seq ?? 0 };
+    },
+
+    async getArchiveStats(tenantId, term) {
+      const c = await prisma.canvas.findUnique({
+        where: { tenantId_termLabel: { tenantId, termLabel: term } },
+        select: { id: true, status: true },
+      });
+      if (!c || c.status !== 'archived') return null;
+      // Per-user placement counts for the term.
+      const groups = await prisma.pixelEvent.groupBy({
+        by: ['actorUserId'],
+        where: { canvasId: c.id, type: 'PixelPlaced' },
+        _count: { _all: true },
+      });
+      const totalPlacements = groups.reduce((sum, g) => sum + g._count._all, 0);
+      const participants = groups.length;
+      // Top placers: busiest first, DC2-eligible (active member + public handle), up to 5.
+      const sorted = [...groups].sort((a, b) => b._count._all - a._count._all);
+      const topPlacers: Array<{ handle: string; displayName: string | null; pixelsPlaced: number }> = [];
+      for (const g of sorted) {
+        if (topPlacers.length >= 5) break;
+        const m = await prisma.membership.findUnique({
+          where: { tenantId_userId: { tenantId, userId: g.actorUserId } },
+          select: { status: true, user: { select: { publicHandle: true, displayName: true } } },
+        });
+        if (m && m.status === 'active' && m.user.publicHandle !== null) {
+          topPlacers.push({ handle: m.user.publicHandle, displayName: m.user.displayName, pixelsPlaced: g._count._all });
+        }
+      }
+      return { totalPlacements, participants, topPlacers };
     },
 
     async getProfileByHandle(tenantId, handle) {

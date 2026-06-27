@@ -261,6 +261,21 @@ export interface ReplayMetaResponse {
   readonly available: boolean;
 }
 
+/** A top placer in a term's statistics (DC2 only — no email). */
+export interface ArchiveTopPlacer {
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly pixelsPlaced: number;
+}
+
+/** Term statistics for an archived term: totals + top placers. */
+export interface ArchiveStatsResponse {
+  readonly term: string;
+  readonly totalPlacements: number;
+  readonly participants: number;
+  readonly topPlacers: ArchiveTopPlacer[];
+}
+
 /** Tenant configuration as seen by a tenant admin (DC2/config only — no secrets, no DC3). */
 export interface TenantConfigResponse {
   readonly id: string;

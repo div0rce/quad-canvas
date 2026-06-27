@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { dto } from '@quad/core';
-import { fetchArchiveSnapshot, fetchReplayMeta } from '@/archives/archives-client';
+import { fetchArchiveSnapshot, fetchReplayMeta, fetchArchiveStats } from '@/archives/archives-client';
 import { paintSnapshot, archiveImageFilename } from '@/archives/paint-snapshot';
 
 const CELL_PX = 8;
@@ -18,15 +18,17 @@ export default function ArchiveTermPage(): React.ReactElement {
   const term = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw[0] ?? '') : '';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [meta, setMeta] = useState<dto.ReplayMetaResponse | null | undefined>(undefined);
+  const [stats, setStats] = useState<dto.ArchiveStatsResponse | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     if (!term) return;
     let active = true;
     void (async () => {
-      const [snap, replay] = await Promise.all([fetchArchiveSnapshot(term), fetchReplayMeta(term)]);
+      const [snap, replay, termStats] = await Promise.all([fetchArchiveSnapshot(term), fetchReplayMeta(term), fetchArchiveStats(term)]);
       if (!active) return;
       setMeta(replay ?? null);
+      setStats(termStats);
       if (!snap) {
         setMissing(true);
         return;
@@ -79,6 +81,23 @@ export default function ArchiveTermPage(): React.ReactElement {
               </>
             )}
           </p>
+          {stats && (
+            <section aria-label="Term statistics">
+              <h2 style={{ fontSize: '1rem' }}>Term statistics</h2>
+              <p style={{ color: '#666' }}>
+                {stats.totalPlacements} placements by {stats.participants} participant{stats.participants === 1 ? '' : 's'}
+              </p>
+              {stats.topPlacers.length > 0 && (
+                <ol>
+                  {stats.topPlacers.map((c) => (
+                    <li key={c.handle}>
+                      {c.displayName ?? c.handle} — {c.pixelsPlaced}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          )}
         </>
       )}
     </main>

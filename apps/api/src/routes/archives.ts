@@ -115,5 +115,25 @@ export function makeArchiveRoutes(repo: PlacementRepository): FastifyPluginAsync
       void reply.header('Cache-Control', CACHE); // immutable past term
       return reply.send(response);
     });
+
+    // Term statistics for an archived term (totals + DC2 top placers).
+    app.get('/api/v1/archives/:term/stats', async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const { term } = request.params as { term: string };
+      const stats = await repo.getArchiveStats(request.tenant.id, term);
+      if (!stats) return err(reply, request, 404, 'NOT_FOUND', 'No archive for that term.');
+      const response: dto.ArchiveStatsResponse = {
+        term,
+        totalPlacements: stats.totalPlacements,
+        participants: stats.participants,
+        topPlacers: stats.topPlacers.map((c) => ({
+          handle: c.handle,
+          pixelsPlaced: c.pixelsPlaced,
+          ...(c.displayName !== null ? { displayName: c.displayName } : {}),
+        })),
+      };
+      void reply.header('Cache-Control', CACHE); // immutable past term
+      return reply.send(response);
+    });
   };
 }
