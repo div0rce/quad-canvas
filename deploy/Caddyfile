@@ -1,0 +1,14 @@
+# Quad edge — a single origin fronting the web UI + the API (DEPLOYMENT.md §9 networking).
+# `/api/*` (including the WebSocket at /api/v1/canvas/current/ws) → the API; everything else → the
+# Next.js app. Caddy v2 preserves the incoming Host header by default, so the API resolves the tenant
+# from it (no default tenant; TENANT-INV-1) — and upgrades WebSocket connections automatically.
+:80 {
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

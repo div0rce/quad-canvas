@@ -91,6 +91,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Edge: one origin for the browser. Routes /api + /ws to `api` by tenant Host, everything else to
+  # `web` — so the Next bundle's same-origin NEXT_PUBLIC_API_BASE='' resolves. This is the origin to
+  # publish; `web`/`api` ports above are for direct/debug access.
+  edge:
+    image: caddy:2-alpine
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - quad_caddy:/data
+    ports:
+      - "${EDGE_PORT:-8088}:80"
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   quad_pg:
   quad_redis:
+  quad_caddy:
