@@ -458,19 +458,21 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       const totalPlacements = groups.reduce((sum, g) => sum + g._count._all, 0);
       const participants = groups.length;
-      // Top placers: busiest first, DC2-eligible (active member + public handle), up to 5.
-      const sorted = [...groups].sort((a, b) => b._count._all - a._count._all);
-      const topPlacers: Array<{ handle: string; displayName: string | null; pixelsPlaced: number }> = [];
-      for (const g of sorted) {
-        if (topPlacers.length >= 5) break;
-        const m = await prisma.membership.findUnique({
-          where: { tenantId_userId: { tenantId, userId: g.actorUserId } },
-          select: { status: true, user: { select: { publicHandle: true, displayName: true } } },
+      // Top placers: busiest first, DC2-eligible (active member + public handle), up to 5. Resolve
+      // eligibility for ALL placers in ONE query (no N+1), then pick the top 5 eligible by count.
+      const eligible = await prisma.membership.findMany({
+        where: { tenantId, userId: { in: groups.map((g) => g.actorUserId) }, status: 'active', user: { publicHandle: { not: null } } },
+        select: { userId: true, user: { select: { publicHandle: true, displayName: true } } },
+      });
+      const byUser = new Map(eligible.map((m) => [m.userId, m.user]));
+      const topPlacers = groups
+        .filter((g) => byUser.has(g.actorUserId))
+        .sort((a, b) => b._count._all - a._count._all)
+        .slice(0, 5)
+        .map((g) => {
+          const u = byUser.get(g.actorUserId);
+          return { handle: u?.publicHandle ?? '', displayName: u?.displayName ?? null, pixelsPlaced: g._count._all };
         });
-        if (m && m.status === 'active' && m.user.publicHandle !== null) {
-          topPlacers.push({ handle: m.user.publicHandle, displayName: m.user.displayName, pixelsPlaced: g._count._all });
-        }
-      }
       return { totalPlacements, participants, topPlacers };
     },
 
