@@ -9,6 +9,7 @@ import type { SessionStore } from '../auth/session-store.js';
 import { requireRole } from '../auth/roles.js';
 
 const LIFECYCLE_STATUSES = new Set<string>(['active', 'frozen', 'archived']);
+const MAX_CANVAS_DIM = 512;
 
 const ASSIGNABLE_ROLES = new Set<domain.Role>(['participant', 'moderator', 'admin']);
 const DEFAULT_LIMIT = 50;
@@ -68,6 +69,56 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
         palette: request.tenant.palette,
       };
       return reply.send(meta);
+    });
+
+    app.post('/api/v1/admin/canvas', { preHandler: requireRole('admin') }, async (request, reply) => {
+      const principal = request.principal;
+      if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const body = (request.body ?? {}) as Partial<dto.CreateCanvasCommand>;
+      const { term, width, height } = body;
+      if (typeof term !== 'string' || term.trim() === '') {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'term is required.');
+      }
+      if (
+        typeof width !== 'number' ||
+        typeof height !== 'number' ||
+        !Number.isInteger(width) ||
+        !Number.isInteger(height) ||
+        width < 1 ||
+        height < 1 ||
+        width > MAX_CANVAS_DIM ||
+        height > MAX_CANVAS_DIM
+      ) {
+        return err(reply, request, 422, 'VALIDATION_ERROR', `width and height must be integers in 1..${MAX_CANVAS_DIM}.`);
+      }
+      const result = await repo.createCanvas({
+        tenantId: request.tenant.id,
+        actorUserId: principal.userId,
+        term: term.trim(),
+        width,
+        height,
+      });
+      if (result.kind === 'duplicate_term') {
+        return err(reply, request, 409, 'CONFLICT', 'A canvas already exists for that term.');
+      }
+      // Tell viewers of the superseded canvas it was archived (best-effort).
+      if (result.archivedCanvasId) {
+        const message: ws.CanvasLifecycleChanged = { type: 'CanvasLifecycleChanged', status: 'archived' };
+        try {
+          await bus.publish(request.tenant.id, result.archivedCanvasId, message);
+        } catch {
+          // best-effort
+        }
+      }
+      const meta: dto.CanvasMetaResponse = {
+        id: result.canvas.id as domain.CanvasId,
+        term: result.canvas.termLabel,
+        status: result.canvas.status,
+        width: result.canvas.width,
+        height: result.canvas.height,
+        palette: request.tenant.palette,
+      };
+      return reply.status(201).send(meta);
     });
 
     app.post('/api/v1/admin/roster/roles', { preHandler: requireRole('admin') }, async (request, reply) => {

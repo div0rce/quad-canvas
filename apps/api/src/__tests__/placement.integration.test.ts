@@ -823,6 +823,63 @@ describe('admin role assignment (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('an admin creates a new term canvas: becomes active, previous active frozen, audited', async () => {
+    const { app, cookie } = await seedAdmin();
+    try {
+      await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F25', status: 'active', width: 10, height: 10 } });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { term: 'S26', width: 20, height: 20 },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json() as object).toMatchObject({ term: 'S26', status: 'active', width: 20 });
+
+      const current = await prisma.canvas.findFirst({ where: { tenantId: 'ten_rutgers', status: 'active' } });
+      expect(current?.termLabel).toBe('S26'); // new one is the active/current canvas
+      const old = await prisma.canvas.findFirst({ where: { tenantId: 'ten_rutgers', termLabel: 'F25' } });
+      expect(old?.status).toBe('archived'); // previous active term becomes a past-term archive
+      expect(await prisma.moderationAction.findMany({ where: { actionType: 'canvas_create' } })).toHaveLength(1);
+
+      const dup = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { term: 'S26', width: 10, height: 10 },
+      });
+      expect(dup.statusCode).toBe(409); // duplicate term
+
+      const bad = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        payload: { term: 'F26', width: 0, height: 10 },
+      });
+      expect(bad.statusCode).toBe(422); // invalid dimensions
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects canvas creation by a non-admin (403)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const sessions = new InMemorySessionStore();
+    const sid = await sessions.create({ userId: s.userId, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${sid}` },
+        payload: { term: 'X', width: 10, height: 10 },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('reports queue (HTTP)', () => {
