@@ -31,3 +31,9 @@ export function ordinal(n: number): string {
   const v = n % 100;
   return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
 }
+
+/** Heat bucket (0–4) for a day's count relative to the busiest day, for the contribution heatmap. */
+export function heatLevel(count: number, max: number): number {
+  if (count <= 0 || max <= 0) return 0;
+  return Math.min(4, Math.ceil((count / max) * 4));
+}

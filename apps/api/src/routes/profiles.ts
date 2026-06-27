@@ -17,6 +17,7 @@ function toResponse(row: ProfileRow): dto.ProfileResponse {
     joinedAt: row.joinedAt.toISOString(),
     pixelsPlaced: row.pixelsPlaced,
     currentTermPixelsPlaced: row.currentTermPixelsPlaced,
+    contributions: row.contributions.map((c) => ({ date: c.date, count: c.count })),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
   };
 }

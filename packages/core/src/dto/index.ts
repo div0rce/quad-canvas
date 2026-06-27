@@ -218,6 +218,14 @@ export interface ProfileResponse {
   readonly pixelsPlaced: number;
   /** Count of the user's placements in the current term (latest canvas), or 0 if none. */
   readonly currentTermPixelsPlaced: number;
+  /** Per-day placement counts (recent window, oldest→newest) for the contribution heatmap. */
+  readonly contributions: ContributionDay[];
+}
+
+/** One day's placement count for the contribution heatmap. `date` is `YYYY-MM-DD`. */
+export interface ContributionDay {
+  readonly date: string;
+  readonly count: number;
 }
 
 /** The caller's own profile. Currently the same DC2 shape (private fields are a follow-on). */

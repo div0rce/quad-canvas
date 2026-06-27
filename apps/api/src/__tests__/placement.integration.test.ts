@@ -1164,6 +1164,10 @@ describe('profiles (HTTP)', () => {
       expect(pub.statusCode).toBe(200);
       expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2, currentTermPixelsPlaced: 2 });
       expect(pub.body).not.toContain('@'); // no DC3 email
+      // Contribution histogram: both placements are today → one active day with count 2.
+      const pubData = pub.json() as { contributions: Array<{ date: string; count: number }> };
+      expect(pubData.contributions).toHaveLength(1);
+      expect(pubData.contributions[0]?.count).toBe(2);
 
       // A new term (later canvas) with no placements → lifetime stays, current-term resets to 0.
       await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F27', status: 'active', width: 10, height: 10 } });

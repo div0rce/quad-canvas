@@ -255,6 +255,7 @@ export interface ProfileRow {
   readonly joinedAt: Date;
   readonly pixelsPlaced: number;
   readonly currentTermPixelsPlaced: number;
+  readonly contributions: ReadonlyArray<{ readonly date: string; readonly count: number }>;
 }
 
 export interface LeaderboardRow {
@@ -339,6 +340,20 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       active ?? (await prisma.canvas.findFirst({ where: { tenantId }, orderBy: { createdAt: 'desc' }, select: { id: true } }));
     if (!canvas) return 0;
     return prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced', canvasId: canvas.id } });
+  };
+  // Per-day placement counts over the last year (oldest→newest) for the contribution heatmap.
+  const contributionHistogram = async (
+    tenantId: string,
+    userId: string,
+  ): Promise<Array<{ date: string; count: number }>> => {
+    const rows = await prisma.$queryRaw<Array<{ day: string; count: number }>>`
+      SELECT to_char(date_trunc('day', "created_at"), 'YYYY-MM-DD') AS day, count(*)::int AS count
+      FROM pixel_events
+      WHERE tenant_id = ${tenantId} AND user_id = ${userId} AND type = 'PixelPlaced'
+        AND "created_at" >= now() - interval '365 days'
+      GROUP BY 1
+      ORDER BY 1 ASC`;
+    return rows.map((r) => ({ date: r.day, count: Number(r.count) }));
   };
   return {
     async findCurrentCanvas(tenantId) {
@@ -432,7 +447,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       if (!m || m.user.publicHandle === null) return null;
       const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: m.userId, type: 'PixelPlaced' } });
       const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, m.userId);
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced };
+      const contributions = await contributionHistogram(tenantId, m.userId);
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced, contributions };
     },
 
     async getProfileByUserId(tenantId, userId) {
@@ -443,7 +459,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       if (!m || m.status !== 'active' || m.user.publicHandle === null) return null;
       const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced' } });
       const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, userId);
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced };
+      const contributions = await contributionHistogram(tenantId, userId);
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced, contributions };
     },
 
     async getLeaderboard(tenantId, limit) {
