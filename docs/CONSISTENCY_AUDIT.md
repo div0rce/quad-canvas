@@ -141,16 +141,18 @@ The original audit's setup items are **resolved**:
 | E | `LICENSE` undecided | Resolved: **MIT** (`LICENSE` at the repo root) |
 | G | `ADR-0010` provider Proposed | Open by design: accept before the live deploy |
 
-**Corpus ↔ implementation drift this audit found.** The system is built and works; these are places the code is currently narrower than the docs. Each is a tracked follow-up; none blocks the current build, but the audit reports them rather than claiming full parity:
+**Corpus ↔ implementation drift.** The audit found these gaps between the docs and the code; a hardening pass has since fixed most. None blocked the build.
 
-| # | Drift | Evidence | Corpus expectation |
-| --- | --- | --- | --- |
-| J | Auth uses a custom session store, not Auth.js | `apps/api` has no `@auth/core` dependency | `AUTHENTICATION.md` / `ADR-0006` recommend Auth.js for the email MVP |
-| K | Idempotency is placement-only | `/reports` and `/moderation/actions` ignore `Idempotency-Key` | `API.md`: every state-changing command honors it |
-| L | Point-in-time replay re-exposes moderated content | `reconstructAt` folds history faithfully, so `/at/{seq}` before a rollback shows the removed pixel | moderated content should not reappear on public surfaces |
-| M | The default compose logs auth tokens | with no mail provider, `LogMailTransport` writes the full magic-link token to stdout | tokens must not be logged in production |
-| N | Web responses carry no security headers | `apps/web` (Next) + the Caddy web route set none | `SECURITY.md`: defensive headers on responses |
-| H | Secret scanning is missing in CI | only `pnpm audit` (dependencies) runs | `SECURITY.md` / `DEPLOYMENT.md`: dependency **and** secret scanning |
+| # | Drift | Status |
+| --- | --- | --- |
+| L | Point-in-time replay re-exposed moderated content (`/at/{seq}` before a rollback) | **Fixed** — `reconstructAt` censors rolled-back placements, consistent with `getPixelHistory` (integration-tested) |
+| M | The default compose logged the full auth token to stdout | **Fixed** — the mail transport is token-free by default; the dev token log is opt-in (`QUAD_LOG_MAIL_TOKEN`) |
+| N | Web responses carried no security headers | **Fixed** — `next.config.ts` sets X-Frame-Options / CSP `frame-ancestors` / nosniff / Referrer-Policy / Permissions-Policy / HSTS |
+| H | Secret scanning was missing in CI | **Fixed** — a pinned `gitleaks` scan gates every PR (`.gitleaks.toml` allowlists example/dev files) |
+| K | Idempotency is placement-only (`/reports`, `/moderation/actions` ignore `Idempotency-Key`) | **Open** — a retry writes a duplicate audit row (the status change itself is idempotent); needs a schema column. Tracked follow-up |
+| J | Auth uses a custom opaque-token session store, not Auth.js | **Open by choice** — the custom store is the deliberate implementation; `ADR-0006` to be updated to record it |
+
+Other hardening in the same pass: keyset pagination tie-breaks + malformed-cursor safety (`listReports`/`listRoster`/`listArchives`), snapshot watermark ordering (no lost pixel on resume), coordinate/seq bounds checks (no Int-overflow 500s), idempotent WS cleanup + protocol-level liveness, blank `HOST`/`PORT` env safety, and frontend fetch/timer/sign-out hardening.
 
 **No blocking contradictions** for the current build. These drift items, plus `ADR-0010` (provider), `LG-9` (legal), and the live deployment, are the open work toward launch.
 
@@ -169,7 +171,7 @@ The original §13/§14 (pre-implementation fixes + first-10-tasks plan) are **co
 ## 14. Final Decision
 
 - **Core contracts: consistent.** The `@quad/core` contract names, the event-sourcing model, tenant isolation, and the moderation/audit shape all agree between the docs and the built system.
-- **Six corpus ↔ implementation drift items remain** (§12-J…N, H): the code is narrower than the docs on the auth library, idempotency coverage, replay sanitization of moderated content, auth-token logging in the default compose, web security headers, and secret scanning. The audit reports them rather than claiming full parity.
+- **Drift mostly resolved by the hardening pass** (§12): replay sanitization (L), auth-token logging (M), web security headers (N), and CI secret scanning (H) are fixed. Two remain: idempotency coverage on non-placement commands (K, needs a schema column) and the auth-library choice (J, a doc-alignment follow-up).
 - **No blocking contradictions** for the current build. The drift items above, plus `ADR-0010`, `LG-9`, and the live deployment, are the open work toward launch.
 
 ---

@@ -41,7 +41,27 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
       };
       registry.add(conn);
       let subscribedCanvasId: string | null = null;
-      const heartbeat = setInterval(() => send({ type: 'Heartbeat' }), HEARTBEAT_MS);
+      // Protocol-level liveness: a half-open/dead peer that never closes (TCP black-hole) would
+      // otherwise hold a registry slot + inflate presence until the OS TCP timeout. Each tick: if the
+      // previous ping got no pong, terminate (reclaim the slot now); else send a ping + the app
+      // Heartbeat. The ws client auto-replies to a ping with a pong, marking it alive again.
+      let isAlive = true;
+      socket.on('pong', () => {
+        isAlive = true;
+      });
+      const heartbeat = setInterval(() => {
+        if (!isAlive) {
+          socket.terminate();
+          return;
+        }
+        isAlive = false;
+        try {
+          socket.ping();
+        } catch {
+          /* socket already closing */
+        }
+        send({ type: 'Heartbeat' });
+      }, HEARTBEAT_MS);
 
       // Presence: broadcast the canvas's approximate active (subscribed) count to its subscribers.
       const broadcastPresence = (canvasId: string): void => {
