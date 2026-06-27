@@ -8,7 +8,10 @@ export default function CanvasPage(): React.ReactElement {
     <main style={{ padding: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
         <h1>Live Canvas</h1>
-        <SessionBadge />
+        <nav style={{ display: 'flex', gap: '1rem', alignItems: 'baseline' }}>
+          <a href="/leaderboards">Leaderboard</a>
+          <SessionBadge />
+        </nav>
       </div>
       <p>Click a cell, choose a color, then confirm to place a pixel. Placing requires a signed-in account.</p>
       <CanvasView />
