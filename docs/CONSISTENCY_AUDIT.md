@@ -8,8 +8,9 @@
 > **Status:** the system is **built and merged to `main`**, the `@quad/*` packages, the `apps/api` and
 > `apps/web` apps, realtime/auth/moderation/archive/replay/cooldown, M50s ops hardening, the CI gates,
 > and a deployable full-stack compose + edge proxy. Milestone-group checkpoints **G1–G5 have passed** and
-> all MVP acceptance criteria (`P-AC-1…13`) are met. The live current state is `CHECKPOINTS.md` §4 and
-> `ACCEPTANCE_TRACEABILITY.md`. Tenant-neutral (Rutgers Quad = tenant #1).
+> all MVP acceptance criteria (`P-AC-1…13`) are met. The core contracts are consistent; **six places where
+> the code is narrower than the docs are tracked as drift in §12.** The live current state is
+> `CHECKPOINTS.md` §4 and `ACCEPTANCE_TRACEABILITY.md`. Tenant-neutral (Rutgers Quad = tenant #1).
 
 ---
 
@@ -59,18 +60,20 @@
 | `PixelPlaced` / `PixelRolledBack` / `RegionRolledBack` event + message names | ✅ one spelling across `@quad/core`, docs, code |
 | Per-canvas sequence ordering | ✅ advisory-locked append in `placement-repository.ts` |
 | `COOLDOWN_ACTIVE` ≠ `RATE_LIMITED` (both 429, never conflated) | ✅ `@quad/core` error codes; cooldown vs rate-limit paths distinct |
-| Idempotency on commands | ✅ `appendPlacement` replay-by-key |
+| Idempotency on commands | ◑ placement only: `appendPlacement` replays by key, but `/reports` and `/moderation/actions` don't yet honor `Idempotency-Key` (drift vs `API.md`, §12-K) |
 | Append-only event log; projections derived | ✅ `pixel_events` + `pixels`; rollbacks are compensating events |
 | Moderation via compensating events + atomic audit | ✅ `routes/moderation.ts`; `moderation_actions` FK-`RESTRICT`, no hard delete |
-| Public replay/archive sanitized | ✅ `getPixelHistory` excludes rolled-back placements |
+| Public **pixel history** sanitized | ✅ `getPixelHistory` drops rolled-back placements |
+| Public **point-in-time replay** sanitized | ◑ `reconstructAt` (`/at/{seq}`) faithfully reproduces history, so a seq before a moderation rollback re-exposes the removed content (§12-L) |
 
-**No contract-term drift** between the docs and the implemented `@quad/core` contracts.
+**No contract-term naming drift** in the `@quad/core` contracts. Behavioural gaps between the corpus and the implementation are tracked in §12.
 
 ---
 
 ## 5. Privacy / Data-Class Consistency
 
-- **`DC2` public attribution only; `DC3` (email) never in public surfaces, logs, metrics, or audit.** Verified: profiles/leaderboards/history return handle-only; access log + `/metrics` key on the route template, never the email; `e2e`/integration assert no `@` leaks. ✅
+- **`DC2` public attribution only; `DC3` (email) never in public surfaces, logs, metrics, or audit.** Verified: profiles/leaderboards/history return handle-only; access log + `/metrics` key on the route template, never the email; `e2e`/integration assert no `@` leaks. The verification mail transport masks the email to its domain before logging. ✅
+- **Caveat:** with no mail provider configured (the default, including `docker-compose.prod.yml`), `LogMailTransport` writes the **full magic-link token** to stdout so a developer can complete the flow locally. A real provider removes it; until one is wired, the default compose logs auth tokens (§12-M).
 
 ---
 
@@ -80,7 +83,7 @@
 | --- | --- |
 | No anonymous writes | ✅ placement/report principal-gated → 401 (CI-gated, `LG-4`) |
 | Email-verification sessions; revocable | ✅ `auth` + `revokeAllForUser` on suspend/ban |
-| Security headers on every response; rate limiting; body limit | ✅ `plugins/security-headers`, `rate-limit/`, 16 KiB `bodyLimit` |
+| Security headers; rate limiting; body limit | ◑ on the **API** (`plugins/security-headers`, `rate-limit/`, 16 KiB `bodyLimit`); `apps/web` (Next) + the Caddy web route add **no** security headers yet (§12-N) |
 | High/critical dependency audit gates CI | ✅ `pnpm audit --audit-level high` step |
 
 ---
@@ -125,21 +128,31 @@ The original §11 audited that Phase 4 stayed scaffolding-only. That gate is pas
 
 ---
 
-## 12. Contradictions / Open Items
+## 12. Open Items
 
-The original audit's non-blocking items are **resolved**:
+The original audit's setup items are **resolved**:
 
 | # | Original item | Now |
 | --- | --- | --- |
-| A | Stale `@quad/web`/`@quad/api` labels | Closed — no code/config usage (audit + SPEC_PLAN history only) |
-| B | `--frozen-lockfile` with no lockfile | Resolved — `pnpm-lock.yaml` committed; CI uses `--frozen-lockfile` |
-| C | Missing `.gitignore` / stray `.DS_Store` | Resolved — `.gitignore` added; no tracked `.DS_Store` |
-| D | Missing `.nvmrc` / `tsconfig.base.json` | Resolved — both present |
-| E | `LICENSE` undecided | Resolved, **MIT** (`LICENSE` at the repo root) |
-| G | `ADR-0010` provider Proposed | Open by design — accept before the live deploy |
-| H | CI scan tooling placeholder | Resolved — `pnpm audit` high/critical gate live |
+| A | Stale `@quad/web`/`@quad/api` labels | Closed: no code/config usage (audit + SPEC_PLAN history only) |
+| B | `--frozen-lockfile` with no lockfile | Resolved: `pnpm-lock.yaml` committed; CI uses `--frozen-lockfile` |
+| C | Missing `.gitignore` / stray `.DS_Store` | Resolved: `.gitignore` added; no tracked `.DS_Store` |
+| D | Missing `.nvmrc` / `tsconfig.base.json` | Resolved: both present |
+| E | `LICENSE` undecided | Resolved: **MIT** (`LICENSE` at the repo root) |
+| G | `ADR-0010` provider Proposed | Open by design: accept before the live deploy |
 
-**No blocking contradictions.** Remaining open items are launch-stage and external: `ADR-0010` provider + `LG-9` legal + the live deployment.
+**Corpus ↔ implementation drift this audit found.** The system is built and works; these are places the code is currently narrower than the docs. Each is a tracked follow-up; none blocks the current build, but the audit reports them rather than claiming full parity:
+
+| # | Drift | Evidence | Corpus expectation |
+| --- | --- | --- | --- |
+| J | Auth uses a custom session store, not Auth.js | `apps/api` has no `@auth/core` dependency | `AUTHENTICATION.md` / `ADR-0006` recommend Auth.js for the email MVP |
+| K | Idempotency is placement-only | `/reports` and `/moderation/actions` ignore `Idempotency-Key` | `API.md`: every state-changing command honors it |
+| L | Point-in-time replay re-exposes moderated content | `reconstructAt` folds history faithfully, so `/at/{seq}` before a rollback shows the removed pixel | moderated content should not reappear on public surfaces |
+| M | The default compose logs auth tokens | with no mail provider, `LogMailTransport` writes the full magic-link token to stdout | tokens must not be logged in production |
+| N | Web responses carry no security headers | `apps/web` (Next) + the Caddy web route set none | `SECURITY.md`: defensive headers on responses |
+| H | Secret scanning is missing in CI | only `pnpm audit` (dependencies) runs | `SECURITY.md` / `DEPLOYMENT.md`: dependency **and** secret scanning |
+
+**No blocking contradictions** for the current build. These drift items, plus `ADR-0010` (provider), `LG-9` (legal), and the live deployment, are the open work toward launch.
 
 ---
 
@@ -155,8 +168,9 @@ The original §13/§14 (pre-implementation fixes + first-10-tasks plan) are **co
 
 ## 14. Final Decision
 
-- **Corpus + implementation: ✅ consistent.** The docs and the built system agree; no drift detected.
-- **Blocking contradictions: none.** Remaining work is launch-stage: `ADR-0010` provider, `LG-9` legal, and the live deployment.
+- **Core contracts: consistent.** The `@quad/core` contract names, the event-sourcing model, tenant isolation, and the moderation/audit shape all agree between the docs and the built system.
+- **Six corpus ↔ implementation drift items remain** (§12-J…N, H): the code is narrower than the docs on the auth library, idempotency coverage, replay sanitization of moderated content, auth-token logging in the default compose, web security headers, and secret scanning. The audit reports them rather than claiming full parity.
+- **No blocking contradictions** for the current build. The drift items above, plus `ADR-0010`, `LG-9`, and the live deployment, are the open work toward launch.
 
 ---
 
