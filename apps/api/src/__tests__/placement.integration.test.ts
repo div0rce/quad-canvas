@@ -1148,6 +1148,35 @@ describe('archives (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('returns term statistics for an archived term (totals + DC2 top placers)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers', handle: 'alice' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    const bob = await prisma.user.create({ data: { email: 'bobstat@scarletmail.rutgers.edu', publicHandle: 'bob', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: bob.id, role: 'participant', status: 'active' } });
+    const bobP = { userId: bob.id as domain.UserId, tenantId: 'ten_rutgers' as domain.TenantId, role: 'participant' as const };
+    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'as1' });
+    await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 1, idempotencyKey: 'as2' });
+    await placePixel(deps(0), bobP, t, { x: 2, y: 0, color: 1, idempotencyKey: 'as3' });
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'archived' } });
+    const canvas = await prisma.canvas.findUnique({ where: { id: s.canvasId }, select: { termLabel: true } });
+    const term = canvas!.termLabel;
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/stats`, headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { totalPlacements: number; participants: number; topPlacers: Array<{ handle: string; pixelsPlaced: number }> };
+      expect(body.totalPlacements).toBe(3);
+      expect(body.participants).toBe(2);
+      expect(body.topPlacers[0]).toMatchObject({ handle: 'alice', pixelsPlaced: 2 }); // busiest first
+      expect(res.body).not.toContain('@'); // no DC3 email
+
+      const missing = await app.inject({ method: 'GET', url: '/api/v1/archives/NOPE/stats', headers: { host: 'rutgers.localhost' } });
+      expect(missing.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('profiles (HTTP)', () => {

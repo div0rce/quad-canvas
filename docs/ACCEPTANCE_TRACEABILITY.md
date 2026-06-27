@@ -16,7 +16,7 @@
 | `P-AC-5` | **Quick-look** handle+time, **full history on click**; email never shown | ◑ | Full ordered history on click (inspector, sanitized DC2; integration) | The separate lightweight **quick-look** (handle+time on hover/preview) is not built |
 | `P-AC-6` | Profile shows term + lifetime stats and a heatmap | ✅ | Profile returns lifetime + current-term counts + a **per-day contribution histogram**; the page shows the stats + a **contribution heatmap** (`heatLevel` buckets, unit-tested) (integration) | — |
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
-| `P-AC-8` | Term-end freeze + archive (final image, **stats**, replay), browsable | ◑ | Freeze/archive; faithful replay; archives UI; **downloadable PNG final image** (`Download image` → `canvas.toBlob`, sanitized filename, unit-tested) | Richer **term statistics** in the archive view |
+| `P-AC-8` | Term-end freeze + archive (final image, stats, replay), browsable | ✅ | Freeze/archive; downloadable PNG final image; faithful replay; **term statistics** (`/archives/{term}/stats`: totals, participants, DC2 top placers) on the archive page; browsable (integration) | — |
 | `P-AC-9` | Replay reproduces the sequence; play/pause/scrub/speed/jump | ✅ | `reconstructAt` (faithful; integration); player play/pause/scrub/jump + **0.5×–4× speed** (`frameInterval`, unit-tested) | — |
 | `P-AC-10` | **Every** moderation action reversible, history intact, audited; no hard delete | ✅ | All actions reversible-by-design — content `rollback`, member `reinstate`, report **`reopen_report`** (→ back to open); all audited, append-only, no hard delete (integration) | — (a console "view resolved + reopen" view is a non-blocking UX follow-up) |
 | `P-AC-11` | Mobile flows (**touch place, pinch-zoom, drag-pan**) + desktop | ◑ | Tap-to-place works on touch; desktop flows complete | Pinch-zoom + drag-pan gestures |
@@ -25,9 +25,9 @@
 
 ## Summary
 
-**9 of 13 fully met and verified** (`P-AC-1, 2, 3, 6, 7, 9, 10, 12, 13`). **4 partial** — core implemented +
-verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look preview,
-archive term-statistics, mobile pinch-zoom/drag-pan).
+**10 of 13 fully met and verified** (`P-AC-1, 2, 3, 6, 7, 8, 9, 10, 12, 13`). **3 partial** — core
+implemented + verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look
+preview, mobile pinch-zoom/drag-pan).
 
 **`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.

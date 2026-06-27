@@ -32,6 +32,15 @@ export async function fetchArchiveAt(term: string, seq: number): Promise<dto.Can
   }
 }
 
+export async function fetchArchiveStats(term: string): Promise<dto.ArchiveStatsResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/stats`);
+    return res.ok ? ((await res.json()) as dto.ArchiveStatsResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchReplayMeta(term: string): Promise<dto.ReplayMetaResponse | null> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/replay`);
