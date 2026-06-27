@@ -9,6 +9,8 @@ import type { ws } from '@quad/core';
 export interface RealtimeConnection {
   readonly id: string;
   readonly tenantId: string;
+  /** The authenticated user, when the WS handshake carried a valid session (anonymous reads omit it). */
+  readonly userId?: string;
   send(message: ws.ServerToClientMessage): void;
 }
 
