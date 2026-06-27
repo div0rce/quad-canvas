@@ -14,7 +14,7 @@
 | `P-AC-3` | Cooldown identical for all tenant users **and always within 5–20 min** | ✅ | Global per-canvas cooldown; the production composition **clamps** the configured fixed value into 5–20 (`clampCooldownMs`, unit-tested), and the dynamic path is bounded by construction | — |
 | `P-AC-4` | Cooldown moves with load **and changes gradually (no oscillation)** | ◑ | Load-responsive + clamped (`dynamicCooldownMs`, monotonic; integration) | The 60-s fixed window resets abruptly (can step/oscillate) — add smoothing (sliding window / EWMA) |
 | `P-AC-5` | **Quick-look** handle+time, **full history on click**; email never shown | ◑ | Full ordered history on click (inspector, sanitized DC2; integration) | The separate lightweight **quick-look** (handle+time on hover/preview) is not built |
-| `P-AC-6` | Profile shows **term + lifetime** stats **and a heatmap** | ◑ | Profile returns a lifetime `pixelsPlaced` count + DC2 identity (integration) | Term-vs-lifetime split **and** a contribution heatmap |
+| `P-AC-6` | Profile shows term + lifetime stats **and a heatmap** | ◑ | Profile returns **both** lifetime `pixelsPlaced` **and** `currentTermPixelsPlaced` (current canvas) + DC2 identity; shown on the profile page (integration) | A contribution **heatmap** |
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
 | `P-AC-8` | Term-end freeze + archive (final image, **stats**, replay), browsable | ◑ | Freeze/archive; faithful replay; archives UI; **downloadable PNG final image** (`Download image` → `canvas.toBlob`, sanitized filename, unit-tested) | Richer **term statistics** in the archive view |
 | `P-AC-9` | Replay reproduces the sequence; play/pause/scrub/speed/jump | ✅ | `reconstructAt` (faithful; integration); player play/pause/scrub/jump + **0.5×–4× speed** (`frameInterval`, unit-tested) | — |
@@ -27,7 +27,7 @@
 
 **8 of 13 fully met and verified** (`P-AC-1, 2, 3, 7, 9, 10, 12, 13`). **5 partial** — core implemented +
 verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look preview,
-term/lifetime stats + heatmap, archive term-statistics, mobile pinch-zoom/drag-pan).
+profile contribution heatmap, archive term-statistics, mobile pinch-zoom/drag-pan).
 
 **`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.

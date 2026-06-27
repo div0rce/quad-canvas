@@ -214,8 +214,10 @@ export interface ProfileResponse {
   readonly role: Role;
   /** ISO-8601 timestamp the user joined this tenant. */
   readonly joinedAt: string;
-  /** Count of the user's placements in this tenant. */
+  /** Count of the user's placements in this tenant (lifetime, across all terms). */
   readonly pixelsPlaced: number;
+  /** Count of the user's placements in the current term (latest canvas), or 0 if none. */
+  readonly currentTermPixelsPlaced: number;
 }
 
 /** The caller's own profile. Currently the same DC2 shape (private fields are a follow-on). */

@@ -41,7 +41,9 @@ export default function ProfilePage(): React.ReactElement {
             <dd>{data.handle}</dd>
             <dt>Role</dt>
             <dd>{data.role}</dd>
-            <dt>Pixels placed</dt>
+            <dt>Pixels placed (this term)</dt>
+            <dd>{data.currentTermPixelsPlaced}</dd>
+            <dt>Pixels placed (lifetime)</dt>
             <dd>{data.pixelsPlaced}</dd>
             <dt>Joined</dt>
             <dd>{new Date(data.joinedAt).toLocaleDateString()}</dd>

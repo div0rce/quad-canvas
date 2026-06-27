@@ -254,6 +254,7 @@ export interface ProfileRow {
   readonly role: string;
   readonly joinedAt: Date;
   readonly pixelsPlaced: number;
+  readonly currentTermPixelsPlaced: number;
 }
 
 export interface LeaderboardRow {
@@ -326,6 +327,19 @@ export interface PlacementRepository {
 }
 
 export function createPlacementRepository(prisma: PrismaClient): PlacementRepository {
+  // Count a user's placements in the tenant's CURRENT term: the active canvas (the placement target),
+  // or the latest canvas when none is active (between terms). 0 if the tenant has no canvas.
+  const countCurrentTermPlacements = async (tenantId: string, userId: string): Promise<number> => {
+    const active = await prisma.canvas.findFirst({
+      where: { tenantId, status: 'active' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    const canvas =
+      active ?? (await prisma.canvas.findFirst({ where: { tenantId }, orderBy: { createdAt: 'desc' }, select: { id: true } }));
+    if (!canvas) return 0;
+    return prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced', canvasId: canvas.id } });
+  };
   return {
     async findCurrentCanvas(tenantId) {
       const c = await prisma.canvas.findFirst({
@@ -417,7 +431,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       if (!m || m.user.publicHandle === null) return null;
       const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: m.userId, type: 'PixelPlaced' } });
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced };
+      const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, m.userId);
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced };
     },
 
     async getProfileByUserId(tenantId, userId) {
@@ -427,7 +442,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       if (!m || m.status !== 'active' || m.user.publicHandle === null) return null;
       const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced' } });
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced };
+      const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, userId);
+      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced };
     },
 
     async getLeaderboard(tenantId, limit) {

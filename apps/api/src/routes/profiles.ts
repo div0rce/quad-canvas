@@ -16,6 +16,7 @@ function toResponse(row: ProfileRow): dto.ProfileResponse {
     role: row.role as domain.Role,
     joinedAt: row.joinedAt.toISOString(),
     pixelsPlaced: row.pixelsPlaced,
+    currentTermPixelsPlaced: row.currentTermPixelsPlaced,
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
   };
 }

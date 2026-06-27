@@ -1162,8 +1162,13 @@ describe('profiles (HTTP)', () => {
     try {
       const pub = await app.inject({ method: 'GET', url: '/api/v1/profiles/alice', headers: { host: 'rutgers.localhost' } });
       expect(pub.statusCode).toBe(200);
-      expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2 });
+      expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2, currentTermPixelsPlaced: 2 });
       expect(pub.body).not.toContain('@'); // no DC3 email
+
+      // A new term (later canvas) with no placements → lifetime stays, current-term resets to 0.
+      await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F27', status: 'active', width: 10, height: 10 } });
+      const afterRollover = await app.inject({ method: 'GET', url: '/api/v1/profiles/alice', headers: { host: 'rutgers.localhost' } });
+      expect(afterRollover.json() as object).toMatchObject({ pixelsPlaced: 2, currentTermPixelsPlaced: 0 });
 
       const me = await app.inject({ method: 'GET', url: '/api/v1/profiles/me', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
       expect(me.statusCode).toBe(200);
