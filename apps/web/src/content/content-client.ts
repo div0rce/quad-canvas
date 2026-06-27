@@ -9,7 +9,11 @@ export async function fetchProfile(handle: string): Promise<dto.ProfileResponse 
   try {
     const res = await fetch(`${API_BASE}/api/v1/profiles/${encodeURIComponent(handle)}`, { credentials: 'include' });
     if (!res.ok) return null;
-    return (await res.json()) as dto.ProfileResponse;
+    const body = (await res.json()) as unknown;
+    // Validate the field the caller renders (the heatmap maps `contributions`); a wrong-shaped 200
+    // (incl. an array or `{}`) degrades to "not found" instead of crashing the page later.
+    if (!body || typeof body !== 'object' || !Array.isArray((body as { contributions?: unknown }).contributions)) return null;
+    return body as dto.ProfileResponse;
   } catch {
     return null;
   }
@@ -19,7 +23,10 @@ export async function fetchLeaderboard(): Promise<dto.LeaderboardResponse | null
   try {
     const res = await fetch(`${API_BASE}/api/v1/leaderboards`);
     if (!res.ok) return null;
-    return (await res.json()) as dto.LeaderboardResponse;
+    const body = (await res.json()) as unknown;
+    // The page maps `entries`; reject a wrong-shaped 200 (array/`{}`/missing field) rather than crash.
+    if (!body || typeof body !== 'object' || !Array.isArray((body as { entries?: unknown }).entries)) return null;
+    return body as dto.LeaderboardResponse;
   } catch {
     return null;
   }

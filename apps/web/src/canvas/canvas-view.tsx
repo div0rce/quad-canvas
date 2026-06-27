@@ -80,17 +80,24 @@ export function CanvasView(): React.ReactElement {
     const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
     const client = new CanvasClient({
       fetchMeta: async () => {
-        const meta = (await (await fetch(`${API_BASE}/api/v1/canvas/current`)).json()) as dto.CanvasMetaResponse;
+        const res = await fetch(`${API_BASE}/api/v1/canvas/current`);
+        if (!res.ok) throw new Error(`canvas metadata request failed (${res.status})`);
+        const meta = (await res.json()) as dto.CanvasMetaResponse;
         setDims({ width: meta.width, height: meta.height, palette: meta.palette });
         return meta;
       },
-      fetchSnapshot: async () =>
-        (await fetch(`${API_BASE}/api/v1/canvas/current/snapshot`)).json() as Promise<dto.CanvasSnapshotResponse>,
+      fetchSnapshot: async () => {
+        const res = await fetch(`${API_BASE}/api/v1/canvas/current/snapshot`);
+        if (!res.ok) throw new Error(`canvas snapshot request failed (${res.status})`);
+        return res.json() as Promise<dto.CanvasSnapshotResponse>;
+      },
       openSocket: () => new WebSocket(`${wsBase}/api/v1/canvas/current/ws`) as unknown as SocketLike,
       onUpdate: (buffer, ctx) => paint(canvasRef.current, buffer, ctx.palette),
     });
     clientRef.current = client;
-    void client.start();
+    // Surface a load failure instead of leaving a blank canvas, and never let the initial load reject
+    // unhandled (a down/erroring API would otherwise be a silent blank screen + an unhandled rejection).
+    client.start().catch(() => setStatus('Could not load the canvas. Please refresh to retry.'));
     return () => {
       client.stop();
       clientRef.current = null;
@@ -165,6 +172,11 @@ export function CanvasView(): React.ReactElement {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverCell.current = '';
     setHover(null);
+  }, []);
+
+  // Cancel a pending quick-look debounce on unmount (no setState-after-unmount / timer leak).
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
   }, []);
 
   // --- Pan / zoom (P-AC-11). The canvas + selected highlight live in a transformed layer; the

@@ -9,7 +9,7 @@ import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
 import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './auth/session-store.js';
 import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verification-store.js';
-import { LogMailTransport } from './auth/mail.js';
+import { LogMailTransport, NullMailTransport } from './auth/mail.js';
 import { AuthService } from './auth/auth-service.js';
 import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 import type { ReadinessCheck } from './routes/health.js';
@@ -21,8 +21,13 @@ const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const COOKIE_SECURE = process.env['QUAD_COOKIE_INSECURE'] !== '1';
 
-const PORT = Number(process.env['PORT'] ?? 3000);
-const HOST = process.env['HOST'] ?? '127.0.0.1';
+// `??` only falls back on null/undefined, so a blank env var (e.g. `HOST=` in an env file) would slip
+// through: HOST="" binds ALL interfaces and PORT="" → Number("")===0 binds a random port. Treat blank
+// as unset, and fall back on a non-numeric/out-of-range port.
+const HOST = process.env['HOST']?.trim() || '127.0.0.1';
+const rawPort = process.env['PORT']?.trim();
+const parsedPort = rawPort ? Number(rawPort) : 3000;
+const PORT = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 3000;
 const DATABASE_URL = process.env['DATABASE_URL'];
 const REDIS_URL = process.env['REDIS_URL'];
 // Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. '1'/'true' →
@@ -51,6 +56,7 @@ async function main(): Promise<void> {
   let sessionStore: SessionStore | undefined;
   let sessionRedis: Redis | undefined;
   let authService: AuthService | undefined;
+  let mailNotDelivered = false; // prod with no real provider → warn (links aren't delivered)
   const readinessChecks: ReadinessCheck[] = [];
   const cleanups: Array<() => Promise<void>> = [];
   if (DATABASE_URL) {
@@ -117,11 +123,19 @@ async function main(): Promise<void> {
     // Verification front-door: tokens share the session Redis (distinct key prefix). The mail
     // transport is a no-op logger by default — production wires the real provider (B6/SMTP).
     const verifications = sessionRedis ? new RedisVerificationStore(sessionRedis) : new InMemoryVerificationStore();
+    // Mail transport. The verification token is a bearer credential (it alone mints a session), so it
+    // must never reach production logs. Log it ONLY outside production (dev needs it to complete the
+    // local flow with no provider) or on an explicit opt-in; in production with no real provider, use
+    // the token-free transport AND warn that links aren't delivered (no silent "success"). Production
+    // wires B6/SMTP via this same MailTransport seam.
+    const isProd = process.env['NODE_ENV'] === 'production';
+    const logToken = !isProd || process.env['QUAD_LOG_MAIL_TOKEN'] === '1';
+    const logAuth = (m: string): void => void process.stdout.write(`[auth] ${m}\n`);
+    const mail = logToken ? new LogMailTransport(logAuth) : new NullMailTransport(logAuth);
+    mailNotDelivered = !logToken; // no real SMTP is wired here; the null transport doesn't deliver
     authService = new AuthService({
       verifications,
-      // No real provider configured: surface the masked link to the server log so tokens are not
-      // silently dropped (dev fallback). Production wires B6/SMTP via this same MailTransport seam.
-      mail: new LogMailTransport((m) => process.stdout.write(`[auth] ${m}\n`)),
+      mail,
       repo: placement.repo,
       sessions: sessionStore,
       verificationTtlSeconds: VERIFICATION_TTL_SECONDS,
@@ -150,6 +164,11 @@ async function main(): Promise<void> {
   });
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
+  }
+  if (mailNotDelivered) {
+    app.log.warn(
+      'No mail provider is configured: email verification links are NOT delivered. Wire SMTP/B6 before launch.',
+    );
   }
 
   // Drain in-flight requests (app.close) before closing the DB/Redis/bus; a watchdog forces exit if

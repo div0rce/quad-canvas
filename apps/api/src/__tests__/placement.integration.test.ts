@@ -1149,6 +1149,48 @@ describe('archives (HTTP)', () => {
     }
   });
 
+  it('point-in-time replay censors a moderated placement (no re-exposure before its rollback)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    const a = await placePixel(deps(0), principal(s), t, { x: 7, y: 7, color: 1, idempotencyKey: 'sanA' });
+    const b = await placePixel(deps(0), principal(s), t, { x: 7, y: 7, color: 4, idempotencyKey: 'sanB' }); // overwrites
+    expect(a.ok && b.ok).toBe(true); // setup must succeed, or the replay assertion below is meaningless
+    const seqB = b.ok ? b.result.seq : 0;
+    // A moderator rolls back (7,7): the color-4 placement is moderated content.
+    const mod = await prisma.user.create({ data: { email: 'modsan@scarletmail.rutgers.edu', publicHandle: 'modsan', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const modApp = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const rb = await modApp.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'pixel_rollback', targetRef: '7,7', reason: 'remove the overwrite' },
+      });
+      expect(rb.statusCode).toBe(200);
+    } finally {
+      await modApp.close();
+    }
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'archived' } });
+    const canvas = await prisma.canvas.findUnique({ where: { id: s.canvasId }, select: { termLabel: true } });
+    const term = canvas!.termLabel;
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      // At seqB the moderated color-4 placement was momentarily the visible cell, but PUBLIC replay must
+      // never re-expose it — the cell shows the surviving color-1 placement instead.
+      const atB = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/at/${seqB}`, headers: { host: 'rutgers.localhost' } });
+      expect(atB.statusCode).toBe(200);
+      const cells = (JSON.parse(atB.body) as { cells: Array<{ x: number; y: number; color: number }> }).cells;
+      const cell = cells.find((c) => c.x === 7 && c.y === 7);
+      expect(cell?.color).not.toBe(4); // the moderated placement is never re-exposed
+      expect(cell?.color).toBe(1); // shows the surviving prior placement
+    } finally {
+      await app.close();
+    }
+  });
+
   it('returns term statistics for an archived term (totals + DC2 top placers)', async () => {
     const s = await seed({ tenantId: 'ten_rutgers', handle: 'alice' });
     const t = { id: 'ten_rutgers' as const, palette: 'default' };

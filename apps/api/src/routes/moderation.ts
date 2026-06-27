@@ -120,6 +120,11 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (!canvas) return err(reply, request, 404, 'NOT_FOUND', 'No canvas for this tenant.');
         // An archived canvas is sealed — no new events may mutate it, even via moderation.
         if (canvas.status === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
+        // Bounds-check against the canvas (like region_rollback) — an out-of-range coordinate would
+        // otherwise overflow the Int column and 500 instead of returning a clean 422.
+        if (coords.x < 0 || coords.y < 0 || coords.x >= canvas.width || coords.y >= canvas.height) {
+          return err(reply, request, 422, 'VALIDATION_ERROR', 'Coordinate is out of canvas bounds.');
+        }
         const result = await repo.rollbackPixel({
           tenantId: request.tenant.id,
           canvasId: canvas.id,

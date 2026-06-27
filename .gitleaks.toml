@@ -1,0 +1,17 @@
+# Secret-scan config for the CI gate (see .github/workflows/ci.yml). Extends gitleaks' default rules.
+# Allowlisting is deliberately NARROW: only the documented example env files are path-exempt, and the
+# known local-dev placeholders are allowlisted by VALUE (regex) so a real secret accidentally added to
+# any deploy/CI file is still caught.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented example env files + known local-dev placeholder values (not real secrets)."
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.prod\.example$''',
+]
+regexes = [
+  '''change-me-in-production''',
+  '''quad:quad@''',
+]

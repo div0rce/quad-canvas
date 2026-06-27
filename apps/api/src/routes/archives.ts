@@ -100,8 +100,10 @@ export function makeArchiveRoutes(repo: PlacementRepository): FastifyPluginAsync
       if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
       const { term, seq } = request.params as { term: string; seq: string };
       const seqNum = Number(seq);
-      if (!Number.isInteger(seqNum) || seqNum < 0) {
-        return err(reply, request, 422, 'VALIDATION_ERROR', 'seq must be a non-negative integer.');
+      // Upper bound at the Int4 ceiling: seq is a 4-byte column, so a larger value can never match an
+      // event and an absurd input should be a clean 422, not carried into the fold.
+      if (!Number.isInteger(seqNum) || seqNum < 0 || seqNum > 2147483647) {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'seq must be a non-negative 32-bit integer.');
       }
       const archive = await repo.findArchiveByTerm(request.tenant.id, term);
       if (!archive) return err(reply, request, 404, 'NOT_FOUND', 'No archive for that term.');
