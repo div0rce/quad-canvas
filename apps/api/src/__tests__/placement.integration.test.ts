@@ -129,6 +129,26 @@ describe('placement service', () => {
     expect(second.ok === false && typeof second.error.details?.['retryAfterMs']).toBe('number');
   });
 
+  it('scales the cooldown with recent canvas load (dynamic cooldown)', async () => {
+    const s = await seed();
+    const userB = await prisma.user.create({ data: { email: 'dynb@example.edu', publicHandle: 'dynb', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: s.tenantId, userId: userB.id, role: 'participant', status: 'active' } });
+    const t = { id: s.tenantId, palette: 'default' };
+    const dyn = { ...deps(0), dynamicCooldown: { minMs: 0, maxMs: 1000, saturationRatePerMin: 2 } };
+
+    // First placement: no recent activity → the cooldown floor.
+    const r1 = await placePixel(dyn, principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'dc1' });
+    expect(r1.ok).toBe(true);
+    expect(r1.ok && r1.result.cooldownMs).toBe(0);
+
+    // A second placement (different actor — not self-cooldown-blocked): 1 placement in the last
+    // minute, saturation 2/min → load 0.5 → cooldown 500ms.
+    const bPrincipal = { userId: userB.id as domain.UserId, tenantId: s.tenantId as domain.TenantId, role: 'participant' as const };
+    const r2 = await placePixel(dyn, bPrincipal, t, { x: 1, y: 0, color: 1, idempotencyKey: 'dc2' });
+    expect(r2.ok).toBe(true);
+    expect(r2.ok && r2.result.cooldownMs).toBe(500);
+  });
+
   it('idempotency replay returns the original result and appends one event', async () => {
     const s = await seed();
     const t = { id: s.tenantId, palette: 'default' };

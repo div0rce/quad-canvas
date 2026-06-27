@@ -122,6 +122,7 @@ model PixelEvent {
   @@index([canvasId, x, y, seq]) // per-cell history (ordered)
   @@index([tenantId])
   @@index([tenantId, actorUserId]) // per-user placement count (profiles)
+  @@index([canvasId, type, createdAt]) // recent-placement load count (dynamic cooldown)
   @@map("pixel_events")
 }
 

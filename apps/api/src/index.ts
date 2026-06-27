@@ -34,6 +34,11 @@ const DEFAULT_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;
 const rawCooldown = process.env['QUAD_COOLDOWN_MS'];
 const parsedCooldown = rawCooldown !== undefined && rawCooldown.trim() !== '' ? Number(rawCooldown) : Number.NaN;
 const COOLDOWN_MS = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MS;
+// Load-based cooldown (opt-in): the value grows with the recent canvas-wide placement rate, bounded
+// by COOLDOWN.md's 5–20 min. Saturation rate (placements/min at which it hits the ceiling) is tunable.
+const DYNAMIC_COOLDOWN = process.env['QUAD_DYNAMIC_COOLDOWN'] === '1';
+const rawSaturation = Number(process.env['QUAD_COOLDOWN_SATURATION_RPM']);
+const COOLDOWN_SATURATION_RPM = Number.isFinite(rawSaturation) && rawSaturation > 0 ? rawSaturation : 120;
 
 async function main(): Promise<void> {
   let placement: PlacementDeps | undefined;
@@ -65,6 +70,15 @@ async function main(): Promise<void> {
       cooldownMs: COOLDOWN_MS,
       now: () => new Date(),
       bus,
+      ...(DYNAMIC_COOLDOWN
+        ? {
+            dynamicCooldown: {
+              minMs: cooldown.COOLDOWN_MIN_MINUTES * 60_000,
+              maxMs: cooldown.COOLDOWN_MAX_MINUTES * 60_000,
+              saturationRatePerMin: COOLDOWN_SATURATION_RPM,
+            },
+          }
+        : {}),
     };
     // Server-side sessions (Redis where available). The verification front-door that issues
     // sessions is a follow-on; until then this validates sessions only (none exist yet → 401).

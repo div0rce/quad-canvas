@@ -277,6 +277,8 @@ export interface PlacementRepository {
   getLeaderboard(tenantId: string, limit: number): Promise<readonly LeaderboardRow[]>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
+  /** Count of placements on a canvas since `since` — the load input for the dynamic cooldown. */
+  countRecentPlacements(canvasId: string, since: Date): Promise<number>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
   findActiveMembership(tenantId: string, userId: string): Promise<{ role: string } | null>;
   /** Find or create a user by email (DC3); a placeholder public handle is generated for new users. */
@@ -337,6 +339,10 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
       });
       return c ?? null;
+    },
+
+    async countRecentPlacements(canvasId, since) {
+      return prisma.pixelEvent.count({ where: { canvasId, type: 'PixelPlaced', createdAt: { gte: since } } });
     },
 
     async listArchives(tenantId, query) {
