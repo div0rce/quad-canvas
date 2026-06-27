@@ -9,7 +9,7 @@ import { cooldown } from '@quad/core';
 import type { PlacementDeps } from './services/placement.js';
 import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './auth/session-store.js';
 import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verification-store.js';
-import { LogMailTransport } from './auth/mail.js';
+import { LogMailTransport, NullMailTransport } from './auth/mail.js';
 import { AuthService } from './auth/auth-service.js';
 import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 import type { ReadinessCheck } from './routes/health.js';
@@ -21,8 +21,13 @@ const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const COOKIE_SECURE = process.env['QUAD_COOKIE_INSECURE'] !== '1';
 
-const PORT = Number(process.env['PORT'] ?? 3000);
-const HOST = process.env['HOST'] ?? '127.0.0.1';
+// `??` only falls back on null/undefined, so a blank env var (e.g. `HOST=` in an env file) would slip
+// through: HOST="" binds ALL interfaces and PORT="" → Number("")===0 binds a random port. Treat blank
+// as unset, and fall back on a non-numeric/out-of-range port.
+const HOST = process.env['HOST']?.trim() || '127.0.0.1';
+const rawPort = process.env['PORT']?.trim();
+const parsedPort = rawPort ? Number(rawPort) : 3000;
+const PORT = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 3000;
 const DATABASE_URL = process.env['DATABASE_URL'];
 const REDIS_URL = process.env['REDIS_URL'];
 // Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. '1'/'true' →
@@ -117,11 +122,16 @@ async function main(): Promise<void> {
     // Verification front-door: tokens share the session Redis (distinct key prefix). The mail
     // transport is a no-op logger by default — production wires the real provider (B6/SMTP).
     const verifications = sessionRedis ? new RedisVerificationStore(sessionRedis) : new InMemoryVerificationStore();
+    // Mail transport. SECURE DEFAULT: never log the verification token (a bearer credential that alone
+    // mints a session). The token-logging dev transport is opt-in only (QUAD_LOG_MAIL_TOKEN=1, for
+    // local flows with no provider); otherwise use the token-free transport. Production wires B6/SMTP
+    // via this same MailTransport seam.
+    const logAuth = (m: string): void => void process.stdout.write(`[auth] ${m}\n`);
+    const mail =
+      process.env['QUAD_LOG_MAIL_TOKEN'] === '1' ? new LogMailTransport(logAuth) : new NullMailTransport(logAuth);
     authService = new AuthService({
       verifications,
-      // No real provider configured: surface the masked link to the server log so tokens are not
-      // silently dropped (dev fallback). Production wires B6/SMTP via this same MailTransport seam.
-      mail: new LogMailTransport((m) => process.stdout.write(`[auth] ${m}\n`)),
+      mail,
       repo: placement.repo,
       sessions: sessionStore,
       verificationTtlSeconds: VERIFICATION_TTL_SECONDS,

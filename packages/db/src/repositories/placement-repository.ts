@@ -335,6 +335,20 @@ export interface PlacementRepository {
   appendPlacement(input: AppendPlacementInput): Promise<AppendResult>;
 }
 
+/** Parse a compound keyset cursor `"<iso>|<id>"` (createdAt + a tiebreak id). Returns null for an
+ *  absent, old-format, or malformed cursor so the caller serves the first page rather than erroring
+ *  (a raw `new Date("garbage")` in a query would throw a 500). A `(createdAt, id)` keyset is stable
+ *  even when several rows share a millisecond, so no row is skipped or duplicated across pages. */
+function parseKeysetCursor(cursor: string | undefined): { date: Date; id: string } | null {
+  if (cursor === undefined) return null;
+  const sep = cursor.lastIndexOf('|');
+  if (sep <= 0) return null;
+  const date = new Date(cursor.slice(0, sep));
+  if (Number.isNaN(date.getTime())) return null;
+  const id = cursor.slice(sep + 1);
+  return id ? { date, id } : null;
+}
+
 export function createPlacementRepository(prisma: PrismaClient): PlacementRepository {
   // Count a user's placements in the tenant's CURRENT term: the active canvas (the placement target),
   // or the latest canvas when none is active (between terms). 0 if the tenant has no canvas.
@@ -387,23 +401,15 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async listArchives(tenantId, query) {
-      // Compound keyset cursor `"<iso>|<id>"` — ordering by (createdAt, id) is stable even when several
-      // archives share a createdAt (e.g. a bulk import), so no row is skipped or repeated across pages.
-      let cursorDate: Date | undefined;
-      let cursorId: string | undefined;
-      if (query.cursor !== undefined) {
-        const sep = query.cursor.lastIndexOf('|');
-        if (sep > 0) {
-          cursorDate = new Date(query.cursor.slice(0, sep));
-          cursorId = query.cursor.slice(sep + 1);
-        }
-      }
+      // Compound keyset cursor `"<iso>|<id>"` (see parseKeysetCursor) — ordering by (createdAt, id) is
+      // stable even when several archives share a createdAt, so no row is skipped or repeated.
+      const cur = parseKeysetCursor(query.cursor);
       const rows = await prisma.canvas.findMany({
         where: {
           tenantId,
           status: 'archived',
-          ...(cursorDate && cursorId
-            ? { OR: [{ createdAt: { lt: cursorDate } }, { AND: [{ createdAt: cursorDate }, { id: { lt: cursorId } }] }] }
+          ...(cur
+            ? { OR: [{ createdAt: { lt: cur.date } }, { AND: [{ createdAt: cur.date }, { id: { lt: cur.id } }] }] }
             : {}),
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -625,34 +631,57 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async getSnapshot(canvasId) {
+      // Read the high-water seq BEFORE the cells (two statements, Read Committed). A placement that
+      // commits between them must not leave the watermark ahead of the cells, or a client resuming
+      // from the watermark would never receive that pixel's delta (lost pixel). With this order the
+      // cells always cover >= the watermark, so the client at worst re-applies an already-seen,
+      // seq-deduped delta.
+      const last = await prisma.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
       const cells = await prisma.pixel.findMany({
         where: { canvasId },
         select: { x: true, y: true, color: true },
         orderBy: [{ y: 'asc' }, { x: 'asc' }],
       });
-      const last = await prisma.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
       return { cells, seq: last?.seq ?? 0 };
     },
 
     async reconstructAt(canvasId, seq) {
-      // Fold the event log up to `seq` into the cell state — the same rules the projection applies:
-      // a PixelPlaced sets the cell; a PixelRolledBack reverts it (to its newColor, or clears it).
+      // Point-in-time replay for PUBLIC archives. It must censor moderated content the same way
+      // getPixelHistory does: a placement that is ever rolled back must never reappear, even at a seq
+      // before its rollback. So fold the cell's FULL event log (a PixelPlaced pushes; a PixelRolledBack
+      // pops the most recent survivor), leaving per cell the placements that were never moderated, then
+      // show the latest survivor with seq <= the requested seq. Folding only up to `seq` would re-expose
+      // a placement that a later rollback removed (a moderation leak); this does not.
       const events = await prisma.pixelEvent.findMany({
-        where: { canvasId, seq: { lte: seq } },
+        where: { canvasId },
         orderBy: { seq: 'asc' },
-        select: { x: true, y: true, type: true, newColor: true },
+        select: { x: true, y: true, type: true, newColor: true, seq: true },
       });
-      const cells = new Map<string, SnapshotCellRow>();
+      const survivors = new Map<string, Array<{ seq: number; color: number }>>();
       for (const e of events) {
         const key = `${e.x},${e.y}`;
-        if (e.type === 'PixelPlaced' && e.newColor !== null) {
-          cells.set(key, { x: e.x, y: e.y, color: e.newColor });
-        } else if (e.type === 'PixelRolledBack') {
-          if (e.newColor !== null) cells.set(key, { x: e.x, y: e.y, color: e.newColor });
-          else cells.delete(key);
+        let stack = survivors.get(key);
+        if (!stack) {
+          stack = [];
+          survivors.set(key, stack);
+        }
+        if (e.type === 'PixelPlaced' && e.newColor !== null) stack.push({ seq: e.seq, color: e.newColor });
+        else if (e.type === 'PixelRolledBack') stack.pop();
+      }
+      const cells: SnapshotCellRow[] = [];
+      for (const [key, stack] of survivors) {
+        // stack is seq-ascending (pushed in order; only the tail is ever popped).
+        let chosen: { seq: number; color: number } | undefined;
+        for (const p of stack) {
+          if (p.seq <= seq) chosen = p;
+          else break;
+        }
+        if (chosen) {
+          const comma = key.indexOf(',');
+          cells.push({ x: Number(key.slice(0, comma)), y: Number(key.slice(comma + 1)), color: chosen.color });
         }
       }
-      return { cells: [...cells.values()], seq };
+      return { cells, seq };
     },
 
     async getPixelHistory(canvasId, x, y, query) {
@@ -777,20 +806,25 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async listReports(tenantId, query) {
+      // Compound `(createdAt, id)` keyset (oldest→newest) — a plain createdAt cursor drops reports that
+      // share a boundary millisecond, and a malformed cursor would 500 on `new Date(...)`.
+      const cur = parseKeysetCursor(query.cursor);
       const rows = await prisma.report.findMany({
         where: {
           tenantId,
           ...(query.status !== undefined ? { status: query.status } : {}),
-          ...(query.cursor !== undefined ? { createdAt: { gt: new Date(query.cursor) } } : {}),
+          ...(cur
+            ? { OR: [{ createdAt: { gt: cur.date } }, { AND: [{ createdAt: cur.date }, { id: { gt: cur.id } }] }] }
+            : {}),
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: query.limit + 1,
         select: { id: true, targetRef: true, reason: true, status: true, createdAt: true },
       });
       const hasMore = rows.length > query.limit;
       const items = hasMore ? rows.slice(0, query.limit) : rows;
       const last = items[items.length - 1];
-      const nextCursor = hasMore && last ? last.createdAt.toISOString() : null;
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}|${last.id}` : null;
       return { items, nextCursor };
     },
 
@@ -973,16 +1007,24 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async listRoster(tenantId, query) {
+      // Compound `(createdAt, userId)` keyset — stable across members sharing a boundary millisecond,
+      // and malformed-cursor-safe (see parseKeysetCursor); userId is the membership's tiebreak key.
+      const cur = parseKeysetCursor(query.cursor);
       const rows = await prisma.membership.findMany({
-        where: { tenantId, ...(query.cursor !== undefined ? { createdAt: { gt: new Date(query.cursor) } } : {}) },
-        orderBy: { createdAt: 'asc' },
+        where: {
+          tenantId,
+          ...(cur
+            ? { OR: [{ createdAt: { gt: cur.date } }, { AND: [{ createdAt: cur.date }, { userId: { gt: cur.id } }] }] }
+            : {}),
+        },
+        orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
         take: query.limit + 1,
         select: { userId: true, role: true, status: true, createdAt: true, user: { select: { publicHandle: true, displayName: true } } },
       });
       const hasMore = rows.length > query.limit;
       const page = hasMore ? rows.slice(0, query.limit) : rows;
       const last = page[page.length - 1];
-      const nextCursor = hasMore && last ? last.createdAt.toISOString() : null;
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}|${last.userId}` : null;
       return {
         items: page.map((m) => ({ userId: m.userId, handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, status: m.status })),
         nextCursor,

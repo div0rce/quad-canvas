@@ -37,3 +37,6 @@ Thumbs.db
 *.swp
 # (VS Code settings intentionally allowed; ignore local-only overrides)
 .vscode/*.local
+
+# Local Claude Code state (worktrees, session data)
+.claude/
