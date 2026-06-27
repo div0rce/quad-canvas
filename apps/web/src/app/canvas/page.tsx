@@ -10,6 +10,7 @@ export default function CanvasPage(): React.ReactElement {
         <h1>Live Canvas</h1>
         <nav style={{ display: 'flex', gap: '1rem', alignItems: 'baseline' }}>
           <a href="/leaderboards">Leaderboard</a>
+          <a href="/archives">Archives</a>
           <SessionBadge />
         </nav>
       </div>
