@@ -11,12 +11,18 @@ import type { domain, dto, ws } from '@quad/core';
 import { getPaletteByKey } from '@quad/config';
 import type { PlacementRepository, PlacedRow } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
+import { dynamicCooldownMs, type CooldownConfig } from './cooldown.js';
+
+/** Window over which the recent placement rate (per minute) is measured for the dynamic cooldown. */
+const LOAD_WINDOW_MS = 60_000;
 
 export interface PlacementDeps {
   readonly repo: PlacementRepository;
-  /** Minimal fixed cooldown for this slice (ms). The dynamic load-based algorithm + Redis
-   *  fast-path are deferred (docs/COOLDOWN.md); this is the server-authoritative boundary. */
+  /** Fixed cooldown floor (ms). Used as-is unless `dynamicCooldown` is set, in which case it is
+   *  the floor and the value grows with canvas load (docs/COOLDOWN.md). Server-authoritative. */
   readonly cooldownMs: number;
+  /** When set, the cooldown is computed from the recent placement rate (load-based, bounded). */
+  readonly dynamicCooldown?: CooldownConfig;
   /** Injectable clock (tests). */
   readonly now: () => Date;
   /** Fan-out bus — a new placement is published so WS subscribers (any node) receive it. */
@@ -107,6 +113,20 @@ export async function placePixel(
     return fail('VALIDATION_ERROR', 'Color is not in the tenant palette.');
   }
 
+  // Cooldown: fixed floor, or load-based when configured — the recent canvas-wide placement rate
+  // (count over the last window = per-minute rate) drives the value between the floor and ceiling.
+  // The dynamic value is a CURRENT estimate, recomputed each request: the server always enforces the
+  // value at the time of the gated request (COOLDOWN.md — clients display, never enforce), so the
+  // figure returned here is advisory. The sample is taken before appendPlacement's per-canvas lock,
+  // so a concurrent burst may briefly under-count — acceptable for a fairness throttle. (A retried/
+  // idempotency-replayed request returns the floor above, since it short-circuits before this.)
+  let effectiveCooldownMs = deps.cooldownMs;
+  if (deps.dynamicCooldown) {
+    const since = new Date(deps.now().getTime() - LOAD_WINDOW_MS);
+    const recentRatePerMin = await deps.repo.countRecentPlacements(canvas.id, since);
+    effectiveCooldownMs = dynamicCooldownMs(recentRatePerMin, deps.dynamicCooldown);
+  }
+
   const outcome = await deps.repo.appendPlacement({
     tenantId: principal.tenantId,
     canvasId: canvas.id,
@@ -115,7 +135,7 @@ export async function placePixel(
     y: input.y,
     color: input.color,
     idempotencyKey: input.idempotencyKey,
-    cooldownMs: deps.cooldownMs,
+    cooldownMs: effectiveCooldownMs,
     nowMs: deps.now().getTime(),
   });
 
@@ -142,5 +162,5 @@ export async function placePixel(
       // swallow — broadcast is best-effort, never authoritative
     }
   }
-  return success(outcome.row, deps.cooldownMs);
+  return success(outcome.row, effectiveCooldownMs);
 }
