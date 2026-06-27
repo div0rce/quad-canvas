@@ -1024,6 +1024,20 @@ describe('reports queue (HTTP)', () => {
       expect(report?.status).toBe('resolved');
       const audits = await prisma.moderationAction.findMany({ where: { actionType: 'resolve_report' } });
       expect(audits).toHaveLength(1);
+
+      // Reopen reverses the triage (P-AC-10): status back to open + its own audit record.
+      const reopened = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'reopen_report', targetRef: reportId, reason: 'needs another look' },
+      });
+      expect(reopened.statusCode).toBe(200);
+      const afterReopen = await prisma.report.findFirst({ where: { id: reportId } });
+      expect(afterReopen?.status).toBe('open');
+      const reopenAudits = await prisma.moderationAction.findMany({ where: { actionType: 'reopen_report' } });
+      expect(reopenAudits).toHaveLength(1);
+      expect(reopenAudits[0]?.reason).toBe('needs another look'); // the moderator's rationale is preserved
     } finally {
       await app.close();
     }

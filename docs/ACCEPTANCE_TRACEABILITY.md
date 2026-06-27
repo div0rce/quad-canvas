@@ -18,17 +18,16 @@
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
 | `P-AC-8` | Term-end freeze + archive (**final image**, stats, replay), browsable | ◑ | Freeze/archive; final-**state** JSON snapshot; faithful replay; archives UI | A **rendered/downloadable final image** (snapshot is JSON cells, not a blob) + richer term stats |
 | `P-AC-9` | Replay reproduces the sequence; play/pause/scrub/speed/jump | ✅ | `reconstructAt` (faithful; integration); player play/pause/scrub/jump + **0.5×–4× speed** (`frameInterval`, unit-tested) | — |
-| `P-AC-10` | **Every** moderation action reversible, history intact, audited; no hard delete | ◑ | Content/member actions reversible (rollback, reinstate); all audited; append-only; no hard delete | Report triage (`resolve_report`/`dismiss_report`) has no reopen/reverse |
+| `P-AC-10` | **Every** moderation action reversible, history intact, audited; no hard delete | ✅ | All actions reversible-by-design — content `rollback`, member `reinstate`, report **`reopen_report`** (→ back to open); all audited, append-only, no hard delete (integration) | — (a console "view resolved + reopen" view is a non-blocking UX follow-up) |
 | `P-AC-11` | Mobile flows (**touch place, pinch-zoom, drag-pan**) + desktop | ◑ | Tap-to-place works on touch; desktop flows complete | Pinch-zoom + drag-pan gestures |
 | `P-AC-12` | No Rutgers value hardcoded; tenant is configuration | ✅ | `@quad/config` registry; host→tenant resolution; no default tenant (tests; `CONSISTENCY_AUDIT.md`) | — |
 | `P-AC-13` | One tenant's data never visible to another | ✅ | Tenant-id scoping on every path; "tenant isolation" integration — **CI-gated** (`LG-6`) | — |
 
 ## Summary
 
-**7 of 13 fully met and verified** (`P-AC-1, 2, 3, 7, 9, 12, 13`). **6 partial** — core implemented +
+**8 of 13 fully met and verified** (`P-AC-1, 2, 3, 7, 9, 10, 12, 13`). **5 partial** — core implemented +
 verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look preview,
-term/lifetime stats + heatmap, downloadable final image + term stats, report-triage reversal, mobile
-pinch-zoom/drag-pan).
+term/lifetime stats + heatmap, downloadable final image + term stats, mobile pinch-zoom/drag-pan).
 
 **`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.
