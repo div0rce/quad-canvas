@@ -74,6 +74,23 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      PORT: "3000"
+    # NOTE: the Next bundle ships with NEXT_PUBLIC_API_BASE='' (same-origin). In production an edge proxy
+    # fronts both on ONE origin and routes /api + /ws to `api` by tenant Host (DEPLOYMENT.md §9). That
+    # proxy is a follow-up — so on this WEB_PORT the UI renders, but browser→API calls won't resolve
+    # until the proxy is added (also what unblocks the browser e2e). Reach the API directly on API_PORT.
+    ports:
+      - "${WEB_PORT:-8080}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   quad_pg:
   quad_redis:
