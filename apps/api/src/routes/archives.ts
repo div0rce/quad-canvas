@@ -2,7 +2,7 @@
 // immutable, so responses are strongly cacheable. Replay artifact pointers (object storage) are a
 // follow-on; this is the list + per-term metadata half.
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-import type { dto } from '@quad/core';
+import type { domain, dto } from '@quad/core';
 import type { PlacementRepository } from '@quad/db';
 
 const DEFAULT_LIMIT = 50;
@@ -75,6 +75,23 @@ export function makeArchiveRoutes(repo: PlacementRepository): FastifyPluginAsync
         available: false, // pre-rendered assets (object storage) are a follow-on
       };
       void reply.header('Cache-Control', CACHE);
+      return reply.send(response);
+    });
+
+    // The archived term's FINAL canvas state (its retained projection) — view a completed term.
+    app.get('/api/v1/archives/:term/snapshot', async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const { term } = request.params as { term: string };
+      const archive = await repo.findArchiveByTerm(request.tenant.id, term);
+      if (!archive) return err(reply, request, 404, 'NOT_FOUND', 'No archive for that term.');
+      const snap = await repo.getSnapshot(archive.id);
+      const response: dto.CanvasSnapshotResponse = {
+        width: archive.width,
+        height: archive.height,
+        seq: snap.seq as domain.PerCanvasSequence,
+        cells: snap.cells.map((c) => ({ x: c.x, y: c.y, color: c.color as domain.ColorIndex })),
+      };
+      void reply.header('Cache-Control', CACHE); // immutable archive
       return reply.send(response);
     });
   };
