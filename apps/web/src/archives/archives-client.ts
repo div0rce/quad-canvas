@@ -23,6 +23,15 @@ export async function fetchArchiveSnapshot(term: string): Promise<dto.CanvasSnap
   }
 }
 
+export async function fetchArchiveAt(term: string, seq: number): Promise<dto.CanvasSnapshotResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/at/${seq}`);
+    return res.ok ? ((await res.json()) as dto.CanvasSnapshotResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchReplayMeta(term: string): Promise<dto.ReplayMetaResponse | null> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/replay`);
