@@ -12,6 +12,28 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
+    # Real Postgres + Redis so the integration suite (placement, archive/replay, moderation, auth,
+    # tenant isolation) gates every PR — not just unit tests. GitHub waits for service health first.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quad
+          POSTGRES_PASSWORD: quad
+          POSTGRES_DB: quad
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quad -d quad" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://quad:quad@localhost:5432/quad
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -47,6 +69,14 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Apply the additive migration history to the CI Postgres, then run the integration suite
+      # against real Postgres + Redis (the schema must exist before the tests TRUNCATE + seed).
+      - name: Apply migrations
+        run: pnpm --filter @quad/db run db:migrate:deploy
+
+      - name: Integration tests
+        run: pnpm test:integration
 
       # Load gate: drive the built API over real HTTP at fixed concurrency and fail on a throughput,
       # tail-latency, or error-rate regression. Thresholds carry large headroom over observed numbers
