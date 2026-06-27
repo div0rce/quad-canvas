@@ -12,7 +12,7 @@
 | `P-AC-1` | Only a verified member can place; non-members cannot | ✅ | Verification front-door + principal-gated placement; **anon → 401** (integration) | — |
 | `P-AC-2` | A placement updates all viewers in real time | ✅ | WS fan-out of `PixelPlaced`; "fan-out" WS integration test | — |
 | `P-AC-3` | Cooldown identical for all tenant users **and always within 5–20 min** | ✅ | Global per-canvas cooldown; the production composition **clamps** the configured fixed value into 5–20 (`clampCooldownMs`, unit-tested), and the dynamic path is bounded by construction | — |
-| `P-AC-4` | Cooldown moves with load **and changes gradually (no oscillation)** | ◑ | Load-responsive + clamped (`dynamicCooldownMs`, monotonic; integration) | The 60-s fixed window resets abruptly (can step/oscillate) — add smoothing (sliding window / EWMA) |
+| `P-AC-4` | Cooldown moves with load and changes gradually (no oscillation) | ✅ | Load-responsive + clamped (`dynamicCooldownMs`); the rate counter is a **2-bucket sliding window** that decays the load gradually across window boundaries (no abrupt reset → no oscillation), unit-tested | — |
 | `P-AC-5` | Quick-look handle+time, full history on click; email never shown | ✅ | **Hover quick-look** (the cell's current handle · time, debounced, DC2; touch users get the same via tap→inspector) + full ordered history on click (inspector, sanitized); email never shown (`quickLookLabel` unit-tested) | — |
 | `P-AC-6` | Profile shows term + lifetime stats and a heatmap | ✅ | Profile returns lifetime + current-term counts + a **per-day contribution histogram**; the page shows the stats + a **contribution heatmap** (`heatLevel` buckets, unit-tested) (integration) | — |
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
@@ -25,12 +25,11 @@
 
 ## Summary
 
-**11 of 13 fully met and verified** (`P-AC-1, 2, 3, 5, 6, 7, 8, 9, 10, 12, 13`). **2 partial** — core
-implemented + verified, with one named sub-capability outstanding each (cooldown smoothing, mobile
-pinch-zoom/drag-pan).
+**12 of 13 fully met and verified** (all except `P-AC-11`). **1 partial** — `P-AC-11`: tap placement +
+desktop work; the **pinch-zoom + drag-pan** mobile gestures remain.
 
-**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The two partials above are its exact
-remaining work; each is tracked as its own follow-up milestone.
+**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The single remaining partial (`P-AC-11`
+mobile pinch-zoom/drag-pan) is its exact remaining work.
 
 ---
 
