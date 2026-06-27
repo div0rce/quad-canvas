@@ -12,6 +12,7 @@ import { EMPTY_CELL } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, placementStatusMessage } from './placement';
+import { formatCountdown, remainingMs } from './cooldown';
 import { ReportControl } from './report-control';
 import { PixelInspector } from './pixel-inspector';
 
@@ -50,6 +51,17 @@ export function CanvasView(): React.ReactElement {
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
+  const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms the cooldown ends (display only)
+  const [nowTick, setNowTick] = useState(0); // re-render driver while a countdown is running
+
+  // Tick once a second while a cooldown is pending so the countdown updates (server still enforces).
+  useEffect(() => {
+    if (cooldownUntil <= Date.now()) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil, nowTick]);
+
+  const cooldownRemainingMs = remainingMs(cooldownUntil, Date.now());
 
   useEffect(() => {
     const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
@@ -106,11 +118,17 @@ export function CanvasView(): React.ReactElement {
           buffer.applyDelta({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq });
           paint(canvasRef.current, buffer, dims?.palette ?? 'default');
         }
+        if (result && result.cooldownMs > 0) setCooldownUntil(Date.now() + result.cooldownMs); // display the countdown
         setStatus(placementStatusMessage(201));
         setPendingColor(null);
         setInspectorNonce((n) => n + 1); // keep the cell selected; refresh its history to show the placement
       } else {
-        const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
+        const body = (await res.json().catch(() => null)) as
+          | { error?: { code?: string; message?: string; details?: { retryAfterMs?: number } } }
+          | null;
+        // The server is on cooldown — reflect its retry-after as the countdown.
+        const retryAfterMs = body?.error?.details?.retryAfterMs;
+        if (typeof retryAfterMs === 'number' && retryAfterMs > 0) setCooldownUntil(Date.now() + retryAfterMs);
         setStatus(placementStatusMessage(res.status, body?.error?.code, body?.error?.message));
       }
     } catch {
@@ -182,8 +200,12 @@ export function CanvasView(): React.ReactElement {
               />
             ))}
           </div>
-          <button type="button" onClick={() => void confirm()} disabled={pendingColor === null || submitting}>
-            {submitting ? 'Placing…' : 'Confirm'}
+          <button
+            type="button"
+            onClick={() => void confirm()}
+            disabled={pendingColor === null || submitting || cooldownRemainingMs > 0}
+          >
+            {submitting ? 'Placing…' : cooldownRemainingMs > 0 ? `Wait ${formatCountdown(cooldownRemainingMs)}` : 'Confirm'}
           </button>
           <button type="button" onClick={cancel} disabled={submitting}>
             Cancel
