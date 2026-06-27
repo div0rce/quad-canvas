@@ -1060,6 +1060,29 @@ describe('archives (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('returns the final snapshot of an archived term', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 2, y: 3, color: 4, idempotencyKey: 'as1' });
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'archived' } });
+    const canvas = await prisma.canvas.findUnique({ where: { id: s.canvasId }, select: { termLabel: true } });
+    const term = canvas!.termLabel;
+    const app = await buildApp({ placement: deps(0) });
+    try {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/snapshot`, headers: { host: 'rutgers.localhost' } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { width: number; cells: Array<{ x: number; y: number; color: number }> };
+      expect(body.width).toBeGreaterThan(0);
+      expect(body.cells).toContainEqual({ x: 2, y: 3, color: 4 });
+      expect(res.headers['cache-control']).toContain('public');
+
+      const missing = await app.inject({ method: 'GET', url: '/api/v1/archives/NOPE/snapshot', headers: { host: 'rutgers.localhost' } });
+      expect(missing.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('profiles (HTTP)', () => {
