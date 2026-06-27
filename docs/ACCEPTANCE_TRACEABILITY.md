@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | `P-AC-1` | Only a verified member can place; non-members cannot | ✅ | Verification front-door + principal-gated placement; **anon → 401** (integration) | — |
 | `P-AC-2` | A placement updates all viewers in real time | ✅ | WS fan-out of `PixelPlaced`; "fan-out" WS integration test | — |
-| `P-AC-3` | Cooldown identical for all tenant users **and always within 5–20 min** | ◑ | Global per-canvas cooldown; the **dynamic** path clamps to 5–20 (`cooldown.test`) | The fixed `QUAD_COOLDOWN_MS` path accepts any value (e.g. `0`) — enforce the 5–20 bound, or make the bounded dynamic path the production default |
+| `P-AC-3` | Cooldown identical for all tenant users **and always within 5–20 min** | ✅ | Global per-canvas cooldown; the production composition **clamps** the configured fixed value into 5–20 (`clampCooldownMs`, unit-tested), and the dynamic path is bounded by construction | — |
 | `P-AC-4` | Cooldown moves with load **and changes gradually (no oscillation)** | ◑ | Load-responsive + clamped (`dynamicCooldownMs`, monotonic; integration) | The 60-s fixed window resets abruptly (can step/oscillate) — add smoothing (sliding window / EWMA) |
 | `P-AC-5` | **Quick-look** handle+time, **full history on click**; email never shown | ◑ | Full ordered history on click (inspector, sanitized DC2; integration) | The separate lightweight **quick-look** (handle+time on hover/preview) is not built |
 | `P-AC-6` | Profile shows **term + lifetime** stats **and a heatmap** | ◑ | Profile returns a lifetime `pixelsPlaced` count + DC2 identity (integration) | Term-vs-lifetime split **and** a contribution heatmap |
@@ -25,10 +25,10 @@
 
 ## Summary
 
-**6 of 13 fully met and verified** (`P-AC-1, 2, 7, 9, 12, 13`). **7 partial** — core implemented + verified,
-with one named sub-capability outstanding each (cooldown bound on the fixed path, cooldown smoothing,
-quick-look preview, term/lifetime stats + heatmap, downloadable final image + term stats,
-report-triage reversal, mobile pinch-zoom/drag-pan).
+**7 of 13 fully met and verified** (`P-AC-1, 2, 3, 7, 9, 12, 13`). **6 partial** — core implemented +
+verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look preview,
+term/lifetime stats + heatmap, downloadable final image + term stats, report-triage reversal, mobile
+pinch-zoom/drag-pan).
 
 **`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.

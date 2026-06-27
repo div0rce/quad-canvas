@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { loadScore, dynamicCooldownMs, type CooldownConfig } from './cooldown.js';
+import { loadScore, dynamicCooldownMs, clampCooldownMs, type CooldownConfig } from './cooldown.js';
 
 const config: CooldownConfig = { minMs: 5 * 60_000, maxMs: 20 * 60_000, saturationRatePerMin: 100 };
+
+describe('clampCooldownMs', () => {
+  const min = 5 * 60_000;
+  const max = 20 * 60_000;
+  it('keeps in-range values and clamps out-of-range ones to the 5–20 min bounds', () => {
+    expect(clampCooldownMs(10 * 60_000, min, max)).toBe(10 * 60_000);
+    expect(clampCooldownMs(0, min, max)).toBe(min); // too short → floor
+    expect(clampCooldownMs(60 * 60_000, min, max)).toBe(max); // too long → ceiling
+  });
+});
 
 describe('loadScore', () => {
   it('is 0 when idle and 1 at/above saturation', () => {
