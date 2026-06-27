@@ -12,6 +12,7 @@ import { EMPTY_CELL } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, placementStatusMessage } from './placement';
+import { ReportControl } from './report-control';
 
 // The API must be reached at the TENANT host so it resolves the tenant from the Host header.
 // Default '' = same-origin (relative URLs) preserves the browser's tenant host.
@@ -185,6 +186,7 @@ export function CanvasView(): React.ReactElement {
           <button type="button" onClick={cancel} disabled={submitting}>
             Cancel
           </button>
+          <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
         </div>
       )}
 
