@@ -29,6 +29,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Security gate: fail the build on a high/critical dependency advisory BEFORE running any
+      # workspace scripts, so a vulnerable build/test-time dependency stops the job before it is
+      # executed. Moderate/low are reported but don't block (currently 2 known moderates: a transitive
+      # @hono/node-server in the Prisma CLI dev tree, and postcss via Next's build — both dev/build-time).
+      - name: Security audit
+        run: pnpm audit --audit-level high
+
       - name: Lint
         run: pnpm lint
 
