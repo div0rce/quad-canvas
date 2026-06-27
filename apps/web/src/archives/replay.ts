@@ -11,3 +11,9 @@ export function replayStep(maxSeq: number, frames = 60): number {
 export function nextReplaySeq(current: number, maxSeq: number, step: number): number {
   return Math.min(maxSeq, current + Math.max(1, step));
 }
+
+/** Per-frame delay for a playback speed multiplier, floored so fast speeds stay sane (~60fps max). */
+export function frameInterval(baseMs: number, speed: number): number {
+  const s = speed > 0 ? speed : 1;
+  return Math.max(16, Math.round(baseMs / s));
+}
