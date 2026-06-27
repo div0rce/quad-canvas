@@ -13,6 +13,7 @@ import { LogMailTransport } from './auth/mail.js';
 import { AuthService } from './auth/auth-service.js';
 import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 import type { ReadinessCheck } from './routes/health.js';
+import { createGracefulShutdown } from './shutdown.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -41,8 +42,10 @@ async function main(): Promise<void> {
   let sessionRedis: Redis | undefined;
   let authService: AuthService | undefined;
   const readinessChecks: ReadinessCheck[] = [];
+  const cleanups: Array<() => Promise<void>> = [];
   if (DATABASE_URL) {
     const prisma = createPrismaClient({ connectionString: DATABASE_URL });
+    cleanups.push(() => prisma.$disconnect());
     // Deep readiness: a trivial query proves the DB is reachable (not just that the process is up).
     readinessChecks.push({
       name: 'database',
@@ -54,6 +57,9 @@ async function main(): Promise<void> {
     // Both implement the same RealtimeBus interface, so nothing else changes.
     bus = REDIS_URL ? new RedisRealtimeBus(REDIS_URL) : new InMemoryRealtimeBus();
     await bus.ready();
+    cleanups.push(async () => {
+      await bus?.close();
+    });
     placement = {
       repo: createPlacementRepository(prisma),
       cooldownMs: COOLDOWN_MS,
@@ -66,6 +72,9 @@ async function main(): Promise<void> {
       sessionRedis = new Redis(REDIS_URL);
       sessionStore = new RedisSessionStore(sessionRedis);
       const redis = sessionRedis;
+      cleanups.push(async () => {
+        await redis.quit();
+      });
       readinessChecks.push({
         name: 'redis',
         check: async () => {
@@ -113,14 +122,18 @@ async function main(): Promise<void> {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
   }
 
-  const shutdown = async (): Promise<void> => {
-    await app.close();
-    if (bus) await bus.close();
-    if (sessionRedis) await sessionRedis.quit();
-    process.exit(0);
-  };
-  process.on('SIGTERM', () => void shutdown());
-  process.on('SIGINT', () => void shutdown());
+  // Drain in-flight requests (app.close) before closing the DB/Redis/bus; a watchdog forces exit if
+  // anything hangs. Idempotent across repeated signals.
+  const shutdown = createGracefulShutdown({
+    close: () => app.close(),
+    cleanups,
+    log: { info: (obj, msg) => app.log.info(obj, msg), error: (obj, msg) => app.log.error(obj, msg) },
+    exit: (code) => process.exit(code),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (timer) => clearTimeout(timer as NodeJS.Timeout),
+  });
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 
   try {
     await app.listen({ port: PORT, host: HOST });
