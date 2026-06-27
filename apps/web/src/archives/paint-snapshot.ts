@@ -7,6 +7,12 @@ import { colorHex } from '@/canvas/inspector-client';
 
 const EMPTY_HEX = '#F4F4F4';
 
+/** A safe download filename for a term's final image (sanitizes the term; never empty). */
+export function archiveImageFilename(term: string): string {
+  const safe = term.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'term';
+  return `quad-canvas-${safe}.png`;
+}
+
 export function paintSnapshot(
   canvas: HTMLCanvasElement,
   snapshot: dto.CanvasSnapshotResponse,
