@@ -1,4 +1,4 @@
-# Quad — Testing Strategy
+# Quad: Testing Strategy
 
 > **Engineering-process doc.** Owns the full test strategy + merge-blocking matrix. Conforms to `ENGINEERING_WORKFLOW.md`, `MILESTONES.md`, `SECURITY.md`, `PERFORMANCE.md`, all Phase 2 docs. Does not rewrite contracts; contradictions → unresolved risks. No tests/code/versions; tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -12,9 +12,9 @@ Tests are how Quad earns the right to claim correctness (`PROC-DP-4`). **In scop
 | What must be tested per subsystem/milestone | Contract definitions (their docs) |
 
 ## 3. Principles
-- **`T-DP-1` Tests before claims** — no "works" without commands + results (`PROC-INV-4`).
-- **`T-DP-2` Critical systems never manual-only** — event sourcing/cooldown/auth/WS/rendering/moderation/tenant isolation are automated.
-- **`T-DP-3` Contract tests for shared contracts** — `@quad/core` DTOs/WS/events validated.
+- **`T-DP-1` Tests before claims**: no "works" without commands + results (`PROC-INV-4`).
+- **`T-DP-2` Critical systems never manual-only**: event sourcing/cooldown/auth/WS/rendering/moderation/tenant isolation are automated.
+- **`T-DP-3` Contract tests for shared contracts**: `@quad/core` DTOs/WS/events validated.
 - **`T-DP-4` Integration uses real Postgres/Redis** (Dockerized), not mocks, for stateful correctness.
 - **`T-DP-5` Security/performance gates** where relevant; no fabricated results.
 
@@ -64,9 +64,9 @@ Synthetic fixtures + factories (`@quad/testing`); tenant-scoped; **Rutgers data 
 
 ## 8a. Local Test Harness (`@quad/testing`)
 The `@quad/testing` package provides reusable, dependency-light building blocks (no product behavior):
-- **Fixtures** — `tenantFixtures()` (configured tenants from `@quad/config`) and `makeTenantFixture(overrides?)` (tenant-neutral, DC2-only, **no default tenant**).
-- **Readiness helpers** — `waitForPostgres()` (real connect + `SELECT 1`) and `waitForRedis()` (RESP `PING` → `+PONG`): **protocol-level** checks, not just an open TCP port, so a container that has opened its port before the datastore is ready cannot produce a false-green. `waitForPort()` / `isDockerRunning()` are lower-level primitives.
-- **Local URLs/creds** — `localTestDatabaseUrl()`, `tenantHost()`, `tenantHostHeader()`, `localTestUrl()` — local-only values matching `docker-compose.yml` (never secrets).
+- **Fixtures**: `tenantFixtures()` (configured tenants from `@quad/config`) and `makeTenantFixture(overrides?)` (tenant-neutral, DC2-only, **no default tenant**).
+- **Readiness helpers**: `waitForPostgres()` (real connect + `SELECT 1`) and `waitForRedis()` (RESP `PING` → `+PONG`): **protocol-level** checks, not just an open TCP port, so a container that has opened its port before the datastore is ready cannot produce a false-green. `waitForPort()` / `isDockerRunning()` are lower-level primitives.
+- **Local URLs/creds**: `localTestDatabaseUrl()`, `tenantHost()`, `tenantHostHeader()`, `localTestUrl()`, local-only values matching `docker-compose.yml` (never secrets).
 
 **Tiers & commands** (always run via Turbo so workspace deps `@quad/core`/`@quad/config` build first):
 - **Unit** (no Docker; part of `pnpm check`): `pnpm test`.

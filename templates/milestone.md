@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to a milestone tracker entry. Mirrors docs/MILESTONES.md §5 fields. -->
-# Milestone `<M##>` — `<imperative title>`
+# Milestone `<M##>`: `<imperative title>`
 
-> Reminders: **one milestone = one PR**, small diff, spec-linked · **contract changes update `@quad/core` + docs/specs same-PR** · **no implementation before `START IMPLEMENTATION`** · **stop, don't guess** on contract/auth/security/cooldown/tenant/event-sourcing/moderation/migration/perf-risk. Conforms to `MILESTONES.md`, `ENGINEERING_WORKFLOW.md`.
+> Reminders: **one milestone = one PR**, small diff, spec-linked · **contract changes update `@quad/core` + docs/specs same-PR** · **stop, don't guess** on contract/auth/security/cooldown/tenant/event-sourcing/moderation/migration/perf-risk. Conforms to `MILESTONES.md`, `ENGINEERING_WORKFLOW.md`.
 
 - **MVP?** `<yes | post-MVP>` · **Group:** `<M0–M9 | …>` · **Linked docs/specs:** `<linked-docs>`
 
@@ -15,7 +15,7 @@
 `<deps met before starting; no dependency on a later milestone>`
 
 ## 4. Allowed Files / Packages
-`<apps/web · apps/api · @quad/core · @quad/db · @quad/realtime · @quad/render · @quad/config · @quad/ui — only what's needed>`
+`<apps/web · apps/api · @quad/core · @quad/db · @quad/realtime · @quad/render · @quad/config · @quad/ui, only what's needed>`
 
 ## 5. Forbidden Scope
 `<what NOT to touch; no unrelated rewrites; no cross-lane drift>`

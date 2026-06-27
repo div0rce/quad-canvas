@@ -1,4 +1,4 @@
-# Playbook — Documentation Update
+# Playbook: Documentation Update
 
 > Reusable scaffold. Obeys `process/engineering-rules.md`. Enforces the **same-PR doc/spec update** rule (`PROC-INV-2`). Conforms to `docs/ENGINEERING_WORKFLOW.md` §16.
 
@@ -12,7 +12,7 @@ DOCS / SPECS TO UPDATE (same PR)
 <owning doc(s) (e.g., API.md/WEBSOCKETS.md/EVENT_SOURCING.md/DATABASE.md/...) + matching spec(s) + ADR if architectural>
 
 @quad/core IMPACT
-<which canonical types change; ensure single source — no duplicate/divergent definitions>
+<which canonical types change; ensure single source, no duplicate/divergent definitions>
 
 CONSISTENCY CHECKS
 - Names match across @quad/core ↔ api ↔ web ↔ docs (DTO/WS/event/DB terms).

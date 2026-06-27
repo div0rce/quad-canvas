@@ -1,4 +1,4 @@
-# ADR-0004 — WebSocket Strategy
+# ADR-0004: WebSocket Strategy
 
 - **Status:** Accepted · **Date:** 2026-06 · **Deciders:** Architect, Realtime · **Linked docs:** `docs/WEBSOCKETS.md`, `docs/API.md`, `docs/EVENT_SOURCING.md`
 
@@ -16,9 +16,9 @@ The canvas must feel alive at thousands of concurrent users (`PRIN-ALIVE`) while
 + One validated write lane; horizontal WS scale via pub/sub; correctness despite best-effort delivery. − Requires snapshot-on-reconnect + monotonic guard discipline; fan-out latency is the scaling watch-item.
 
 ## 4. Alternatives Considered
-- **Polling:** rejected — stale, wasteful, not "alive."
-- **Authoritative WS commands:** rejected — splits the write path; weakens validation/fairness.
-- **DB pub/sub only (no Redis):** rejected — couples realtime to the DB; poorer fan-out.
+- **Polling:** rejected, stale, wasteful, not "alive."
+- **Authoritative WS commands:** rejected, splits the write path; weakens validation/fairness.
+- **DB pub/sub only (no Redis):** rejected, couples realtime to the DB; poorer fan-out.
 
 ## 5. Affected Docs / Contracts
 `WEBSOCKETS.md` (`WS-INV-*`), `API.md` (§16 no-polling), `EVENT_SOURCING.md` (ordering), `@quad/core` (WS message types), `PERFORMANCE.md` (fan-out budget B09).

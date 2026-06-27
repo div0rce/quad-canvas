@@ -1,8 +1,8 @@
-# Quad — Product Specification
+# Quad: Product Specification
 
-> **This is the product source of truth.** It defines *what* Quad is and *how it must behave for users* — not how it is built. Architecture, data models, APIs, and algorithms live in their own docs (`ARCHITECTURE.md`, `DATABASE.md`, `API.md`, `COOLDOWN.md`, …) and must conform to this document. When product intent and an architecture doc disagree, **this file wins** until it is explicitly changed.
+> **This is the product source of truth.** It defines *what* Quad is and *how it must behave for users*, not how it is built. Architecture, data models, APIs, and algorithms live in their own docs (`ARCHITECTURE.md`, `DATABASE.md`, `API.md`, `COOLDOWN.md`, …) and must conform to this document. When product intent and an architecture doc disagree, **this file wins** until it is explicitly changed.
 >
-> **Naming:** the platform is **Quad**. **Rutgers Quad** is **tenant #1 / the first deployment** — never a hardcoded assumption in platform behavior. Code lives in the `quad-canvas` repo under `@quad/*` packages. Wherever this doc says "the university" or "the tenant," it means *any* current or future tenant.
+> **Naming:** the platform is **Quad**. **Rutgers Quad** is **tenant #1 / the first deployment**, never a hardcoded assumption in platform behavior. Code lives in the `quad-canvas` repo under `@quad/*` packages. Wherever this doc says "the university" or "the tenant," it means *any* current or future tenant.
 >
 > **Versions:** see [`docs/TECH_BASELINE.md`](TECH_BASELINE.md). Not repeated here.
 >
@@ -14,7 +14,7 @@
 
 Quad is a **production-quality, real-time collaborative pixel canvas for verified university communities.** Inspired by Reddit's r/place but built for a single campus at a time, Quad turns an academic term into a **shared, semester-long social experiment**: thousands of students at one university place individual pixels on one live canvas, cooperating and competing to create a single evolving work of art that captures the culture of that campus in that moment in time.
 
-At the end of each term the canvas is **frozen forever**, archived, and turned into a replay and a downloadable final image — a permanent historical artifact a university can revisit for years.
+At the end of each term the canvas is **frozen forever**, archived, and turned into a replay and a downloadable final image, a permanent historical artifact a university can revisit for years.
 
 The experience must feel **alive, fair, and instantaneous**:
 
@@ -47,12 +47,12 @@ The experience must feel **alive, fair, and instantaneous**:
 
 A **tenant** is one university's complete, self-contained Quad presence. From the product's point of view, every tenant has:
 
-- **`P-TENANT-1` Identity & branding** — name, public-facing title (e.g., "Rutgers Quad"), theme/colors, logo.
-- **`P-TENANT-2` Membership rule** — how a person proves they belong (MVP: verified university email domain(s); later: official campus SSO). Defined per tenant; see `AUTHENTICATION.md` for mechanism.
-- **`P-TENANT-3` Its own canvases** — one official canvas per term, plus archives of past terms.
-- **`P-TENANT-4` Its own people** — its students, its moderators, its admins. **No cross-tenant participation:** a verified member of University A cannot place pixels on University B's canvas.
-- **`P-TENANT-5` Its own configuration** — color palette, canvas dimensions, term schedule, cooldown bounds (within platform-allowed limits), and moderation roster.
-- **`P-TENANT-6` Its own archives & analytics** — fully isolated; one tenant never sees another's private data.
+- **`P-TENANT-1` Identity & branding**: name, public-facing title (e.g., "Rutgers Quad"), theme/colors, logo.
+- **`P-TENANT-2` Membership rule**: how a person proves they belong (MVP: verified university email domain(s); later: official campus SSO). Defined per tenant; see `AUTHENTICATION.md` for mechanism.
+- **`P-TENANT-3` Its own canvases**: one official canvas per term, plus archives of past terms.
+- **`P-TENANT-4` Its own people**: its students, its moderators, its admins. **No cross-tenant participation:** a verified member of University A cannot place pixels on University B's canvas.
+- **`P-TENANT-5` Its own configuration**: color palette, canvas dimensions, term schedule, cooldown bounds (within platform-allowed limits), and moderation roster.
+- **`P-TENANT-6` Its own archives & analytics**: fully isolated; one tenant never sees another's private data.
 
 **`P-TENANT-7` Isolation is a product guarantee, not just a technical one:** accounts, pixels, leaderboards, profiles, reports, and archives are always scoped to a single tenant. Leaderboards and heatmaps are per-tenant; there is no global cross-university ranking in MVP.
 
@@ -117,11 +117,11 @@ stateDiagram-v2
     end note
 ```
 
-- **`P-LIFE-2` Upcoming** — canvas configured (dimensions, palette, schedule) but not yet open; optional read-only preview.
-- **`P-LIFE-3` Active** — the live experience: placement, cooldown, real-time updates, reports, and moderation all operate.
-- **`P-LIFE-4` Frozen** — at the scheduled term end, **placement stops permanently** for that canvas. It becomes read-only. No retroactive edits except audited moderation corrections during a short, clearly-bounded freeze window (see §14).
-- **`P-LIFE-5` Archived** — the platform generates and preserves: the **final image**, **term statistics**, and a **replay**. The archive is permanent and browsable.
-- **`P-LIFE-6` Rollover** — a new term's canvas is created (Upcoming → Active). Past canvases are **never deleted or overwritten** (`P-LIFE-7`).
+- **`P-LIFE-2` Upcoming**: canvas configured (dimensions, palette, schedule) but not yet open; optional read-only preview.
+- **`P-LIFE-3` Active**: the live experience: placement, cooldown, real-time updates, reports, and moderation all operate.
+- **`P-LIFE-4` Frozen**: at the scheduled term end, **placement stops permanently** for that canvas. It becomes read-only. No retroactive edits except audited moderation corrections during a short, clearly-bounded freeze window (see §14).
+- **`P-LIFE-5` Archived**: the platform generates and preserves: the **final image**, **term statistics**, and a **replay**. The archive is permanent and browsable.
+- **`P-LIFE-6` Rollover**: a new term's canvas is created (Upcoming → Active). Past canvases are **never deleted or overwritten** (`P-LIFE-7`).
 
 ---
 
@@ -138,7 +138,7 @@ stateDiagram-v2
 
 ---
 
-## 8. Dynamic Cooldown — Product Behavior
+## 8. Dynamic Cooldown: Product Behavior
 
 The cooldown is the fairness throttle that gates how often a student may place a pixel. **This section defines behavior only; the algorithm, smoothing, and inputs are specified in [`COOLDOWN.md`](COOLDOWN.md).**
 
@@ -169,7 +169,7 @@ Each participant has a profile, scoped per tenant.
 
 - **`P-PROF-1` Term + lifetime stats:** pixels placed, pixels currently surviving, favorite color, longest-surviving pixel, current streak, semester participation, lifetime participation.
 - **`P-PROF-2` Contribution heatmap:** a personal heatmap of where/when the user contributed.
-- **`P-PROF-3` Identity:** shows the user's public handle/display name — never their email.
+- **`P-PROF-3` Identity:** shows the user's public handle/display name, never their email.
 - **`P-PROF-4` Privacy controls:** a user controls what is publicly visible on their profile within tenant policy (e.g., display name vs handle). Defaults favor minimal exposure.
 - **`P-PROF-5` Badges (post-MVP):** a future achievements/badges system; the model should not preclude it.
 
@@ -191,7 +191,7 @@ Each participant has a profile, scoped per tenant.
 - **`P-ARCH-2` Browsable history:** members can browse all past terms for their tenant ("years of campus history").
 - **`P-ARCH-3` Final artifacts per term:** a downloadable **final image**, **term statistics**, and a **replay**.
 - **`P-ARCH-4` Tenant-scoped:** archives belong to their tenant and respect tenant isolation.
-- **`P-ARCH-5` Stable references:** an archived term has a stable, shareable identity (e.g., "Rutgers Quad — Fall 2026").
+- **`P-ARCH-5` Stable references:** an archived term has a stable, shareable identity (e.g., "Rutgers Quad, Fall 2026").
 
 ---
 
@@ -201,11 +201,11 @@ Each participant has a profile, scoped per tenant.
 - **`P-REPLAY-2` Controls:** play, pause, a timeline scrubber, variable speed, and jump-to-timestamp.
 - **`P-REPLAY-3` Accuracy:** the replay faithfully reflects the real sequence of placements (it is derived from the permanent history).
 - **`P-REPLAY-4` Per-pixel replay:** replay a single cell's history (shared with §9).
-- **`P-REPLAY-5` Shareable moments:** a user can link to a specific point in a replay. (Export/video is post-MVP — see §18.)
+- **`P-REPLAY-5` Shareable moments:** a user can link to a specific point in a replay. (Export/video is post-MVP, see §18.)
 
 ---
 
-## 14. Moderation — Product Requirements
+## 14. Moderation: Product Requirements
 
 Moderation keeps the canvas safe **without erasing history**. All moderation is tenant-scoped and performed by authorized moderators/admins.
 
@@ -216,11 +216,11 @@ Moderation keeps the canvas safe **without erasing history**. All moderation is 
 - **`P-MOD-5` Nothing is hard-deleted.** "Removal"/"rollback" changes the visible canvas state but **never destroys history**; actions are themselves reversible and traceable.
 - **`P-MOD-6` Proportionate & bounded power:** moderators act only within their tenant; the most destructive actions (e.g., wide rollbacks) are reserved for higher roles and are clearly logged.
 - **`P-MOD-7` Freeze-window corrections:** between term Freeze and Archive, only audited moderation corrections are permitted; after Archive, the record is immutable.
-- **`P-MOD-8` Transparency (product stance):** affected users can be informed of actions taken against them (mechanism TBD — see §21).
+- **`P-MOD-8` Transparency (product stance):** affected users can be informed of actions taken against them (mechanism TBD, see §21).
 
 ---
 
-## 15. Anti-Abuse — Product Requirements
+## 15. Anti-Abuse: Product Requirements
 
 - **`P-ABUSE-1` One real student, one account.** Participation requires verified university membership; the product is designed so a person cannot trivially run many accounts.
 - **`P-ABUSE-2` Cooldown as the primary throttle** (per §8), reinforced by rate limiting on actions.
@@ -260,7 +260,7 @@ The smallest release that delivers the core promise for **one tenant (Rutgers Qu
 - `P-FEAT-1` live canvas with smooth zoom/pan, real-time updates, coordinate readout, mobile + desktop.
 - `P-FEAT-2` pixel placement with palette selection.
 - `P-FEAT-3` dynamic **global** cooldown (5–20 min) with visible countdown.
-- Authentication via **verified university email** (Rutgers domains) — Auth.js email verification (no passwords).
+- Authentication via **verified university email** (Rutgers domains), Auth.js email verification (no passwords).
 - `P-FEAT-4` attribution: hover quick-look + click-through pixel history + per-pixel replay.
 - `P-FEAT-5` basic profiles (term + lifetime core stats, contribution heatmap).
 - `P-FEAT-6` leaderboards (core categories).
@@ -347,11 +347,11 @@ Genuine product decisions to resolve before or during the relevant milestone (no
 ## Document control
 
 - **Path:** `docs/PRODUCT.md`
-- **Purpose:** The authoritative product specification for Quad — what it is and how it must behave for users; the source every spec, milestone, and acceptance test traces back to.
+- **Purpose:** The authoritative product specification for Quad, what it is and how it must behave for users; the source every spec, milestone, and acceptance test traces back to.
 - **Dependencies:** `README.md` (overview), `docs/TECH_BASELINE.md` (versions, referenced not repeated). **Consumed by:** `PRINCIPLES`, `NON_GOALS`, `ROADMAP`, `LAUNCH_PLAN`, and all architecture docs (which must conform to it, not redefine it).
 - **Acceptance checklist:** ☑ all 21 required sections present ☑ product truth only (no schemas/APIs/algorithms) ☑ tenant-neutral (Quad platform; Rutgers Quad = tenant #1) ☑ no Rutgers hardcoding in platform behavior ☑ versions referenced, not repeated ☑ stable requirement IDs for traceability ☑ testable acceptance criteria ☑ no app code / package files created.
 - **Open questions:** see §21 (`P-Q-1`…`P-Q-11`).
-- **Next recommended:** product-support batch — `docs/PRINCIPLES.md`, `docs/NON_GOALS.md`, `docs/ROADMAP.md`, `docs/LAUNCH_PLAN.md`.
+- **Next recommended:** product-support batch, `docs/PRINCIPLES.md`, `docs/NON_GOALS.md`, `docs/ROADMAP.md`, `docs/LAUNCH_PLAN.md`.
 
 ---
 

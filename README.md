@@ -2,212 +2,162 @@
 
 # Quad
 
-### A collaborative pixel-canvas platform for universities
+### A whole campus, one pixel canvas, one semester.
 
 *One student. One pixel. One cooldown. One semester-long work of art.*
-
-**Status:** 🏗️ Foundation in place — the specification corpus is complete and the workspace foundation (`@quad/*` packages, `apps/web` / `apps/api` shells, `@quad/testing` harness) is built and merged. Product features build next, milestone-by-milestone; see [Project Status](#project-status).
 
 </div>
 
 ---
 
-## What is Quad?
+## The idea
 
-**Quad** is a production-quality, real-time collaborative pixel canvas inspired by Reddit's r/place, built **exclusively for verified university students**. Each semester, thousands of students at a university work together — and against each other — to create one massive shared piece of digital artwork on a single live canvas. At the end of the semester the canvas is **frozen, archived forever, and turned into a replay** — a permanent historical snapshot of campus culture.
+Give every verified student at a university a single shared canvas and one simple power: place a pixel, wait out a cooldown, place another. That's the whole game. There's no way to buy more, no premium tier, no bots, no machine-generated art, no shortcuts.
 
-Quad is **not** a Reddit clone and **not** a one-off school project. It is a **multi-tenant platform**: the application never hardcodes any single school. **Rutgers University is tenant #1**, and onboarding the next university (Princeton, Michigan, Penn State, Georgia Tech, …) is a matter of **configuration, not a rewrite**.
+So whatever ends up on the canvas, a dorm's logo, a club crest, an inside joke, a turf war between two majors, was put there one pixel at a time by real people who showed up and cooperated (or didn't). The art is the receipt of a thousand small decisions.
 
-> The repository directory is named `quad-canvas`; the **platform and all code are tenant-neutral and branded `Quad`** (`@quad/*` packages). Rutgers lives entirely in tenant configuration.
+Then the semester ends. The canvas **freezes**, gets **archived forever**, and becomes a **replay** you can scrub from the first blank pixel to the final piece. It is a time capsule of a campus, made by the campus.
 
-### Why "every student has equal influence"
+## One rule: everyone is equal
 
-The product is built around a single non-negotiable value — **fairness**:
+Quad has exactly one non-negotiable value, **fairness**, and every feature bends to it:
 
-- **One account per real, verified student.** No anonymous participation.
-- **One pixel at a time**, gated by a cooldown that is **identical for everyone**.
-- **No pay-to-win, no premium, no purchased pixels, no NFTs, no machine-generated art.**
-- **Every action is preserved forever** — the canvas is rebuilt from an immutable event log.
+- **One account per real, verified student.** No anonymous pixels.
+- **One pixel at a time**, behind a cooldown that is **identical for everyone**. It is never personalized, never shortened, never for sale.
+- **No pay-to-win.** No premium, no purchased pixels, no NFTs, no generated art.
+- **Nothing is ever lost.** The canvas is rebuilt from an immutable log of every placement, so the full story survives, forever.
 
----
+If you can place a pixel, you have exactly as much influence as anyone else on campus. That is the point.
 
-## Core Features
+## What you can do
 
-| Area | What it does |
+| | |
 | --- | --- |
-| **Live canvas** | Pixel-perfect HTML5 Canvas with smooth zoom/pan, deep-zoom, coordinate readout, and real-time updates over WebSockets — no polling. |
-| **Dynamic global cooldown** | A single global cooldown that auto-adjusts between **5 and 20 minutes** based on live server load, smoothed to avoid oscillation. Identical for every user — never personalized. |
-| **Event-sourced history** | Every placement is an immutable `PixelPlaced` event. The current canvas is a *projection*; nothing is ever overwritten or lost. |
-| **Pixel stories** | Hover a pixel for owner/coords/time; click it for full placement history and a per-pixel replay. |
-| **Semester archives** | Each semester has exactly one official canvas. At semester end it is frozen, archived permanently, and a final image + statistics are generated. |
-| **Replay engine** | Scrub, play/pause, variable-speed replay of an entire semester from blank canvas to final artwork. |
-| **Profiles & leaderboards** | Pixels placed/surviving, streaks, favorite color, contribution heatmaps; leaderboards across day/semester/all-time. |
-| **Heatmaps & analytics** | Most-contested areas, activity-by-hour, color usage, contribution density. |
-| **Moderation & auditability** | Ban/suspend, rollback a pixel or a time range, remove offensive artwork — all **attributable and audit-logged**. Nothing is hard-deleted. |
-| **Multi-university tenancy** | Each tenant has its own name, domain(s), theme, auth provider, canvas, moderators, and archives. |
+| **Paint live** | A pixel-perfect canvas with smooth zoom and pan, coordinate readout, and real-time updates over WebSockets. No refresh, no polling. |
+| **Feel the cooldown** | A single global cooldown that auto-adjusts between **5 and 20 minutes** with live load, smoothed so it drifts instead of snapping. The same for everyone, always. |
+| **Read any pixel's story** | Hover for who placed it and when; click for the full, ordered history of that cell. |
+| **Relive the semester** | Every canvas is archived at term's end with a final image, statistics, and a scrub/play/variable-speed **replay** from blank to finished. |
+| **Climb the boards** | Profiles with term and lifetime stats and a contribution heatmap; leaderboards that rank real, attributable activity. |
+| **Trust the moderation** | Bans, suspensions, and pixel or region rollbacks are all reversible and audit-logged. Nothing is ever hard-deleted. |
+
+## Built for every campus, not just one
+
+Quad is a **platform**, not a single school's project. The app never hardcodes a university: a tenant's name, domains, theme, palette, canvas, and moderators all live in configuration.
+
+**Rutgers University is tenant #1.** Onboarding the next campus (Princeton, Michigan, Penn State, pick one) is a config change, not a rewrite. The code stays tenant-neutral and branded **Quad**; Rutgers lives entirely in tenant config.
 
 ---
 
-## Architecture at a Glance
+# Under the hood
 
-Quad is a **monorepo** managed with **pnpm workspaces** and **Turborepo**, with **Docker-first** local development and a **spec-first** implementation workflow.
+A production-quality, real-time, multi-tenant system. A **monorepo** on **pnpm workspaces** + **Turborepo**, Docker-first locally, with shared contracts that keep the client and server honest.
+
+## Architecture
 
 ```mermaid
 flowchart LR
   subgraph Client
-    W["apps/web — Next.js / React<br/>HTML5 Canvas renderer"]
+    W["apps/web: Next.js / React<br/>HTML5 Canvas renderer"]
   end
   subgraph Server
-    A["apps/api — Fastify<br/>REST + WebSockets"]
-    PROJ["Projector<br/>event log → current canvas"]
+    A["apps/api: Fastify<br/>REST + WebSockets"]
+    PROJ["Projector<br/>event log to current canvas"]
   end
   subgraph Data
     PG[("PostgreSQL<br/>events + projections")]
     RDS[("Redis<br/>cooldown + pub/sub + presence")]
   end
   W -- "REST: auth, history, profiles" --> A
-  W <-- "WebSocket: PixelPlaced, CooldownUpdated…" --> A
+  W <-- "WebSocket: PixelPlaced, lifecycle" --> A
   A -- "append immutable events" --> PG
-  A -- "read/write global + per-user cooldown" --> RDS
+  A -- "read/write cooldown window" --> RDS
   A -- "fan-out via pub/sub" --> RDS
   PROJ -- "rebuild projection" --> PG
-  A -. "shared contracts" .-> CORE["@quad/core<br/>DTOs · WS schemas · domain events · cooldown types · tenant config"]
+  A -. "shared contracts" .-> CORE["@quad/core<br/>DTOs · WS schemas · domain events · cooldown + tenant types"]
   W -. "shared contracts" .-> CORE
 ```
 
-**Canonical shared contracts live in `@quad/core`** and are consumed by both the web and API apps — DTOs, WebSocket payload schemas, domain event schemas, cooldown calculation types, and tenant config types. This eliminates duplicated/untyped payloads and keeps the client and server in lockstep.
+**Every shared contract lives in `@quad/core`** (DTOs, WebSocket payloads, domain events, cooldown types, tenant config) and is consumed by both apps, so there are no duplicated or untyped payloads and the client and server stay in lockstep. Placement is **event-sourced**: each pixel is an immutable `PixelPlaced` event, the live canvas is a projection of that log, and even a moderator rollback is a new compensating event rather than a delete.
 
-### Stack
+## Stack
 
-The intended technology stack is below. **Exact major versions and ecosystem assumptions are pinned in one place — [`docs/TECH_BASELINE.md`](docs/TECH_BASELINE.md) — and nowhere else.** Do not scatter version assumptions across docs or code.
+Exact major versions are pinned in one place, [`docs/TECH_BASELINE.md`](docs/TECH_BASELINE.md), and nowhere else.
 
 | Layer | Technology |
 | --- | --- |
 | Frontend | Next.js · React · TypeScript · HTML5 Canvas |
 | Backend | Fastify · REST + WebSockets |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Cache / realtime fan-out | Redis (cooldown, pub/sub, presence) |
-| Authentication | Auth.js (email-verification MVP → official university CAS/SSO) |
-| Build / monorepo | pnpm workspaces · Turborepo |
-| Testing | Vitest · Playwright (+ load & a11y testing) |
-| Delivery | Docker · Docker Compose · CI/CD · IaC |
+| Database | PostgreSQL · Prisma |
+| Cache / realtime | Redis (cooldown, pub/sub, presence) |
+| Auth | email-verification today, university SSO later |
+| Monorepo | pnpm workspaces · Turborepo |
+| Testing | Vitest · Playwright (+ load gate) |
+| Delivery | Docker · Docker Compose · Caddy edge · CI/CD |
 
----
-
-## Repository Layout
+## Repository layout
 
 ```text
 quad-canvas/
 ├── apps/
-│   ├── web/                 # Next.js client (canvas UI, profiles, replay) — scaffolding until START IMPLEMENTATION
-│   └── api/                 # Fastify server (REST + WS, event store, projector, cron) — scaffolding until START IMPLEMENTATION
+│   ├── web/                 # Next.js client: canvas + pan/zoom, placement, auth, profiles, leaderboards, archives, replay
+│   └── api/                 # Fastify server: REST + WS, event store, projector, auth, moderation, archives, cooldown
 ├── packages/
-│   ├── core/                # @quad/core — canonical domain types, DTOs, WS schemas, domain events, cooldown + tenant config types
-│   ├── db/                  # @quad/db — Prisma schema, client, migrations, repositories
-│   ├── realtime/            # @quad/realtime — WS server/client helpers, pub/sub adapters
-│   ├── render/              # @quad/render — canvas rendering engine (dirty-region, batching, zoom)
-│   ├── config/              # @quad/config — tenant registry, color palette, env loading/validation
-│   ├── ui/                  # @quad/ui — shared React component library + design tokens
-│   └── testing/             # @quad/testing — shared test utilities, fixtures, factories
-├── docs/                    # Product, architecture & engineering docs — the source of truth
-│   └── adr/                 # Architecture Decision Records (0001–0010)
-├── specs/                   # Spec-driven dev: features, api, websockets, database, events, ui, rendering, security, moderation, testing
-├── templates/               # Authoring templates (feature/api/ws/migration/event/ui/canvas/moderation/test-plan/adr/milestone/checkpoint/bugfix/refactor/pr-review)
-├── process/                      # engineering process: global rules, per-role guides, playbooks, SPEC_PLAN.md
-├── infra/                   # Dockerfiles, IaC, deployment assets
-├── tests/                   # Cross-cutting e2e / load / integration suites
-├── scripts/                 # Repo automation (lint docs, check links, seed, etc.)
-├── docker-compose.yml       # Postgres + Redis + apps for local dev
+│   ├── core/                # @quad/core: domain types, DTOs, WS schemas, domain events, cooldown + tenant config types
+│   ├── db/                  # @quad/db: Prisma schema, client, migrations, repositories
+│   ├── realtime/            # @quad/realtime: WS registry + pub/sub adapters
+│   ├── render/              # @quad/render: framework-agnostic canvas engine (dirty-region, viewport math)
+│   ├── config/              # @quad/config: tenant registry, palette, env loading/validation
+│   ├── ui/ · testing/       # @quad/ui shared components · @quad/testing fixtures + harness
+│   └── eslint-config/ · tsconfig/   # shared lint + TS base configs
+├── docs/                    # product, architecture, and engineering docs, the source of truth (+ adr/)
+├── specs/ · templates/      # spec-driven authoring: conventions + scaffolds
+├── process/                 # engineering operating model: rules, role guides, playbooks, SPEC_PLAN.md
+├── deploy/                  # Caddyfile (edge proxy)
+├── scripts/                 # load gate, backup/restore drill, migration-safety, canvas e2e
+├── docker-compose.yml · docker-compose.prod.yml   # local datastores · full prod stack
 ├── pnpm-workspace.yaml · turbo.json · package.json
 └── .github/workflows/ci.yml
 ```
 
-> See [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md) for the complete intended tree and the full documentation manifest.
+## Run it locally
 
----
-
-## The Repo Is the Source of Truth
-
-Quad is built **primarily by a small engineering team through iterative, milestone-by-milestone development.** To make that work at a premium standard, **the repository — not a chat log — is the operating system for the build.** Every product requirement, contract, decision, and budget lives in a file:
-
-| Truth | Lives in |
-| --- | --- |
-| Product requirements | [`docs/PRODUCT.md`](docs/PRODUCT.md), [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md), [`docs/NON_GOALS.md`](docs/NON_GOALS.md) |
-| Technical architecture | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) + subsystem docs in `docs/` |
-| API / WebSocket / event / DB contracts | `docs/API.md`, `docs/WEBSOCKETS.md`, `docs/EVENT_SOURCING.md`, `docs/DATABASE.md` (code in `@quad/core` + `@quad/db`) |
-| Architectural decisions | [`docs/adr/`](docs/adr/) |
-| Milestones & checkpoints | [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) |
-| Testing / security / performance / ops | `docs/TESTING.md`, `docs/SECURITY.md`, `docs/PERFORMANCE.md`, `docs/OPERATIONS.md` |
-| Version baseline | [`docs/TECH_BASELINE.md`](docs/TECH_BASELINE.md) |
-| engineering workflow | [`docs/ENGINEERING_WORKFLOW.md`](docs/ENGINEERING_WORKFLOW.md), [`process/`](process/) |
-
-**Rule: if an implementation PR changes a contract, the corresponding doc/spec is updated in the same PR.** No undocumented behavior. No invisible architecture.
-
----
-
-## How This Repository Is Built (Engineering Operating Model)
-
-- **Specs first.** Engineers implement *against* a spec from `specs/` + a milestone from `docs/MILESTONES.md`. They never invent product requirements.
-- **Small PRs.** Each milestone is PR-sized and self-contained; no milestone rewrites unrelated subsystems.
-- **Tests are mandatory.** Every feature ships with tests; critical subsystems (event sourcing, cooldown, auth, realtime, rendering, moderation) are never "manually verified only."
-- **Hard guardrails.** No business logic in React components; no DB writes outside repositories/services; no untyped WebSocket payloads; no schema change without a migration spec; **no Rutgers (or any tenant) hardcoded outside tenant config**; no moderation action without an audit log.
-- **Stop conditions.** When requirements are ambiguous or a change touches a contract, the engineer stops and asks for review instead of guessing.
-
-The full governance model, per-role guide instructions, and playbook formats live in [`process/`](process/) and [`docs/ENGINEERING_WORKFLOW.md`](docs/ENGINEERING_WORKFLOW.md).
-
----
-
-## Getting Started
-
-The foundation is runnable today. (Foundation only — product features build per [`docs/MILESTONES.md`](docs/MILESTONES.md); their developer workflow activates as those milestones land.)
+The whole stack runs from one command:
 
 ```bash
-# 1. Prerequisites: Node 22 + pnpm 10 + Docker (see docs/TECH_BASELINE.md)
-nvm use 22
+# Full stack: Postgres + Redis + migrate + API + web + edge proxy
+cp .env.prod.example .env.prod
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# then open the app through the edge proxy (tenant resolved by Host)
+```
 
-# 2. Install (lockfile-pinned)
+Working on the code:
+
+```bash
+nvm use 22                          # Node 22 + pnpm 10 (see docs/TECH_BASELINE.md)
 pnpm install --frozen-lockfile
+pnpm check                          # lint · typecheck · test · build (Turbo-orchestrated)
 
-# 3. Quality gates (Turbo-orchestrated: lint · typecheck · test · build)
-pnpm typecheck
-pnpm build
-pnpm check
-
-# 4. Unit tests for the shared test harness
-pnpm --filter @quad/testing test
-
-# 5. Docker-backed integration (local Postgres + Redis)
-docker compose up -d --wait postgres redis
-pnpm --filter @quad/testing test:integration
+docker compose up -d --wait postgres redis   # local datastores for integration tests
+pnpm --filter api test:integration
 docker compose down
 ```
 
----
+## Project status
 
-## Project Status
+Built and merged to `main`, end to end: the `@quad/*` packages and both apps, realtime, auth, moderation, archives and replay, and dynamic cooldown. Milestone checkpoints **G1 through G5 have passed** and **all MVP acceptance criteria are met and verified** (unit, integration against real Postgres/Redis, and a browser e2e). CI gates every PR (security audit, migration-safety, lint, typecheck, unit, build, integration, load), and the full stack deploys from `docker-compose.prod.yml` behind a Caddy edge proxy.
 
-The specification corpus is **complete** and the **workspace foundation is built and merged to `main`**. The build follows a deliberate, spec-driven sequence so product features proceed milestone-by-milestone without loss of architectural context:
-
-1. **Specification corpus — complete**: product, architecture, and engineering-process docs; specs, templates, role guides, ADRs; the cross-corpus consistency audit and the first foundation tasks.
-2. **Workspace foundation — built & merged**: pnpm/Turborepo workspace, strict TypeScript, lockfile-based CI (`verify`); `@quad/core` / `@quad/config` / `@quad/db` + leaf packages; `apps/api` (Fastify health shell) and `apps/web` (Next tenant shell); and the `@quad/testing` local integration harness (Docker Postgres/Redis).
-3. **Next — foundation checkpoint (G1)**: verify the foundation end-to-end before product milestones begin (see [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md)).
-4. **Then — product milestones**: canvas, event sourcing, cooldown, auth, WebSockets, moderation, and derived features — each built against the corpus.
-
-**Product feature code is built milestone-by-milestone ([`docs/MILESTONES.md`](docs/MILESTONES.md)); no product behaviour is added ahead of its milestone.** Track progress in [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), and [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md).
-
----
+What's left is launch-stage and external: legal/ToS/university approval and a live cloud target. Live detail lives in [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) and [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md).
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow, PR size limits, required checks, and the doc-update-in-the-same-PR rule. All engineers operate under the guardrails in [`docs/ENGINEERING_WORKFLOW.md`](docs/ENGINEERING_WORKFLOW.md) and [`process/engineering-rules.md`](process/engineering-rules.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow, PR-size limits, required checks, and the rule that a contract change updates its doc in the same PR. The full engineering model lives in [`docs/ENGINEERING_WORKFLOW.md`](docs/ENGINEERING_WORKFLOW.md) and [`process/`](process/).
 
 ## License
 
-To be selected before public launch (see `docs/LAUNCH_PLAN.md`).
+[MIT](LICENSE).
 
 ---
 
 <div align="center">
-<sub>Quad — built like the product actually matters. Rutgers is tenant&nbsp;#1.</sub>
+<sub>Quad. Built like the product actually matters. Rutgers is tenant&nbsp;#1.</sub>
 </div>

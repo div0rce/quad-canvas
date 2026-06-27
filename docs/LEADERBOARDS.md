@@ -1,4 +1,4 @@
-# Quad — Leaderboards
+# Quad: Leaderboards
 
 > **Derived-feature doc.** Leaderboards are **derived ranking projections, never authoritative**; this doc does not redefine event/analytics semantics or contracts. Conforms to [`ANALYTICS.md`](ANALYTICS.md), [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`DATABASE.md`](DATABASE.md), [`PROFILES.md`](PROFILES.md), [`MODERATION.md`](MODERATION.md), [`MULTI_TENANCY.md`](MULTI_TENANCY.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md), [`NON_GOALS.md`](NON_GOALS.md). Contradictions flagged in §11.
 >

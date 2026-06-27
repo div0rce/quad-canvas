@@ -1,11 +1,11 @@
-# Quad — MVP Acceptance Traceability (`LG-1`)
+# Quad: MVP Acceptance Traceability (`LG-1`)
 
 > Maps each MVP product acceptance criterion (`P-AC-1…P-AC-13`, defined in `PRODUCT.md`) to its
 > implementation and the verification that proves it. This is the evidence for launch gate **`LG-1`**.
 >
-> **`LG-1` requires *all* `P-AC-1…13` to pass, so `LG-1` is NOT passed while any row is partial.** Status
-> is reported **honestly**: ✅ met (implemented + verified), ◑ partial (core implemented + verified, with
-> a named sub-capability still outstanding). The partials below are the precise blockers for `LG-1`.
+> **`LG-1` requires *all* `P-AC-1…13` to pass.** Every row below is **✅ met** (implemented + verified),
+> so **`LG-1` is MET**. Status is reported honestly against that bar: ✅ met, or ◑ partial (core verified
+> with a named sub-capability still outstanding) if any remained.
 
 | # | Criterion (abbrev.) | Status | Implementation / verification | If ◑: what remains |
 |---|---|---|---|---|
@@ -28,9 +28,9 @@
 **All 13 acceptance criteria are met and verified** (`P-AC-1…13`). The pure logic is unit-tested, the
 DB-backed behaviour is integration-tested, and the canvas interaction (tap-to-place, pan, zoom) is
 exercised by a **browser e2e** (`scripts/e2e-canvas.mjs`, Playwright/chromium against the full edge
-stack) that passes — which also closes the deferred **M19** browser end-to-end milestone.
+stack) that passes, which also closes the deferred **M19** browser end-to-end milestone.
 
-**`LG-1` (all MVP acceptance criteria pass) is MET** — every `P-AC-1…13` is implemented and verified.
+**`LG-1` (all MVP acceptance criteria pass) is MET**, every `P-AC-1…13` is implemented and verified.
 What remains for full launch readiness lives outside the acceptance set: `LG-9` (legal/ToS/university
 approval) and the live deployment itself.
 

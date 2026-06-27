@@ -1,4 +1,4 @@
-# Quad — Security, Threat Model & Mitigations
+# Quad: Security, Threat Model & Mitigations
 
 > **This document owns Quad's security posture: the threat model across every surface, the data-protection model, the mitigation architecture, the required controls/tests, and the incident-response + launch-gate expectations.** It **synthesizes** the trust boundaries (`B1…B7`) and data classes (`DC1…DC5`) from [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md) and the invariants from every Phase 1–2 doc; it does **not** rewrite their contracts.
 >
@@ -10,7 +10,7 @@
 
 ## 1. Purpose & Scope
 
-Quad holds verified-student identity, an immutable history, and a fairness guarantee — all of which are attack-worthy. This document is the **single place the system is threat-modeled end to end**, so mitigations are explicit, owned, and testable rather than assumed.
+Quad holds verified-student identity, an immutable history, and a fairness guarantee, all of which are attack-worthy. This document is the **single place the system is threat-modeled end to end**, so mitigations are explicit, owned, and testable rather than assumed.
 
 **In scope:** security principles, trust boundaries, data classes, threat model by surface, the consolidated mitigation matrix, required controls, logging/secrets posture, security testing, incident response, launch gates, invariants. **Out of scope:** implementation of controls, the overall test strategy (`TESTING.md`), concrete infra/secrets manager (`DEPLOYMENT.md`), and contract definitions (owned by their docs).
 
@@ -29,14 +29,14 @@ Quad holds verified-student identity, an immutable history, and a fairness guara
 
 ## 3. Security Principles
 
-- **`SEC-DP-1` Server-authoritative state** — clients never decide fairness/validity/identity (`SEC-INV-1`).
-- **`SEC-DP-2` No anonymous writes** — every write authenticated + authorized + tenant-scoped (`PRIN-NO-ANON`).
-- **`SEC-DP-3` Tenant isolation** — enforced on every path; cross-tenant → `404`; no default tenant (`PRIN-ISOLATION`).
-- **`SEC-DP-4` Least privilege** — minimal roles; elevated/operator actions audited.
-- **`SEC-DP-5` No public `DC3`** — only `DC2` is ever public.
-- **`SEC-DP-6` Auditability** — every consequential action is recorded (`DC4`, append-only).
-- **`SEC-DP-7` No hard deletion** — append-only log; integrity verifiable (`PRIN-PERMANENCE`).
-- **`SEC-DP-8` Fairness protection** — cooldown is inviolable; no bypass (`PRIN-FAIRNESS`).
+- **`SEC-DP-1` Server-authoritative state**: clients never decide fairness/validity/identity (`SEC-INV-1`).
+- **`SEC-DP-2` No anonymous writes**: every write authenticated + authorized + tenant-scoped (`PRIN-NO-ANON`).
+- **`SEC-DP-3` Tenant isolation**: enforced on every path; cross-tenant → `404`; no default tenant (`PRIN-ISOLATION`).
+- **`SEC-DP-4` Least privilege**: minimal roles; elevated/operator actions audited.
+- **`SEC-DP-5` No public `DC3`**: only `DC2` is ever public.
+- **`SEC-DP-6` Auditability**: every consequential action is recorded (`DC4`, append-only).
+- **`SEC-DP-7` No hard deletion**: append-only log; integrity verifiable (`PRIN-PERMANENCE`).
+- **`SEC-DP-8` Fairness protection**: cooldown is inviolable; no bypass (`PRIN-FAIRNESS`).
 
 ---
 
@@ -209,36 +209,36 @@ Quad holds verified-student identity, an immutable history, and a fairness guara
 
 ## 15. Required Security Controls
 
-- **Input validation** — every request/message validated against its `@quad/core` schema.
-- **Output filtering** — responses serialize only allowed DTO fields; `DC3` structurally excluded from public surfaces.
-- **CSRF protection** — SameSite + token for state-changing REST (cookie auth).
-- **Origin checks** — WS handshake origin allowlist.
-- **Rate limiting** — per identity + IP, stricter on auth/write.
-- **Idempotency** — `Idempotency-Key` on state-changing commands (`API-INV-6`).
-- **Authorization checks** — server-side, per endpoint/subscription, regardless of UI.
-- **Tenant-context enforcement** — on every data/auth/realtime path.
-- **Audit logging** — every moderation/admin/auth-sensitive action (`DC4`).
-- **Secrets handling** — never in repo; injected at runtime; rotated.
-- **Encryption in transit** — TLS everywhere (HTTPS/WSS).
-- **Encryption at rest** — for `DC3`/sensitive data (managed datastore).
-- **Secure cookies** — httpOnly + Secure + SameSite, host-only per tenant.
+- **Input validation**: every request/message validated against its `@quad/core` schema.
+- **Output filtering**: responses serialize only allowed DTO fields; `DC3` structurally excluded from public surfaces.
+- **CSRF protection**: SameSite + token for state-changing REST (cookie auth).
+- **Origin checks**: WS handshake origin allowlist.
+- **Rate limiting**: per identity + IP, stricter on auth/write.
+- **Idempotency**: `Idempotency-Key` on state-changing commands (`API-INV-6`).
+- **Authorization checks**: server-side, per endpoint/subscription, regardless of UI.
+- **Tenant-context enforcement**: on every data/auth/realtime path.
+- **Audit logging**: every moderation/admin/auth-sensitive action (`DC4`).
+- **Secrets handling**: never in repo; injected at runtime; rotated.
+- **Encryption in transit**: TLS everywhere (HTTPS/WSS).
+- **Encryption at rest**: for `DC3`/sensitive data (managed datastore).
+- **Secure cookies**: httpOnly + Secure + SameSite, host-only per tenant.
 
 ---
 
 ## 16. Logging & Telemetry Rules
 
-- **No `DC3` in normal logs** — reference user/correlation ids, never email (`SEC-INV-5`, `BE-INV-10`).
+- **No `DC3` in normal logs**: reference user/correlation ids, never email (`SEC-INV-5`, `BE-INV-10`).
 - **Request/correlation ids** on every log line for tracing.
 - **Security-relevant events** (auth failures, authz denials, rate-limit/abuse triggers, tenant-mismatch) are logged for detection.
-- **Audit (`DC4`) vs telemetry (`DC5`) separation** — audit is a durable, append-only, authoritative record; telemetry is operational and scrubbed of `DC3`.
+- **Audit (`DC4`) vs telemetry (`DC5`) separation**: audit is a durable, append-only, authoritative record; telemetry is operational and scrubbed of `DC3`.
 
 ---
 
 ## 17. Secrets & Configuration Posture
 
-- **No secrets in the repo** — ever; only a documented `.env.example` (no real values) is added later (Phase 4 scaffolding).
-- **Rotation posture** — secrets/credentials are rotatable; session-signing/secret rotation supported without data loss.
-- **Environment separation** — distinct secrets/config per local/staging/prod; no prod secrets in dev.
+- **No secrets in the repo**: ever; only documented example env files with no real values (`.env.example`, `.env.prod.example`).
+- **Rotation posture**: secrets/credentials are rotatable; session-signing/secret rotation supported without data loss.
+- **Environment separation**: distinct secrets/config per local/staging/prod; no prod secrets in dev.
 - Concrete secrets manager/provider → `DEPLOYMENT.md`.
 
 ---
@@ -257,7 +257,7 @@ Quad holds verified-student identity, an immutable history, and a fairness guara
 - Cooldown abuse (bypass attempts; fail-closed; no double-charge).
 - WS subscription (authz; tenant isolation; flooding/rate limits).
 - Object-storage visibility (no public/unscoped exposure; no `DC3` in artifacts).
-- Dependency/security scanning (SCA + secret scanning in CI — tooling → `DEPLOYMENT.md`).
+- Dependency/security scanning (SCA + secret scanning in CI, tooling → `DEPLOYMENT.md`).
 
 ---
 
@@ -267,7 +267,7 @@ Quad holds verified-student identity, an immutable history, and a fairness guara
 2. **Revoke sessions** (targeted or tenant-wide) as needed.
 3. **Rotate secrets** if credential compromise is suspected.
 4. **Preserve audit/log evidence** (append-only audit + telemetry retained).
-5. **Post-incident review** — root cause, timeline, fixes, and prevention; update this doc + mitigations.
+5. **Post-incident review**, root cause, timeline, fixes, and prevention; update this doc + mitigations.
 
 (Runbooks/on-call → `OPERATIONS.md`; DR → `DISASTER_RECOVERY.md`.)
 
@@ -296,7 +296,7 @@ Before public Rutgers Quad launch (ties to `LAUNCH_PLAN.md` `LG-*`):
 - **`SEC-INV-5`** `DC3` never appears in public responses or normal logs; only `DC2` is public.
 - **`SEC-INV-6`** Every moderation/admin/auth-sensitive action is audited (`DC4`, append-only); audit ≠ telemetry.
 - **`SEC-INV-7`** Nothing is hard-deleted; the event log is append-only and tamper-evident.
-- **`SEC-INV-8`** Fairness is protected — cooldown is server-enforced, bypass-free, and fail-closed.
+- **`SEC-INV-8`** Fairness is protected, cooldown is server-enforced, bypass-free, and fail-closed.
 - **`SEC-INV-9`** Secrets are never in the repo; TLS in transit; sensitive data encrypted at rest.
 - **`SEC-INV-10`** All external input is validated; all output is filtered to allowed fields.
 - **`SEC-INV-11`** Cookie-auth state-changing requests are CSRF-protected; WS handshakes are origin-checked.

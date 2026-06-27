@@ -1,9 +1,9 @@
-# Playbook — Milestone Implementation
+# Playbook: Milestone Implementation
 
 > Reusable scaffold. Fill in and run **only after `START IMPLEMENTATION`**. Obeys `process/engineering-rules.md`. Conforms to `docs/ENGINEERING_WORKFLOW.md`, `docs/MILESTONES.md`.
 
 ```
-You are the <owner-lane> engineer. Implement milestone <M##> — <title>.
+You are the <owner-lane> engineer. Implement milestone <M##>, <title>.
 
 GOAL
 <one-line objective>
@@ -18,7 +18,7 @@ FORBIDDEN FILES / SCOPE
 <what NOT to touch; no unrelated rewrites; stay in lane>
 
 CONTRACTS TOUCHED
-<API/WS/event/DB/@quad/core — if any, update @quad/core + owning doc/spec in THIS PR (ADR if architectural)>
+<API/WS/event/DB/@quad/core, if any, update @quad/core + owning doc/spec in THIS PR (ADR if architectural)>
 
 TESTS REQUIRED
 <unit/integration(real PG+Redis)/contract/e2e/security/perf/a11y; critical-subsystem matrix items>

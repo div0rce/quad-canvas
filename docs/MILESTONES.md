@@ -1,10 +1,10 @@
-# Quad — Milestones (Implementation Plan)
+# Quad: Milestones (Implementation Plan)
 
 > **This document owns the milestone-by-milestone implementation sequence** from empty repo to public MVP launch: ordering, acceptance shape, checkpoint gates, and the MVP/post-MVP split. It conforms to [`process/SPEC_PLAN.md`](../process/SPEC_PLAN.md), [`ENGINEERING_WORKFLOW.md`](ENGINEERING_WORKFLOW.md), [`ROADMAP.md`](ROADMAP.md), [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md), and all architecture docs.
 >
 > **Altitude:** sequence + acceptance shape. **No** code, package files, templates, specs, or scaffolding (Phase 4 + `START IMPLEMENTATION` own those). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
 >
-> **Hard gate:** these milestones execute **only after `START IMPLEMENTATION`** (`MILESTONE-INV-6`). **Status:** the signal has been given, the **foundation group (M0–M9) is built and merged to `main`**, and the **G1 foundation checkpoint has PASSED** (`docs/CHECKPOINTS.md` §4a). Product groups begin at **M10** (gate **G2**): the **backend placement loop (M10–M12)** has landed — server-authoritative placement → `PixelPlaced` event → projection, with the read path — verified by Docker-backed integration tests. **G2 is not yet reached** (WS/render/frontend, M14–M19, remain; see `docs/CHECKPOINTS.md` §4b).
+> **Status:** the sequence is **built and merged to `main`**, every milestone group is implemented and the checkpoints **G1–G5 have PASSED**, with all MVP acceptance criteria (`P-AC-1…13`) met and verified (`docs/CHECKPOINTS.md` §4, `docs/ACCEPTANCE_TRACEABILITY.md`). Remaining for full launch (**G6**): `LG-9` (legal/ToS/university approval) and a live cloud deployment, both external/organizational. This document remains the dependency-ordered map; further work follows it one milestone per PR.
 
 ---
 
@@ -21,13 +21,13 @@ Turn the corpus into a build path an engineer can execute **one PR at a time wit
 
 ## 3. Milestone Principles
 - **`M-DP-1` One milestone per PR**, spec-linked, small diff (`PROC-INV-3`).
-- **`M-DP-2` Acceptance-testable** — every milestone has testable acceptance + required tests (`MILESTONE-INV-2`).
-- **`M-DP-3` Dependency-ordered** — no milestone depends on a later one (`MILESTONE-INV-3`).
-- **`M-DP-4` No drift** — `@quad/core` contracts, clean boundaries (`ENGINEERING_WORKFLOW.md` §12).
-- **`M-DP-5` No product behaviour ahead of its milestone** — the foundation is built; product groups follow their checkpoint gates.
+- **`M-DP-2` Acceptance-testable**: every milestone has testable acceptance + required tests (`MILESTONE-INV-2`).
+- **`M-DP-3` Dependency-ordered**: no milestone depends on a later one (`MILESTONE-INV-3`).
+- **`M-DP-4` No drift**: `@quad/core` contracts, clean boundaries (`ENGINEERING_WORKFLOW.md` §12).
+- **`M-DP-5` No product behaviour ahead of its milestone**: the foundation is built; product groups follow their checkpoint gates.
 
 ## 4. Numbering & Naming
-`M<NN> — <imperative title>`, grouped in tens (M0–M9 …). IDs are **stable** (deprecate, don't renumber). A milestone may be split into `M12a/M12b` if it exceeds PR size; the parent objective stays.
+`M<NN>, <imperative title>`, grouped in tens (M0–M9 …). IDs are **stable** (deprecate, don't renumber). A milestone may be split into `M12a/M12b` if it exceeds PR size; the parent objective stays.
 
 ## 5. Milestone Template (fields)
 Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
@@ -45,7 +45,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 
 ## 7. Milestone Sequence
 
-### M0–M9 — Foundation *(all MVP-blocking)*
+### M0–M9: Foundation *(all MVP-blocking)*
 | ID | Objective | Lane | Contracts | Key acceptance |
 | --- | --- | --- | --- | --- |
 | M0 | Root workspace scaffolding (pnpm/Turbo/tsconfig base) | DevOps | — | `pnpm i` + Turbo graph build green |
@@ -60,7 +60,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 | M9 | `apps/web` Next.js skeleton (tenant theme provider, shell; no canvas) | Frontend | — | tenant-branded shell renders from config |
 → **Checkpoint G1: Foundation.**
 
-### M10–M19 — Core placement loop *(all MVP-blocking)*
+### M10–M19: Core placement loop *(all MVP-blocking)*
 | ID | Objective | Lane | Contracts | Key acceptance |
 | --- | --- | --- | --- | --- |
 | M10 | Tenant resolution (host→tenant; **no default tenant**) | Backend | — | unknown host → no context/landing |
@@ -75,7 +75,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 | M19 | Live delta end-to-end verified | Testing | — | multi-client live update under test |
 → **Checkpoint G2: Placement loop.**
 
-### M20–M29 — Identity / tenant / realtime / fairness *(all MVP-blocking)*
+### M20–M29: Identity / tenant / realtime / fairness *(all MVP-blocking)*
 | ID | Objective | Lane | Contracts | Key acceptance |
 | --- | --- | --- | --- | --- |
 | M20 | Auth foundation: `@auth/core` in api; email-verification (request/confirm) + domain allowlist | Auth/Security | API | only eligible domains verify; no passwords |
@@ -90,7 +90,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 | M29 | Anti-abuse: rate limiting + idempotency hardening + bot hooks | Security | — | rate limits + abuse hooks active |
 → **Checkpoint G3: Auth/tenant/fairness.**
 
-### M30–M39 — UX / features / moderation *(M30–M37,M39 MVP; M38 baseline MVP)*
+### M30–M39: UX / features / moderation *(M30–M37,M39 MVP; M38 baseline MVP)*
 | ID | Objective | Lane | MVP? |
 | --- | --- | --- | --- |
 | M30 | Profiles: `user_stats` projection + `/profiles/me` + `/{handle}` (DC2) | Backend/FE | ✅ |
@@ -105,7 +105,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 | M39 | Sanitized public surfaces verified (removed content not re-exposed) | Mod/FE | ✅ |
 → **Checkpoint G4: Moderation.**
 
-### M40–M49 — Replay / archive / analytics *(replay+archive+basic analytics MVP; rich analytics/heatmaps partly post-MVP)*
+### M40–M49: Replay / archive / analytics *(replay+archive+basic analytics MVP; rich analytics/heatmaps partly post-MVP)*
 | ID | Objective | Lane | MVP? |
 | --- | --- | --- | --- |
 | M40 | Projection checkpoints/keyframes | Backend/DB | ✅ |
@@ -120,7 +120,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 | M49 | Replay/archive performance (precomputed assets + CDN) | Backend/DevOps | ✅ |
 → **Checkpoint G5: (folded into pre-launch).**
 
-### M50–M59 — Hardening / deployment / launch *(all MVP-blocking)*
+### M50–M59: Hardening / deployment / launch *(all MVP-blocking)*
 | ID | Objective | Lane |
 | --- | --- | --- |
 | M50 | Security hardening + security tests (CSRF/origin/authz/no-DC3/integrity) | Security |
@@ -139,7 +139,7 @@ Each milestone (authored against `templates/milestone.md` in Phase 4) carries:
 M0–M9 foundation · M10–M19 core placement loop · M20–M29 identity/tenant/realtime/fairness · M30–M39 UX/features/moderation · M40–M49 replay/archive/analytics · M50–M59 hardening/deployment/launch.
 
 ## 9. Detail Sufficiency
-Each row above is intentionally terse; at implementation time each milestone is expanded into a full `templates/milestone.md` instance (Phase 4) with all §5 fields — that expansion is what an engineer implements against (and what prevents guessing, per `PROC-INV-1`). The **owner lane**, **contracts touched**, and **acceptance** here fix the milestone's intent and boundaries.
+Each row above is intentionally terse; at implementation time each milestone is expanded into a full `templates/milestone.md` instance (Phase 4) with all §5 fields, that expansion is what an engineer implements against (and what prevents guessing, per `PROC-INV-1`). The **owner lane**, **contracts touched**, and **acceptance** here fix the milestone's intent and boundaries.
 
 ## 10. MVP-Blocking Milestones
 **Blocking for public Rutgers MVP:** M0–M46, M49, M50–M59 (i.e., the full placement loop, identity/tenant/fairness, moderation, replay+archive+baseline analytics, and hardening/deployment/launch).
@@ -207,7 +207,7 @@ M50–M59 map directly to `LAUNCH_PLAN.md` gates: M50/M51→`LG-6` (security/int
 - **`MILESTONE-INV-8`** All MVP-blocking milestones complete + launch gates pass before public launch.
 
 ## 21. Diagrams
-- **Milestone dependency flow** — §12. **Checkpoint gate flow** — below. **MVP path** — below.
+- **Milestone dependency flow**: §12. **Checkpoint gate flow**, below. **MVP path**, below.
 ### 21.1 Implementation PR lifecycle
 ```mermaid
 flowchart LR
@@ -247,4 +247,4 @@ flowchart LR
 - **Dependencies:** `process/SPEC_PLAN.md`, `ENGINEERING_WORKFLOW.md`, `ROADMAP.md`, `LAUNCH_PLAN.md`, all Phase 2 docs, `SECURITY`, `PERFORMANCE`, `DEPLOYMENT`. **Consumed by:** `CHECKPOINTS.md`, `TESTING.md`, `REVIEW_PROCESS.md`, Phase-4 `templates/milestone.md`, the first-10-tasks build plan (Phase 5).
 - **Acceptance checklist:** ☑ all 23 parts ☑ principles ☑ numbering convention ☑ milestone template fields ☑ phase map ☑ full M0–M59 sequence (objective/lane/contracts/acceptance) ☑ MVP-blocking vs post-MVP split ☑ dependency ordering rules ☑ checkpoint gates G1–G6 ☑ per-group testing/security/perf/doc gates ☑ PR size/split + rollback posture ☑ launch mapping to `LG-*` ☑ `MILESTONE-INV-1…8` ☑ 4 Mermaid diagrams ☑ no code/templates/specs created ☑ versions referenced not declared ☑ tenant-neutral ☑ no implementation before `START IMPLEMENTATION`.
 - **Open questions:** see §22.
-- **Next recommended (batch):** engineering-support batch — `docs/CHECKPOINTS.md`, `docs/TESTING.md`, `docs/OBSERVABILITY.md`, `docs/OPERATIONS.md`, `docs/DISASTER_RECOVERY.md`, `docs/CODE_QUALITY.md`, `docs/REVIEW_PROCESS.md` — then the **Phase 3 checkpoint**.
+- **Next recommended (batch):** engineering-support batch, `docs/CHECKPOINTS.md`, `docs/TESTING.md`, `docs/OBSERVABILITY.md`, `docs/OPERATIONS.md`, `docs/DISASTER_RECOVERY.md`, `docs/CODE_QUALITY.md`, `docs/REVIEW_PROCESS.md`: then the **Phase 3 checkpoint**.

@@ -1,8 +1,8 @@
-# Quad — Backend Architecture (`apps/api`)
+# Quad: Backend Architecture (`apps/api`)
 
 > **This document defines the backend service: the authoritative tier that handles commands, appends events, maintains projections, serves REST + WebSocket transport, and runs background jobs.** It conforms to [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md), and [`FRONTEND.md`](FRONTEND.md); IDs are cited (`P-*`, `PRIN-*`, `ARCH-INV-*`, `CTX-INV-*`, `FE-INV-*`, `B*`, `DC*`).
 >
-> **Altitude:** service architecture only. It says *what `apps/api` is responsible for and how its pieces fit* — **not** the concrete contracts. Detailed REST contracts → [`API.md`](API.md); event semantics/append rules → [`EVENT_SOURCING.md`](EVENT_SOURCING.md); physical schema/Prisma → [`DATABASE.md`](DATABASE.md); WebSocket lifecycle/payloads → [`WEBSOCKETS.md`](WEBSOCKETS.md); auth mechanism → [`AUTHENTICATION.md`](AUTHENTICATION.md); cooldown algorithm → [`COOLDOWN.md`](COOLDOWN.md); moderation internals → [`MODERATION.md`](MODERATION.md).
+> **Altitude:** service architecture only. It says *what `apps/api` is responsible for and how its pieces fit*, **not** the concrete contracts. Detailed REST contracts → [`API.md`](API.md); event semantics/append rules → [`EVENT_SOURCING.md`](EVENT_SOURCING.md); physical schema/Prisma → [`DATABASE.md`](DATABASE.md); WebSocket lifecycle/payloads → [`WEBSOCKETS.md`](WEBSOCKETS.md); auth mechanism → [`AUTHENTICATION.md`](AUTHENTICATION.md); cooldown algorithm → [`COOLDOWN.md`](COOLDOWN.md); moderation internals → [`MODERATION.md`](MODERATION.md).
 >
 > **No** complete schemas/Prisma models, endpoint specs, WS payload specs, or cooldown formulas. **No** versions (see [`TECH_BASELINE.md`](TECH_BASELINE.md)). **No** app code or package files.
 >
@@ -12,7 +12,7 @@
 
 ## 1. Purpose & Scope
 
-`apps/api` is the **authoritative tier** of Quad. Per `ARCHITECTURE.md` §5–§6, it is the only place commands are validated and events are created; the frontend (`FRONTEND.md`) merely renders and orchestrates. Everything that must be *true and fair* — placement validity, cooldown, identity/authorization, tenant isolation, audit — is decided here.
+`apps/api` is the **authoritative tier** of Quad. Per `ARCHITECTURE.md` §5–§6, it is the only place commands are validated and events are created; the frontend (`FRONTEND.md`) merely renders and orchestrates. Everything that must be *true and fair*, placement validity, cooldown, identity/authorization, tenant isolation, audit, is decided here.
 
 **In scope:** the Fastify service shape, the request/command lifecycle, command handling and domain orchestration, the boundaries with `@quad/db`/`@quad/realtime`/`@quad/core`/`@quad/config`, tenant-context propagation, the auth/cooldown/moderation enforcement boundaries (high level), background jobs, and the error/observability/performance/security/testing responsibilities the backend owns.
 
@@ -52,14 +52,14 @@ It is otherwise **stateless** (no authoritative state in process memory), so ins
 
 A **plugin-composed** Fastify app (version baseline in `TECH_BASELINE.md`):
 
-- **Edge plugins** — config bootstrap, **tenant resolver**, **authentication**, authorization helpers, **schema validation**, error handler, rate limiting, security headers, request-id/correlation.
-- **Transport modules** — REST **route modules** (grouped by feature) and a **WebSocket module**, both speaking `@quad/core` types.
-- **Domain service layer** — orchestrators that load state, invoke domain decisions, and persist results.
-- **Command handlers** — the only path that changes state (produce events).
-- **Repository layer** — `@quad/db` (the only DB I/O).
-- **Realtime adapter** — `@quad/realtime` (publish/fan-out, serve WS).
-- **Projector** — maintains/rebuilds read models from events.
-- **Jobs/scheduler** — background work (§15).
+- **Edge plugins**: config bootstrap, **tenant resolver**, **authentication**, authorization helpers, **schema validation**, error handler, rate limiting, security headers, request-id/correlation.
+- **Transport modules**: REST **route modules** (grouped by feature) and a **WebSocket module**, both speaking `@quad/core` types.
+- **Domain service layer**: orchestrators that load state, invoke domain decisions, and persist results.
+- **Command handlers**: the only path that changes state (produce events).
+- **Repository layer**: `@quad/db` (the only DB I/O).
+- **Realtime adapter**: `@quad/realtime` (publish/fan-out, serve WS).
+- **Projector**: maintains/rebuilds read models from events.
+- **Jobs/scheduler**: background work (§15).
 
 Encapsulation is by Fastify plugin boundaries; request/response validation is schema-driven and tied to `@quad/core` (`§10`). No endpoint or payload shapes are fixed here.
 
@@ -105,15 +105,15 @@ flowchart TB
 
 Every state-changing request flows through an ordered pipeline. Each stage has a clear owner; details of any single stage are deferred to that stage's doc.
 
-1. **Tenant resolution** — map the request/connection to a tenant; attach tenant context (`§11`; mechanism → `MULTI_TENANCY.md`).
-2. **Authentication / session lookup** — establish the caller's identity from the session/credential (`B2`/`B6`; mechanism → `AUTHENTICATION.md`).
-3. **Authorization** — check role + tenant scope for the requested action (`B2`/`B3`/`B5`).
-4. **Validation** — validate the payload against the `@quad/core` schema; reject malformed input early.
-5. **Command handling** — run the domain decision: check invariants, **cooldown**, and **idempotency** (`§6`, `§13`, `§17`).
-6. **Event append** — on acceptance, append the immutable domain event via `@quad/db` (`EVENT_SOURCING.md` owns semantics).
-7. **Projection update** — update the read model consistently with the log (`§8`; rebuildable, `BE-INV-4`).
-8. **Realtime publish** — publish the update via `@quad/realtime` (Redis pub/sub) for fan-out to subscribed clients (`§9`).
-9. **Response** — return a typed result (accepted) or a typed error (rejected: cooldown active / invalid / unauthorized).
+1. **Tenant resolution**, map the request/connection to a tenant; attach tenant context (`§11`; mechanism → `MULTI_TENANCY.md`).
+2. **Authentication / session lookup**, establish the caller's identity from the session/credential (`B2`/`B6`; mechanism → `AUTHENTICATION.md`).
+3. **Authorization**, check role + tenant scope for the requested action (`B2`/`B3`/`B5`).
+4. **Validation**, validate the payload against the `@quad/core` schema; reject malformed input early.
+5. **Command handling**, run the domain decision: check invariants, **cooldown**, and **idempotency** (`§6`, `§13`, `§17`).
+6. **Event append**, on acceptance, append the immutable domain event via `@quad/db` (`EVENT_SOURCING.md` owns semantics).
+7. **Projection update**, update the read model consistently with the log (`§8`; rebuildable, `BE-INV-4`).
+8. **Realtime publish**, publish the update via `@quad/realtime` (Redis pub/sub) for fan-out to subscribed clients (`§9`).
+9. **Response**, return a typed result (accepted) or a typed error (rejected: cooldown active / invalid / unauthorized).
 
 ```mermaid
 sequenceDiagram
@@ -128,7 +128,7 @@ sequenceDiagram
   F->>F: 2. authenticate
   F->>S: 3. authorize (role + tenant)
   S->>S: 4. validate (@quad/core schema)
-  S->>R: 5. handle — cooldown + idempotency check
+  S->>R: 5. handle, cooldown + idempotency check
   alt accepted
     S->>DB: 6. append immutable event
     S->>DB: 7. update projection (consistent w/ log)
@@ -147,7 +147,7 @@ Read (query) requests skip stages 5–8: resolve tenant → authenticate (as nee
 ## 6. Command Handling Model
 
 - Quad uses a **command/query split (CQRS-lite):** **commands** change state by producing events; **queries** read projections. They never mix.
-- A **command** is an explicit, named intent (e.g., place a pixel, submit a report, perform a moderation action). The matching **handler** loads only the state it needs, asks the domain (`@quad/core`) to decide, and—on acceptance—emits one or more events.
+- A **command** is an explicit, named intent (e.g., place a pixel, submit a report, perform a moderation action). The matching **handler** loads only the state it needs, asks the domain (`@quad/core`) to decide, and, on acceptance, emits one or more events.
 - **Handlers are the only path to state change** (`BE-INV-2`); there is no out-of-band mutation of the log or projections.
 - Acceptance is **all-or-nothing**: a command either appends its event(s) and updates the projection consistently, or it is rejected with a typed error and changes nothing (`§16`).
 - Commands carry idempotency context so retries are safe (`§17`).
@@ -180,7 +180,7 @@ Read (query) requests skip stages 5–8: resolve tenant → authenticate (as nee
 
 ## 10. Contract Boundary with `@quad/core`
 
-- `apps/api` **imports all shared contracts from `@quad/core`** — DTOs, WS payload types, domain event types, cooldown calculation types, tenant config types — and declares **no parallel definitions** (`ARCH-INV-6`, `BE-INV-9`).
+- `apps/api` **imports all shared contracts from `@quad/core`**: DTOs, WS payload types, domain event types, cooldown calculation types, tenant config types, and declares **no parallel definitions** (`ARCH-INV-6`, `BE-INV-9`).
 - Inbound validation is driven by the core schemas, so what the api accepts and what the client sends are the **same contract** (kills untyped/duplicated payloads). Concrete contract *content* lives in `API.md`/`WEBSOCKETS.md`/`EVENT_SOURCING.md`, but the **authoritative types live in core**.
 
 ---
@@ -198,7 +198,7 @@ Read (query) requests skip stages 5–8: resolve tenant → authenticate (as nee
 
 - **Authentication** establishes the caller's identity from a session/credential issued at the auth boundary (`B2`/`B6`); the api **trusts the IdP for membership, not the client's claims**.
 - **Authorization** checks, per command: is the caller a verified member of *this* tenant (`B2`), and does the action require an elevated role (`B3`) or cross-tenant operator scope (`B5`)?
-- Authorization is enforced **server-side regardless of UI gating** — the frontend's role-gating is UX only (`FE-INV-10`); the api is the real control (`BE-INV-6`).
+- Authorization is enforced **server-side regardless of UI gating**: the frontend's role-gating is UX only (`FE-INV-10`); the api is the real control (`BE-INV-6`).
 - Mechanism (session/token format, CSRF, where the session crosses into the WS handshake) is deferred to `AUTHENTICATION.md` + `ADR-0006`. **No custom passwords** (`NG-ANON`).
 
 ---
@@ -213,8 +213,8 @@ Read (query) requests skip stages 5–8: resolve tenant → authenticate (as nee
 
 ## 14. Moderation / Audit Command Boundary (High Level)
 
-- Moderation actions are **commands** that produce **compensating domain events** (rollback a pixel/region/time-range, remove artwork) **plus a mandatory audit-log entry** (`DC4`) — actor, action, target, reason, time.
-- **No moderation action without an audit entry** (`P-MOD-4`, `BE-INV-8`); **nothing is hard-deleted** — the visible canvas changes, history does not (`PRIN-NO-INVISIBLE-LOSS`, `P-MOD-5`).
+- Moderation actions are **commands** that produce **compensating domain events** (rollback a pixel/region/time-range, remove artwork) **plus a mandatory audit-log entry** (`DC4`), actor, action, target, reason, time.
+- **No moderation action without an audit entry** (`P-MOD-4`, `BE-INV-8`); **nothing is hard-deleted**: the visible canvas changes, history does not (`PRIN-NO-INVISIBLE-LOSS`, `P-MOD-5`).
 - Actions are **role- and tenant-scoped** (`B3`); authority is enforced server-side. Tool inventory, role model, and action semantics are owned by `MODERATION.md` + `ADR-0009`.
 
 ---
@@ -240,10 +240,10 @@ flowchart LR
     J4["Replay generation"]
     J5["Ephemeral Redis cleanup"]
   end
-  LOG[("Event log — Postgres")]
-  PROJ[("Projections — Postgres")]
-  RDS[("Redis — cooldown · presence")]
-  OBJ[("Object storage — image · replay")]
+  LOG[("Event log, Postgres")]
+  PROJ[("Projections, Postgres")]
+  RDS[("Redis, cooldown · presence")]
+  OBJ[("Object storage, image · replay")]
   J1 -->|replay events| LOG
   J1 -->|rebuild| PROJ
   J2 -->|read load signals| RDS
@@ -259,7 +259,7 @@ flowchart LR
 
 ## 16. Error Model (Architecture Level)
 
-- Errors are **domain-typed in `@quad/core`** and mapped to transport at the edge (REST status / WS error message) — the api never leaks framework internals, stack traces, or `DC3` to clients.
+- Errors are **domain-typed in `@quad/core`** and mapped to transport at the edge (REST status / WS error message), the api never leaks framework internals, stack traces, or `DC3` to clients.
 - Categories: **validation** (malformed input), **authn/authz** (unauthenticated / forbidden), **not-found**, **conflict** (e.g., cooldown active, idempotency replay), **rate-limited**, **internal**.
 - A rejected command changes nothing (`§6`): a failure during append/projection must not leave a partially-applied state (`BE-INV-3/4`).
 - The concrete error payload shape lives in `API.md`/`WEBSOCKETS.md`; this doc fixes the **model** (typed, consistent, leak-free).
@@ -268,7 +268,7 @@ flowchart LR
 
 ## 17. Idempotency / Duplicate-Request Posture (High Level)
 
-- **State-changing commands are idempotent against retries and duplicates** (`BE-INV-11`): a double-tapped placement or a retried request must not append two events or charge the cooldown twice — critical for fairness (`PRIN-EQUAL-POWER`).
+- **State-changing commands are idempotent against retries and duplicates** (`BE-INV-11`): a double-tapped placement or a retried request must not append two events or charge the cooldown twice, critical for fairness (`PRIN-EQUAL-POWER`).
 - Mechanism (idempotency keys and/or natural uniqueness constraints) is fixed in shape here but detailed in `EVENT_SOURCING.md`/`DATABASE.md`.
 - **Realtime delivery is at-least-once / best-effort**; clients reconcile via snapshot-on-reconnect (`§9`). Writes aim for effectively-once via idempotency; reads/broadcasts tolerate duplication.
 
@@ -276,10 +276,10 @@ flowchart LR
 
 ## 18. Observability Responsibilities
 
-- **Structured logs** — JSON with request/correlation id and tenant id; **never** contain `DC3` (`CTX-INV-8`, `BE-INV-10`).
-- **Metrics** — placement rate, current cooldown value, WS connection counts/presence, projection lag, error rates, and latencies. These both **feed the cooldown load score** and validate `PERFORMANCE.md` budgets.
-- **Traces** — spans across the request/command lifecycle (`§5`) for latency analysis.
-- **Audit-sensitive logging rules** — the **moderation audit log (`DC4`)** is a first-class, durable, append-only record, **distinct from operational telemetry (`DC5`)**; operational logs must never carry `DC3`, and audit entries are authoritative, not debug output. Detail → `OBSERVABILITY.md`.
+- **Structured logs**: JSON with request/correlation id and tenant id; **never** contain `DC3` (`CTX-INV-8`, `BE-INV-10`).
+- **Metrics**: placement rate, current cooldown value, WS connection counts/presence, projection lag, error rates, and latencies. These both **feed the cooldown load score** and validate `PERFORMANCE.md` budgets.
+- **Traces**: spans across the request/command lifecycle (`§5`) for latency analysis.
+- **Audit-sensitive logging rules**: the **moderation audit log (`DC4`)** is a first-class, durable, append-only record, **distinct from operational telemetry (`DC5`)**; operational logs must never carry `DC3`, and audit entries are authoritative, not debug output. Detail → `OBSERVABILITY.md`.
 
 ---
 
@@ -312,14 +312,14 @@ The api holds the **real, authoritative** controls (the frontend is defense-in-d
 
 Backend test layers (tooling → `TECH_BASELINE.md`; strategy → `TESTING.md`). Critical subsystems are automated, **never manual-only**:
 
-- **Unit** — domain services/handlers + pure `@quad/core` logic.
-- **Integration** — api against **real Postgres + Redis** (Dockerized), exercising the full lifecycle.
-- **API behavior** — request→response and the typed error model (without re-specifying contracts, which `API.md` owns).
-- **WebSocket behavior** — connect/subscribe/broadcast/reconnect convergence.
-- **Event append + projection** — append correctness and **deterministic rebuild** from the log.
-- **Tenant isolation** — cross-tenant access is denied on every path (`P-AC-13`).
-- **Authorization** — role/scope enforcement (incl. that UI-gated actions are still server-enforced).
-- **Moderation audit** — every moderation action writes an audit entry and is reversible (no hard delete).
+- **Unit**: domain services/handlers + pure `@quad/core` logic.
+- **Integration**: api against **real Postgres + Redis** (Dockerized), exercising the full lifecycle.
+- **API behavior**: request→response and the typed error model (without re-specifying contracts, which `API.md` owns).
+- **WebSocket behavior**: connect/subscribe/broadcast/reconnect convergence.
+- **Event append + projection**: append correctness and **deterministic rebuild** from the log.
+- **Tenant isolation**: cross-tenant access is denied on every path (`P-AC-13`).
+- **Authorization**: role/scope enforcement (incl. that UI-gated actions are still server-enforced).
+- **Moderation audit**: every moderation action writes an audit entry and is reversible (no hard delete).
 
 ---
 
@@ -342,9 +342,9 @@ Backend test layers (tooling → `TECH_BASELINE.md`; strategy → `TESTING.md`).
 
 ## 23. Diagrams
 
-- **Service component diagram** — §4 (Fastify plugins/layers and their dependencies).
-- **Request/command lifecycle** — §5 (the 9-stage pipeline as a sequence).
-- **Background job ownership** — §15 (jobs and what they read/produce).
+- **Service component diagram**: §4 (Fastify plugins/layers and their dependencies).
+- **Request/command lifecycle**: §5 (the 9-stage pipeline as a sequence).
+- **Background job ownership**: §15 (jobs and what they read/produce).
 
 (All three are inline above, at the section that owns them.)
 
@@ -369,12 +369,12 @@ Backend test layers (tooling → `TECH_BASELINE.md`; strategy → `TESTING.md`).
 
 ## 24a. Implementation Status (M10–M12)
 
-The pixel-placement command path is implemented in `apps/api` (validate → server-enforced cooldown → atomic append + projection + idempotency via `@quad/db`). Per `BE-INV-6` / `PRIN-NO-ANON`, the placement **domain service takes a verified `Principal` as a typed input** and never trusts client claims. The request→principal step is now implemented (M20): the identity plugin validates the opaque **session cookie** against the server-side session store and the user's **active membership**, setting `request.principal` — anything short of that stays null, so writes reject `401` (no anonymous writes, no header bypass; a ban/suspension drops the membership and cuts access even on a still-valid session). Session **issuance** is implemented (M20b): the domain-allowlisted magic-link front-door (`POST /auth/verify/request` → single-use token via an injected mail transport; `POST /auth/verify/confirm` → tenant-bound, find-or-create user + participant membership → session cookie if active; `POST /auth/signout` → revoke), per `AUTHENTICATION.md` / `ADR-0006`. The read path (`GET …/pixels/{x}/{y}`) returns DC2 attribution only. See `CHECKPOINTS.md` §4b.
+The pixel-placement command path is implemented in `apps/api` (validate → server-enforced cooldown → atomic append + projection + idempotency via `@quad/db`). Per `BE-INV-6` / `PRIN-NO-ANON`, the placement **domain service takes a verified `Principal` as a typed input** and never trusts client claims. The request→principal step is now implemented (M20): the identity plugin validates the opaque **session cookie** against the server-side session store and the user's **active membership**, setting `request.principal`, anything short of that stays null, so writes reject `401` (no anonymous writes, no header bypass; a ban/suspension drops the membership and cuts access even on a still-valid session). Session **issuance** is implemented (M20b): the domain-allowlisted magic-link front-door (`POST /auth/verify/request` → single-use token via an injected mail transport; `POST /auth/verify/confirm` → tenant-bound, find-or-create user + participant membership → session cookie if active; `POST /auth/signout` → revoke), per `AUTHENTICATION.md` / `ADR-0006`. The read path (`GET …/pixels/{x}/{y}`) returns DC2 attribution only. See `CHECKPOINTS.md` §4b.
 
 ## 25. Document Control
 
 - **Path:** `docs/BACKEND.md`
-- **Purpose:** Define the `apps/api` service architecture — the authoritative tier for commands, events, projections, transport, and jobs — within the boundaries set by `ARCHITECTURE.md`.
+- **Purpose:** Define the `apps/api` service architecture, the authoritative tier for commands, events, projections, transport, and jobs, within the boundaries set by `ARCHITECTURE.md`.
 - **Dependencies:** `ARCHITECTURE.md`, `SYSTEM_CONTEXT.md`, `FRONTEND.md`, `PRODUCT.md`, `PRINCIPLES.md`, `TECH_BASELINE.md`. **Consumed by:** `DATABASE.md`, `EVENT_SOURCING.md`, `API.md`, `WEBSOCKETS.md`, `AUTHENTICATION.md`, `COOLDOWN.md`, `MODERATION.md`, `OBSERVABILITY.md`, `TESTING.md`.
 - **Acceptance checklist:** ☑ all 25 parts present ☑ service altitude only (no schemas/Prisma/endpoints/WS payloads/cooldown formulas) ☑ full 9-stage request lifecycle ☑ command/query split + orchestration model ☑ package boundaries (`@quad/db`/`@quad/realtime`/`@quad/core`/`@quad/config`) ☑ cooldown/authz/moderation enforcement boundaries ☑ 5 background jobs ☑ error/idempotency/observability/perf/security responsibilities ☑ 3 Mermaid diagrams ☑ `BE-INV-1…12` ☑ versions referenced not declared ☑ tenant-neutral, no Rutgers hardcoding ☑ no app code/package files.
 - **Open questions:** see §24 (all routed to owning docs/ADRs).

@@ -1,4 +1,4 @@
-# ADR-0002 — Repository Strategy
+# ADR-0002: Repository Strategy
 
 - **Status:** Accepted · **Date:** 2026-06 · **Deciders:** Architect · **Linked docs:** `docs/ARCHITECTURE.md`, `process/SPEC_PLAN.md` §1, `docs/CODE_QUALITY.md`, `docs/TECH_BASELINE.md`
 
@@ -15,9 +15,9 @@ An engineering product spanning client, server, shared contracts, and infra need
 + Atomic cross-package PRs; type-enforced contracts kill duplicate/untyped payloads; fast cached CI; reproducible infra. − Single repo needs boundary discipline (enforced by `CODE_QUALITY.md` fitness checks).
 
 ## 4. Alternatives Considered
-- **Multi-repo:** rejected — scatters contracts, invites drift, blocks atomic changes.
-- **App-only repo (no shared packages):** rejected — forces duplicated DTOs.
-- **Untyped shared code:** rejected — violates strict-typing quality bar.
+- **Multi-repo:** rejected, scatters contracts, invites drift, blocks atomic changes.
+- **App-only repo (no shared packages):** rejected, forces duplicated DTOs.
+- **Untyped shared code:** rejected, violates strict-typing quality bar.
 
 ## 5. Affected Docs / Contracts
 `ARCHITECTURE.md` (§3–§4), `CODE_QUALITY.md` (boundary rules), `TECH_BASELINE.md` (pnpm/Turbo majors), `DEPLOYMENT.md`.

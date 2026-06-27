@@ -1,9 +1,9 @@
 # Frontend Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
 - **Lane:** `apps/web`, `@quad/ui`, UI specs, accessibility, and integration with the `@quad/render` seam.
-- **May touch (after `START IMPLEMENTATION`):** `apps/web/**`, `@quad/ui/**`, `specs/ui/*`; consumes (does not define) `@quad/core` contracts.
+- **May touch:** `apps/web/**`, `@quad/ui/**`, `specs/ui/*`; consumes (does not define) `@quad/core` contracts.
 - **Must not touch without review:** `@quad/core` contracts, `apps/api`, `@quad/db`, `@quad/render` internals (only the mount/feed seam).
 - **Source docs:** `docs/FRONTEND.md`, `docs/RENDERING.md` (seam), `docs/API.md`/`docs/WEBSOCKETS.md` (client expectations), `docs/CODE_QUALITY.md`, `specs/ui/`.
 - **Stop conditions:** needs a new/changed shared contract (→ stop, route to core/owning lane); any auth/cooldown/tenant decision (those are server-side, display only).

@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/rendering/<feature>.md. Reusable rendering feature spec. -->
-# Canvas Rendering Spec — `<rendering-feature>`
+# Canvas Rendering Spec: `<rendering-feature>`
 
-> Reminders: **`@quad/render` does no REST/WS I/O and no business logic** (fed by `apps/web`) · **no `DC3` in the renderer** (colors/coords only) · crisp pixels, no per-pixel React re-render · **no impl before `START IMPLEMENTATION`** · **stop, don't guess** on render-seam contract changes. Conforms to `RENDERING.md`.
+> Reminders: **`@quad/render` does no REST/WS I/O and no business logic** (fed by `apps/web`) · **no `DC3` in the renderer** (colors/coords only) · crisp pixels, no per-pixel React re-render · **stop, don't guess** on render-seam contract changes. Conforms to `RENDERING.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Rendering · **Milestone:** `<M##>` · **Linked docs:** `RENDERING.md`, `FRONTEND.md`
 

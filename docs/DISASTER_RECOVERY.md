@@ -1,4 +1,4 @@
-# Quad — Disaster Recovery
+# Quad: Disaster Recovery
 
 > **Engineering-process doc.** Owns backups, restore drills, RPO/RTO posture, and event-log integrity during recovery. Conforms to `DATABASE.md`, `EVENT_SOURCING.md`, `DEPLOYMENT.md`, `SECURITY.md`, `ARCHIVES.md`, `OPERATIONS.md`. Does not rewrite contracts; contradictions → unresolved risks. No code/configs; no versions; tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -12,11 +12,11 @@ DR ensures Quad's **permanence promise survives disasters** (`PRIN-PERMANENCE`).
 | Data priority + event-log integrity in recovery | Storage design (`DATABASE.md`) / event semantics (`EVENT_SOURCING.md`) |
 
 ## 3. Principles
-- **`DR-DP-1` The event log is the crown jewel** — highest backup priority; its integrity is paramount.
-- **`DR-DP-2` Projections are rebuildable** — derivable from the log, so they need less stringent RPO (but are still backed up for speed).
-- **`DR-DP-3` Restore drills required** — a backup is unproven until a restore succeeds (`LG-8`).
-- **`DR-DP-4` Backups are useless unless tested** — drills are scheduled, not theoretical.
-- **`DR-DP-5` Preserve audit history** — `DC4` audit is restored intact.
+- **`DR-DP-1` The event log is the crown jewel**: highest backup priority; its integrity is paramount.
+- **`DR-DP-2` Projections are rebuildable**: derivable from the log, so they need less stringent RPO (but are still backed up for speed).
+- **`DR-DP-3` Restore drills required**: a backup is unproven until a restore succeeds (`LG-8`).
+- **`DR-DP-4` Backups are useless unless tested**: drills are scheduled, not theoretical.
+- **`DR-DP-5` Preserve audit history**: `DC4` audit is restored intact.
 
 ## 4. Data Priority Order
 1. **Event log** (truth) → 2. **Audit log** (`DC4`) → 3. **Tenants/users/memberships** → 4. **Current projections** → 5. **Archive artifacts** (object storage) → 6. **Derived analytics** (rebuildable, lowest priority).
@@ -25,7 +25,7 @@ DR ensures Quad's **permanence promise survives disasters** (`PRIN-PERMANENCE`).
 - **Postgres:** regular backups + point-in-time recovery; the event-log + audit are the priority targets; tenant-scoped integrity preserved.
 - **Object storage:** durable storage + versioning for archive artifacts.
 - **Configs:** tenant config (`@quad/config`) versioned in repo/IaC.
-- **Secrets:** **metadata/rotation posture only** — secrets live in the secrets manager (`DEPLOYMENT.md`), never in backups in plaintext; DR documents how to re-provision, not the secrets themselves.
+- **Secrets:** **metadata/rotation posture only**: secrets live in the secrets manager (`DEPLOYMENT.md`), never in backups in plaintext; DR documents how to re-provision, not the secrets themselves.
 
 ## 6. Restore Strategy
 1. **Restore Postgres** (event log + audit + relational data) to target RPO.

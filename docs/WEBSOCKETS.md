@@ -1,8 +1,8 @@
-# Quad — WebSocket Protocol & Realtime Contract
+# Quad: WebSocket Protocol & Realtime Contract
 
 > **This document owns the live realtime layer: connection lifecycle, channel scoping, the message envelope, the canonical server↔client message catalogs, ordering/reconnect/fan-out semantics, backpressure, presence, and the realtime error/version model.** It conforms to [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md), [`BACKEND.md`](BACKEND.md), [`DATABASE.md`](DATABASE.md), [`EVENT_SOURCING.md`](EVENT_SOURCING.md), and [`API.md`](API.md); IDs cited (`P-*`, `PRIN-*`, `ARCH-INV-*`, `ES-INV-*`, `API-INV-*`, `DC*`, `B*`).
 >
-> **Altitude:** the realtime contract — **message *types/names*, envelope, lifecycle, and delivery semantics.** Concrete payload **declarations live in `@quad/core`**. **No** WS handler/source files, **no** REST endpoints (`API.md`), **no** event semantics (`EVENT_SOURCING.md`), **no** DB tables (`DATABASE.md`), **no** versions (`TECH_BASELINE.md`), **no** app code.
+> **Altitude:** the realtime contract, **message *types/names*, envelope, lifecycle, and delivery semantics.** Concrete payload **declarations live in `@quad/core`**. **No** WS handler/source files, **no** REST endpoints (`API.md`), **no** event semantics (`EVENT_SOURCING.md`), **no** DB tables (`DATABASE.md`), **no** versions (`TECH_BASELINE.md`), **no** app code.
 >
 > **Naming:** platform = **Quad**; **Rutgers Quad** = tenant #1 (example only). No tenant literal in channels/payloads.
 
@@ -10,7 +10,7 @@
 
 ## 1. Purpose & Scope
 
-WebSockets are how Quad stays **alive** (`PRIN-ALIVE`, `P-CANVAS-7`): after a client loads the canvas snapshot over REST, it receives every change in real time over a WS connection — **no polling**. Per `API.md` §16, **REST accepts commands and serves snapshots/history; WS distributes live updates.**
+WebSockets are how Quad stays **alive** (`PRIN-ALIVE`, `P-CANVAS-7`): after a client loads the canvas snapshot over REST, it receives every change in real time over a WS connection, **no polling**. Per `API.md` §16, **REST accepts commands and serves snapshots/history; WS distributes live updates.**
 
 **In scope:** realtime principles, connection lifecycle, auth/tenant scoping at the WS boundary (high level), the message envelope, server→client and client→server message catalogs, disallowed messages, ordering, reconnect/recovery, Redis pub/sub fan-out, backpressure, heartbeat, presence, cooldown/moderation/lifecycle updates, privacy, error/version models, security/performance/testing, invariants.
 
@@ -32,25 +32,25 @@ WebSockets are how Quad stays **alive** (`PRIN-ALIVE`, `P-CANVAS-7`): after a cl
 
 ## 3. Realtime Design Principles
 
-- **`WS-DP-1` No polling for live canvas** — liveness is push-based (`PRIN-ALIVE`, `API-INV-12`).
-- **`WS-DP-2` Server-authoritative state** — WS conveys facts the server already decided; the client never gains authority via WS (`FE-INV-3`).
-- **`WS-DP-3` Tenant-scoped channels** — every subscription is within one tenant/canvas; no cross-tenant subscription (`B4`, `WS-INV-3`).
-- **`WS-DP-4` Typed by `@quad/core`** — every message has a declared type + `schemaVersion`; no untyped messages (`ARCH-INV-6`).
-- **`WS-DP-5` Reconnect convergence via snapshot** — the snapshot (fetched over REST) is the authoritative base; pub/sub is best-effort and reconciled on (re)connect (`ES`/`ARCHITECTURE` §11).
+- **`WS-DP-1` No polling for live canvas**: liveness is push-based (`PRIN-ALIVE`, `API-INV-12`).
+- **`WS-DP-2` Server-authoritative state**: WS conveys facts the server already decided; the client never gains authority via WS (`FE-INV-3`).
+- **`WS-DP-3` Tenant-scoped channels**: every subscription is within one tenant/canvas; no cross-tenant subscription (`B4`, `WS-INV-3`).
+- **`WS-DP-4` Typed by `@quad/core`**: every message has a declared type + `schemaVersion`; no untyped messages (`ARCH-INV-6`).
+- **`WS-DP-5` Reconnect convergence via snapshot**: the snapshot (fetched over REST) is the authoritative base; pub/sub is best-effort and reconciled on (re)connect (`ES`/`ARCHITECTURE` §11).
 
 ---
 
 ## 4. Connection Lifecycle
 
-1. **Initial snapshot (REST)** — the client first fetches the canvas snapshot via `GET /canvas/current/snapshot` (`API.md`), which includes a **sequence watermark** (the last applied per-canvas sequence).
-2. **WS connect** — the client opens the WebSocket carrying its session credential.
-3. **Auth/session validation at connect** — the server authenticates and resolves the tenant **before** any subscription (`§5`).
-4. **Subscription** — the client sends `SubscribeCanvas {canvasId}`; the server validates scope and acks.
-5. **Heartbeat** — the server periodically pings; the client replies (`§15`).
-6. **Live updates** — the server streams canvas/cooldown/moderation/lifecycle/presence messages, each carrying a per-canvas `seq` where applicable (`§11`).
-7. **Disconnect** — on network loss/close, the client enters reconnect.
-8. **Reconnect** — the client reconnects, **re-fetches the snapshot** (fresh watermark), and **resubscribes**.
-9. **Snapshot refresh after reconnect** — the snapshot is authoritative; the client resumes applying deltas with `seq` beyond the new watermark (`§12`).
+1. **Initial snapshot (REST)**, the client first fetches the canvas snapshot via `GET /canvas/current/snapshot` (`API.md`), which includes a **sequence watermark** (the last applied per-canvas sequence).
+2. **WS connect**, the client opens the WebSocket carrying its session credential.
+3. **Auth/session validation at connect**, the server authenticates and resolves the tenant **before** any subscription (`§5`).
+4. **Subscription**, the client sends `SubscribeCanvas {canvasId}`; the server validates scope and acks.
+5. **Heartbeat**, the server periodically pings; the client replies (`§15`).
+6. **Live updates**, the server streams canvas/cooldown/moderation/lifecycle/presence messages, each carrying a per-canvas `seq` where applicable (`§11`).
+7. **Disconnect**, on network loss/close, the client enters reconnect.
+8. **Reconnect**, the client reconnects, **re-fetches the snapshot** (fresh watermark), and **resubscribes**.
+9. **Snapshot refresh after reconnect**, the snapshot is authoritative; the client resumes applying deltas with `seq` beyond the new watermark (`§12`).
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +76,7 @@ sequenceDiagram
 ## 5. Authentication at the WS Boundary (High Level)
 
 - The WS connection is **authenticated at connect** and bound to a tenant-scoped identity; **no anonymous elevated subscription** (`PRIN-NO-ANON`, `WS-INV-9`). Public read-only subscription (if read-only viewing is enabled, `P-Q-2`) carries no write/elevated capability.
-- **Mechanism is deferred to `AUTHENTICATION.md` + `ADR-0006`.** Note the **browser limitation**: browsers cannot set custom headers on the WS handshake, so the session must travel via an allowed channel (cookie, or subprotocol/first-message token) — the exact approach is `AUTHENTICATION.md`'s decision; this doc only requires that the connection is authenticated before subscription.
+- **Mechanism is deferred to `AUTHENTICATION.md` + `ADR-0006`.** Note the **browser limitation**: browsers cannot set custom headers on the WS handshake, so the session must travel via an allowed channel (cookie, or subprotocol/first-message token), the exact approach is `AUTHENTICATION.md`'s decision; this doc only requires that the connection is authenticated before subscription.
 
 ---
 
@@ -84,8 +84,8 @@ sequenceDiagram
 
 - The **tenant is resolved at connect** (consistent with `API.md` §6; mechanism → `MULTI_TENANCY.md`) and pinned to the connection.
 - **Channels are scoped** as `tenant:{tenantId}:canvas:{canvasId}` for public canvas updates, with a **separate role-gated** `…:mod` channel for moderation/admin updates (`§18`).
-- **No cross-tenant subscription** — a connection may only subscribe within its resolved tenant; a forbidden/cross-tenant subscribe attempt errors (`§20`, `WS-INV-3`).
-- **Operator/admin considerations** — elevated channels require the corresponding role; operators (`B5`) acting cross-tenant do so through controlled, audited paths, never by broadening a participant's subscription.
+- **No cross-tenant subscription**: a connection may only subscribe within its resolved tenant; a forbidden/cross-tenant subscribe attempt errors (`§20`, `WS-INV-3`).
+- **Operator/admin considerations**: elevated channels require the corresponding role; operators (`B5`) acting cross-tenant do so through controlled, audited paths, never by broadening a participant's subscription.
 
 ---
 
@@ -144,9 +144,9 @@ Client→server messages are **validated and rate-limited** (`§20/§22`); an in
 
 ## 10. Messages Explicitly NOT Allowed
 
-- **No client-side `PlacePixel` over WS in MVP** — placement is the REST command `POST /canvas/current/pixels` (`API.md`), so the authoritative path stays one well-validated lane (`WS-INV-1`). (A future change would require an `API.md`/`ADR` update.)
-- **No chat / DM / comment messages** — excluded by `NON_GOALS.md` (`NG-CHAT`/`NG-DM`/`NG-COMMENTS`); the realtime layer carries canvas facts, not conversation.
-- **No untyped admin/moderation commands over WS** — moderation/admin actions are REST commands (audited); WS only *broadcasts* their results.
+- **No client-side `PlacePixel` over WS in MVP**: placement is the REST command `POST /canvas/current/pixels` (`API.md`), so the authoritative path stays one well-validated lane (`WS-INV-1`). (A future change would require an `API.md`/`ADR` update.)
+- **No chat / DM / comment messages**: excluded by `NON_GOALS.md` (`NG-CHAT`/`NG-DM`/`NG-COMMENTS`); the realtime layer carries canvas facts, not conversation.
+- **No untyped admin/moderation commands over WS**: moderation/admin actions are REST commands (audited); WS only *broadcasts* their results.
 
 ---
 
@@ -154,14 +154,14 @@ Client→server messages are **validated and rate-limited** (`§20/§22`); an in
 
 - Canvas-changing messages carry the **per-canvas `seq`** assigned at append (`EVENT_SOURCING.md` §10).
 - **Delivery order is best-effort**, so the client must not assume strict in-order arrival. The client keeps a **monotonic guard**: apply a message only if `seq > lastAppliedSeq`; ignore duplicates and stale messages (`WS-INV-4`).
-- **Gap handling:** if the client detects a gap it cannot reconcile (or receives `ReconnectRequired`/`CanvasSnapshotAvailable`), it **re-fetches the snapshot** to converge (`§12`) — it does not attempt to request individual missed messages over WS.
+- **Gap handling:** if the client detects a gap it cannot reconcile (or receives `ReconnectRequired`/`CanvasSnapshotAvailable`), it **re-fetches the snapshot** to converge (`§12`), it does not attempt to request individual missed messages over WS.
 
 ---
 
 ## 12. Reconnect & Recovery Model
 
-- **Missed messages are tolerated** — pub/sub is fire-and-forget (`§13`); the design never relies on perfect WS delivery for correctness.
-- **Snapshot-on-reconnect is authoritative** — on (re)connect the client fetches a fresh snapshot (REST) with a new watermark and resumes applying `seq`-greater deltas (`WS-INV-5`).
+- **Missed messages are tolerated**: pub/sub is fire-and-forget (`§13`); the design never relies on perfect WS delivery for correctness.
+- **Snapshot-on-reconnect is authoritative**: on (re)connect the client fetches a fresh snapshot (REST) with a new watermark and resumes applying `seq`-greater deltas (`WS-INV-5`).
 - **Client resubscribes** after reconnect.
 - **Server may force reconnect** via `ReconnectRequired` (e.g., on version mismatch, server rollout, or when a slow client has fallen too far behind, `§14`).
 
@@ -183,9 +183,9 @@ sequenceDiagram
 ## 13. Redis Pub/Sub Fan-Out Model
 
 - On a placement/moderation/cooldown/lifecycle change, the handling **api instance publishes** to the tenant/canvas channel in Redis.
-- **All api/WS instances** subscribed to that channel **fan out** to their locally-connected clients — so a change on instance A reaches clients on B and C (`ARCHITECTURE.md` §11, `ARCH-GOAL-3`).
-- **Best-effort delivery** — pub/sub does not guarantee delivery or order across instances; this is acceptable because **convergence is guaranteed by snapshot-on-reconnect** (`§12`).
-- **Persistence stays in Postgres, not Redis** — Redis is **transport only**; losing a pub/sub message loses nothing durable (`WS-INV-10`, `DB-INV-12`).
+- **All api/WS instances** subscribed to that channel **fan out** to their locally-connected clients, so a change on instance A reaches clients on B and C (`ARCHITECTURE.md` §11, `ARCH-GOAL-3`).
+- **Best-effort delivery**: pub/sub does not guarantee delivery or order across instances; this is acceptable because **convergence is guaranteed by snapshot-on-reconnect** (`§12`).
+- **Persistence stays in Postgres, not Redis**: Redis is **transport only**; losing a pub/sub message loses nothing durable (`WS-INV-10`, `DB-INV-12`).
 
 ```mermaid
 flowchart TB
@@ -203,7 +203,7 @@ flowchart TB
 ## 14. Backpressure & Slow-Client Strategy
 
 - Each connection has a **bounded send buffer**; the server **never blocks** on a slow client.
-- When a client falls behind: **coalesce** (drop superseded intermediate deltas — the latest cell state is what matters) and/or send `CanvasSnapshotAvailable`/`ReconnectRequired` to force a **snapshot resync** rather than replaying a huge backlog.
+- When a client falls behind: **coalesce** (drop superseded intermediate deltas, the latest cell state is what matters) and/or send `CanvasSnapshotAvailable`/`ReconnectRequired` to force a **snapshot resync** rather than replaying a huge backlog.
 - A persistently slow/unresponsive client is disconnected with `ReconnectRequired`; it recovers via the snapshot path (`§12`). This keeps one slow client from degrading others (`P-CANVAS-7`).
 
 ---
@@ -218,7 +218,7 @@ flowchart TB
 
 ## 16. Presence Model
 
-- Presence is **approximate** — an estimated count of active participants per canvas, surfaced via `PresenceUpdated`.
+- Presence is **approximate**: an estimated count of active participants per canvas, surfaced via `PresenceUpdated`.
 - It is **not authoritative for identity** and never enumerates who is present (privacy); it carries **counts/aggregates only**, never `DC2`/`DC3` identity lists.
 - Presence **feeds the cooldown load signal as telemetry** (concurrent-user input to the cooldown, `COOLDOWN.md`), but the cooldown computation/authority lives server-side (`§17`).
 
@@ -227,7 +227,7 @@ flowchart TB
 ## 17. Cooldown Updates Over WS
 
 - `CooldownUpdated` distributes the **global** cooldown value when it changes; the connection may also receive its **own remaining** cooldown for display.
-- These are **display-only** — the client never enforces or shortens cooldown; enforcement is server-side at placement (`BE-INV-7`, `API-INV-9`, `WS-INV-6`, `P-COOL-6`).
+- These are **display-only**: the client never enforces or shortens cooldown; enforcement is server-side at placement (`BE-INV-7`, `API-INV-9`, `WS-INV-6`, `P-COOL-6`).
 - The cooldown **algorithm/load-score** is owned by `COOLDOWN.md`; WS only transports the resulting value.
 
 ---
@@ -242,7 +242,7 @@ flowchart TB
 
 ## 19. Privacy Rules
 
-- **`DC2` only in public messages** — canvas/attribution messages carry the public handle/display name, **never `DC3`** (full email/internal ids) (`WS-INV-7`, `CTX-INV-3`, `API-INV-7`).
+- **`DC2` only in public messages**: canvas/attribution messages carry the public handle/display name, **never `DC3`** (full email/internal ids) (`WS-INV-7`, `CTX-INV-3`, `API-INV-7`).
 - **No `DC3` in any WS payload**, public or otherwise; identity is referenced by `DC2`/actor id, not email.
 - **Moderator/admin channels are scoped separately** and role-gated; any expanded context there is governed by `MODERATION.md`/`AUTHENTICATION.md`.
 - Presence carries **counts, not identities** (`§16`).
@@ -279,18 +279,18 @@ Errors never leak internals or `DC3` (`API-INV-8` parity).
 - **Auth/session checked at connect** and on privileged subscriptions (`§5`); mechanics → `AUTHENTICATION.md`.
 - **CSRF / cross-site WS** concerns (e.g., origin of the handshake, cookie-based auth risks) are **deferred to `AUTHENTICATION.md`/`SECURITY.md`**; this doc flags them as required controls.
 - **Origin checks** on the handshake; **input validation** on every client→server message; **rate limiting** on client→server traffic (`WS_RATE_LIMITED`).
-- **Abuse/bot prevention** — connection/subscription limits per identity/IP; suspicious patterns feed abuse tooling (`SECURITY.md`, `P-ABUSE-*`).
+- **Abuse/bot prevention**: connection/subscription limits per identity/IP; suspicious patterns feed abuse tooling (`SECURITY.md`, `P-ABUSE-*`).
 - **No sensitive data** in payloads (`§19`); Redis carries only transient, non-durable messages.
 
 ---
 
 ## 23. Performance Considerations
 
-- **Fan-out latency** — placement→broadcast must be fast across instances (`ARCH-GOAL-3`); pub/sub keeps it horizontal.
-- **Payload size** — deltas are small (a cell change); the large **snapshot** is delivered once over REST, not repeatedly over WS (`§13`, snapshot encoding → `RENDERING.md`).
-- **Batching/coalescing** — high-activity periods may coalesce rapid deltas to slow/lagging clients (`§14`).
-- **Compression tradeoffs** — per-message compression saves bandwidth at CPU cost; adopt selectively (decision → `PERFORMANCE.md`/`OPERATIONS.md`).
-- **Snapshot vs delta boundary** — initial state = REST snapshot; subsequent changes = WS deltas; reconnect = new snapshot + deltas. This boundary is the core performance contract with `RENDERING.md`.
+- **Fan-out latency**: placement→broadcast must be fast across instances (`ARCH-GOAL-3`); pub/sub keeps it horizontal.
+- **Payload size**: deltas are small (a cell change); the large **snapshot** is delivered once over REST, not repeatedly over WS (`§13`, snapshot encoding → `RENDERING.md`).
+- **Batching/coalescing**: high-activity periods may coalesce rapid deltas to slow/lagging clients (`§14`).
+- **Compression tradeoffs**: per-message compression saves bandwidth at CPU cost; adopt selectively (decision → `PERFORMANCE.md`/`OPERATIONS.md`).
+- **Snapshot vs delta boundary**: initial state = REST snapshot; subsequent changes = WS deltas; reconnect = new snapshot + deltas. This boundary is the core performance contract with `RENDERING.md`.
 - Concrete budgets owned by `PERFORMANCE.md`.
 
 ---
@@ -299,15 +299,15 @@ Errors never leak internals or `DC3` (`API-INV-8` parity).
 
 WS test layers (strategy → `TESTING.md`):
 
-- **Connection lifecycle** — connect → auth → subscribe → updates → disconnect → reconnect.
-- **Subscription authorization** — role/scope enforced; forbidden/cross-tenant rejected.
-- **Tenant isolation** — no message from another tenant ever reaches a connection (`P-AC-13`).
-- **Message contract** — every message conforms to its `@quad/core` type + `schemaVersion`.
-- **Reconnect convergence** — after drop + reconnect, the client converges to server truth via snapshot.
-- **Duplicate/out-of-order** — monotonic guard ignores stale/dup `seq`; final state is correct.
-- **Heartbeat timeout** — missed heartbeats close the connection; client recovers.
-- **Slow-client/backpressure** — a slow client is coalesced/forced-resync without degrading others.
-- **Privacy** — no `DC3` in any payload; presence carries counts only.
+- **Connection lifecycle**: connect → auth → subscribe → updates → disconnect → reconnect.
+- **Subscription authorization**: role/scope enforced; forbidden/cross-tenant rejected.
+- **Tenant isolation**: no message from another tenant ever reaches a connection (`P-AC-13`).
+- **Message contract**: every message conforms to its `@quad/core` type + `schemaVersion`.
+- **Reconnect convergence**: after drop + reconnect, the client converges to server truth via snapshot.
+- **Duplicate/out-of-order**: monotonic guard ignores stale/dup `seq`; final state is correct.
+- **Heartbeat timeout**: missed heartbeats close the connection; client recovers.
+- **Slow-client/backpressure**: a slow client is coalesced/forced-resync without degrading others.
+- **Privacy**: no `DC3` in any payload; presence carries counts only.
 
 ---
 
@@ -330,10 +330,10 @@ WS test layers (strategy → `TESTING.md`):
 
 ## 26. Diagrams
 
-- **Connection lifecycle** — §4.
-- **REST snapshot + WS delta flow** — below.
-- **Redis pub/sub fan-out** — §13.
-- **Reconnect convergence** — §12.
+- **Connection lifecycle**: §4.
+- **REST snapshot + WS delta flow**: below.
+- **Redis pub/sub fan-out**: §13.
+- **Reconnect convergence**: §12.
 
 ### 26.1 REST snapshot + WS delta flow
 ```mermaid
@@ -367,7 +367,7 @@ flowchart LR
 ## 28. Document Control
 
 - **Path:** `docs/WEBSOCKETS.md`
-- **Purpose:** Define Quad's realtime WebSocket protocol — lifecycle, channels, message envelope/catalog, ordering, reconnect, fan-out, backpressure, presence, and error/version models — that `@quad/realtime` + `apps/api` implement and `apps/web` consumes.
+- **Purpose:** Define Quad's realtime WebSocket protocol, lifecycle, channels, message envelope/catalog, ordering, reconnect, fan-out, backpressure, presence, and error/version models, that `@quad/realtime` + `apps/api` implement and `apps/web` consumes.
 - **Dependencies:** `API.md`, `EVENT_SOURCING.md`, `BACKEND.md`, `DATABASE.md`, `ARCHITECTURE.md`, `SYSTEM_CONTEXT.md`, `PRODUCT.md`, `PRINCIPLES.md`. **Consumed by:** `AUTHENTICATION.md` (handshake), `COOLDOWN.md` (distribution), `MODERATION.md` (broadcasts), `RENDERING.md` (snapshot/delta consumption), `FRONTEND.md` (WS client), `@quad/core` (message types), `specs/websockets`.
 - **Acceptance checklist:** ☑ all 28 parts present ☑ contract altitude (message types/names + lifecycle; no handlers/source/DTO declarations) ☑ realtime principles (no polling, server-authoritative, tenant-scoped, typed, snapshot convergence) ☑ full lifecycle ☑ message envelope + server→client and client→server catalogs ☑ disallowed messages (no WS placement/chat/admin) ☑ ordering (per-canvas seq + monotonic guard) ☑ reconnect/recovery ☑ Redis pub/sub best-effort + Postgres durability ☑ backpressure + heartbeat + presence ☑ cooldown/moderation/lifecycle over WS ☑ privacy (`DC2` only) ☑ error + version models ☑ `WS-INV-1…12` ☑ 4 Mermaid diagrams ☑ versions referenced not declared ☑ tenant-neutral (Rutgers = example) ☑ no app code/package files.
 - **Open questions:** see §27 (handshake auth, payload shapes, snapshot inline vs REST, compression/heartbeat tuning).

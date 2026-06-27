@@ -1,6 +1,6 @@
-# Quad — Product Principles
+# Quad: Product Principles
 
-> **These are the non-negotiable laws of the product.** Every feature, spec, milestone, design, and line of code must conform. A principle is not a preference to be traded away for convenience or growth — it is a constraint the product is defined by. When a proposed feature conflicts with a principle, **the feature changes or dies, not the principle.**
+> **These are the non-negotiable laws of the product.** Every feature, spec, milestone, design, and line of code must conform. A principle is not a preference to be traded away for convenience or growth, it is a constraint the product is defined by. When a proposed feature conflicts with a principle, **the feature changes or dies, not the principle.**
 >
 > Principles are *product law*; they sit above [`PRODUCT.md`](PRODUCT.md) (which says what to build) and govern [`NON_GOALS.md`](NON_GOALS.md) (what we refuse to build). Architecture docs implement these; they do not get to reinterpret them.
 >
@@ -20,7 +20,7 @@ When two principles tension against each other, resolve in this order:
 
 ## The Laws
 
-### `PRIN-FAIRNESS` — Fairness above everything
+### `PRIN-FAIRNESS`: Fairness above everything
 
 **Law.** Every participant has identical power over the canvas at all times. No money, status, seniority, social connection, activity level, or administrative favor grants more influence than any other verified student has.
 
@@ -28,11 +28,11 @@ When two principles tension against each other, resolve in this order:
 
 **Requires.** Identical cooldown for everyone in a tenant at any instant (`P-COOL-1`, `P-COOL-6`); equal placement rights on every cell/color/region (`P-CANVAS-6`); leaderboards and profiles that reward only real, attributable effort (`P-LEAD-4`).
 
-**Forbids.** Any mechanism — paid, earned, or assigned — that shortens a cooldown, grants extra/priority placements, reserves regions, or weights one account's pixel over another's.
+**Forbids.** Any mechanism, paid, earned, or assigned, that shortens a cooldown, grants extra/priority placements, reserves regions, or weights one account's pixel over another's.
 
 ---
 
-### `PRIN-EQUAL-POWER` — One account, one pixel, one cooldown
+### `PRIN-EQUAL-POWER`: One account, one pixel, one cooldown
 
 **Law.** A participant is exactly one verified human with one account, who places one pixel per action and waits the one global cooldown.
 
@@ -44,25 +44,25 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-IDENTITY` — Identity and accountability, never anonymity
+### `PRIN-IDENTITY`: Identity and accountability, never anonymity
 
 **Law.** Participation requires verified membership of the tenant university, and every pixel is permanently attributable to the account that placed it.
 
-**Why.** A safe, accountable community of real classmates — not anonymous internet actors — is what makes the canvas trustworthy and moderatable (`P-VISION-4`). Accountability is also the foundation that lets moderation be precise and reversible.
+**Why.** A safe, accountable community of real classmates, not anonymous internet actors, is what makes the canvas trustworthy and moderatable (`P-VISION-4`). Accountability is also the foundation that lets moderation be precise and reversible.
 
 **Requires.** Verified-membership gating (`P-JOURNEY-1`, `P-TENANT-2`); attribution on every cell (`P-ATTR-1`); traceability of every placement (`P-ABUSE-5`).
 
 **Forbids.** Anonymous or guest placement; unattributable pixels; participation by non-members.
 
-**Bounded by privacy.** Accountability is internal-first: identities are attributable to moderators/admins and shown publicly only as a tenant-defined **public handle** — **never the full email** (`P-ATTR-3`, `P-ATTR-4`). Accountability does not mean public exposure of sensitive identifiers.
+**Bounded by privacy.** Accountability is internal-first: identities are attributable to moderators/admins and shown publicly only as a tenant-defined **public handle**, **never the full email** (`P-ATTR-3`, `P-ATTR-4`). Accountability does not mean public exposure of sensitive identifiers.
 
 ---
 
-### `PRIN-PERMANENCE` — Preserve every action forever
+### `PRIN-PERMANENCE`: Preserve every action forever
 
 **Law.** Every placement and every consequential action is preserved permanently. History is appended, never silently overwritten or destroyed.
 
-**Why.** The product's lasting value is a faithful, permanent record of a campus's term — the per-pixel story, the replay, the archive (`P-VISION-3`). If history can vanish, the artifact is untrustworthy.
+**Why.** The product's lasting value is a faithful, permanent record of a campus's term, the per-pixel story, the replay, the archive (`P-VISION-3`). If history can vanish, the artifact is untrustworthy.
 
 **Requires.** Full per-pixel history (`P-ATTR-5`), faithful replays (`P-REPLAY-3`), permanent archives (`P-ARCH-1`), and term canvases that are never deleted (`P-LIFE-7`).
 
@@ -70,7 +70,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-ISOLATION` — Each tenant is self-contained
+### `PRIN-ISOLATION`: Each tenant is self-contained
 
 **Law.** Every university's accounts, pixels, canvases, leaderboards, profiles, reports, archives, and configuration are fully isolated. No participant acts in, and no data leaks across, another tenant.
 
@@ -82,7 +82,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-CONFIG-OVER-CODE` — Multi-tenant by configuration, never by hardcoding
+### `PRIN-CONFIG-OVER-CODE`: Multi-tenant by configuration, never by hardcoding
 
 **Law.** Tenant-specific facts (name, branding, domains, palette, dimensions, term schedule, cooldown bounds, moderators) live in configuration. Platform behavior contains no tenant-specific assumptions.
 
@@ -94,7 +94,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-MOBILE-FIRST` — Designed for phones first
+### `PRIN-MOBILE-FIRST`: Designed for phones first
 
 **Law.** Every participant-facing experience is designed and validated for mobile touch use first, then enhanced for desktop.
 
@@ -106,7 +106,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-ALIVE` — Always alive and instantaneous
+### `PRIN-ALIVE`: Always alive and instantaneous
 
 **Law.** The canvas reflects the community in real time; interaction feels immediate.
 
@@ -118,7 +118,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-NO-PAY-TO-WIN` — No monetized or earned advantage
+### `PRIN-NO-PAY-TO-WIN`: No monetized or earned advantage
 
 **Law.** Nothing a person can buy, earn, or be granted changes their power over the canvas.
 
@@ -130,7 +130,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-NO-ANON` — No anonymous participation
+### `PRIN-NO-ANON`: No anonymous participation
 
 **Law.** No one places a pixel without verified tenant membership tied to an identity.
 
@@ -142,7 +142,7 @@ When two principles tension against each other, resolve in this order:
 
 ---
 
-### `PRIN-NO-INVISIBLE-LOSS` — Moderation is reversible and audited; history never vanishes silently
+### `PRIN-NO-INVISIBLE-LOSS`: Moderation is reversible and audited; history never vanishes silently
 
 **Law.** Moderation changes what the canvas *shows*, never what *happened*. Every moderation action is reversible-by-design and recorded in an audit log; nothing is hard-deleted.
 

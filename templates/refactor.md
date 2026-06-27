@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to a refactor task/PR description. Reusable refactor. -->
-# Refactor — `<short title>`
+# Refactor: `<short title>`
 
 > Reminders: **behavior-preserving, no contract drift, no scope creep** · **no speculative rewrites** · tests stay green · **stop, don't guess** if a "refactor" starts changing a contract/behavior (that's a feature/ADR, not a refactor). Conforms to `ENGINEERING_WORKFLOW.md`, `CODE_QUALITY.md`.
 
@@ -14,7 +14,7 @@
 ## 3. Forbidden Scope
 `<no contract changes; no unrelated subsystems; no new features>`
 
-## 4. Contracts Unchanged — Confirmation
+## 4. Contracts Unchanged: Confirmation
 `<confirm @quad/core DTOs/WS/events/types unchanged; if any change → this is NOT a refactor → stop>`
 
 ## 5. Tests Proving No Behavior Change

@@ -1,4 +1,4 @@
-# ADR-0008 — Dynamic Cooldown
+# ADR-0008: Dynamic Cooldown
 
 - **Status:** Accepted · **Date:** 2026-06 · **Deciders:** Architect, Backend · **Linked docs:** `docs/COOLDOWN.md`, `docs/PRODUCT.md` §8, `docs/PRINCIPLES.md`
 
@@ -12,15 +12,15 @@ Fairness is the soul of the product (`PRIN-FAIRNESS`): everyone must wait the sa
 - **In-flight timers are fixed at placement time** (later global changes affect only future placements).
 - **State in Redis/Valkey (ephemeral)**; durable history optional; **no durable truth depends on Redis**.
 - **Fail-closed:** if cooldown state can't be verified, placements are rejected (never fail open).
-- **No individual advantage** — no paid/role/streak path shortens any user's cooldown.
+- **No individual advantage**: no paid/role/streak path shortens any user's cooldown.
 
 ## 3. Consequences
 + Fair + load-adaptive; write-load naturally bounded (≈ activeUsers/cooldown). − Redis dependency on the hot path (mitigated by fail-closed + key protection).
 
 ## 4. Alternatives Considered
-- **Fixed cooldown only:** rejected — can't adapt to load; worse fairness/strategy under spikes.
-- **Per-user dynamic advantage:** rejected — violates equal power.
-- **Client-side cooldown authority:** rejected — trivially bypassable; not server-authoritative.
+- **Fixed cooldown only:** rejected, can't adapt to load; worse fairness/strategy under spikes.
+- **Per-user dynamic advantage:** rejected, violates equal power.
+- **Client-side cooldown authority:** rejected, trivially bypassable; not server-authoritative.
 
 ## 5. Affected Docs / Contracts
 `COOLDOWN.md` (`COOL-INV-*`), `API.md` (`429 COOLDOWN_ACTIVE`), `WEBSOCKETS.md` (`CooldownUpdated`), `@quad/core` (cooldown types), `PERFORMANCE.md` (B08).

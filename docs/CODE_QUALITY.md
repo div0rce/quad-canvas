@@ -1,4 +1,4 @@
-# Quad — Code Quality & Architecture Fitness
+# Quad: Code Quality & Architecture Fitness
 
 > **Engineering-process doc.** Owns coding standards, architecture fitness rules, dependency boundaries, and maintainability. Conforms to `ARCHITECTURE.md`, `ENGINEERING_WORKFLOW.md`, all Phase 2 docs. Does not rewrite contracts; contradictions → unresolved risks. No code/lint-configs (Phase 4); no versions (`TECH_BASELINE.md`); tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -12,11 +12,11 @@ Code quality is how the codebase **resists entropy** under engineering, mileston
 | Forbidden patterns + dependency direction | PR review process (`REVIEW_PROCESS.md`) |
 
 ## 3. Principles
-- **`Q-DP-1` Strict TypeScript** — strict mode; **no `any` in the domain** (`@quad/core`).
-- **`Q-DP-2` Clean Architecture** — dependencies point inward to `@quad/core` (`ARCH-INV-7`).
-- **`Q-DP-3` Small modules** — single-responsibility; readable over clever.
-- **`Q-DP-4` Explicit boundaries** — each package owns its concern; cross-boundary only via public interfaces.
-- **`Q-DP-5` Tests with behavior** — behavior changes ship with tests (`TESTING.md`).
+- **`Q-DP-1` Strict TypeScript**: strict mode; **no `any` in the domain** (`@quad/core`).
+- **`Q-DP-2` Clean Architecture**: dependencies point inward to `@quad/core` (`ARCH-INV-7`).
+- **`Q-DP-3` Small modules**: single-responsibility; readable over clever.
+- **`Q-DP-4` Explicit boundaries**: each package owns its concern; cross-boundary only via public interfaces.
+- **`Q-DP-5` Tests with behavior**: behavior changes ship with tests (`TESTING.md`).
 
 ## 4. Package Boundary Rules
 | Package | Owns | May import |

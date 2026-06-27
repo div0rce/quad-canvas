@@ -1,9 +1,9 @@
 # Database Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
-- **Lane:** `@quad/db` — Prisma schema, migrations, repositories, projections, indexes, and migration safety.
-- **May touch (after `START IMPLEMENTATION`):** `@quad/db/**`, `specs/database/*`; coordinates event/projection types with `@quad/core`.
+- **Lane:** `@quad/db`: Prisma schema, migrations, repositories, projections, indexes, and migration safety.
+- **May touch:** `@quad/db/**`, `specs/database/*`; coordinates event/projection types with `@quad/core`.
 - **Must not touch without review:** event *semantics* (`EVENT_SOURCING` lane/architect), `apps/api` business logic, `apps/web`.
 - **Source docs:** `docs/DATABASE.md`, `docs/EVENT_SOURCING.md`, `docs/DEPLOYMENT.md`, `docs/DISASTER_RECOVERY.md`.
 - **Stop conditions:** **no schema change without a migration spec**; any data-loss/destructive-log risk; tenant-isolation impact.

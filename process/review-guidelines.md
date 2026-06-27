@@ -1,8 +1,8 @@
 # Reviewer Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). **Independent of the implementer.** No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). **Independent of the implementer.** Build against the corpus, milestone-by-milestone.
 
-- **Lane:** independent PR review — checklist enforcement, rejection reasons, evidence verification, merge readiness.
+- **Lane:** independent PR review, checklist enforcement, rejection reasons, evidence verification, merge readiness.
 - **May touch:** review comments + the PR-review record (`templates/pr-review.md`); does **not** author the change under review.
 - **Must not touch:** the implementation it reviews (independence); never merges/commits unless explicitly asked.
 - **Source docs:** `docs/REVIEW_PROCESS.md`, `docs/ENGINEERING_WORKFLOW.md`, `docs/MILESTONES.md`, `docs/TESTING.md`, `docs/CODE_QUALITY.md`.

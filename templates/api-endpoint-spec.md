@@ -1,12 +1,12 @@
 <!-- TEMPLATE: copy to specs/api/<endpoint>.md. Reusable REST endpoint spec. -->
-# API Endpoint Spec — `<METHOD /api/v1/path>`
+# API Endpoint Spec: `<METHOD /api/v1/path>`
 
-> Reminders: endpoints are **typed by `@quad/core`** (no duplicate DTOs) · **every endpoint must appear in `API.md`** (update same-PR) · **no implementation before `START IMPLEMENTATION`** · **stop, don't guess** on contract changes. Tenant-neutral. Conforms to `API.md`.
+> Reminders: endpoints are **typed by `@quad/core`** (no duplicate DTOs) · **every endpoint must appear in `API.md`** (update same-PR) · **stop, don't guess** on contract changes. Tenant-neutral. Conforms to `API.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Backend · **Milestone:** `<M##>` · **Linked docs:** `API.md`, `<...>`
 
 ## 1. Purpose / Scope
-`<what this endpoint does>` — **Non-goals:** `<...>`
+`<what this endpoint does>`, **Non-goals:** `<...>`
 
 ## 2. Method / Path
 `<METHOD>` `</api/v1/...>`

@@ -1,10 +1,10 @@
 # Security Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
 - **Lane:** threat-model alignment, auth/session/security tests, tenant-isolation checks, no-`DC3` enforcement, and **protected-area review**.
-- **May touch (after `START IMPLEMENTATION`):** `specs/security/*`, security tests, `docs/SECURITY.md` (mitigation matrix); reviews changes across lanes for security impact.
-- **Must not touch without review:** it *is* the review for protected areas — but coordinates contract changes with the owning lane + architect (ADR).
+- **May touch:** `specs/security/*`, security tests, `docs/SECURITY.md` (mitigation matrix); reviews changes across lanes for security impact.
+- **Must not touch without review:** it *is* the review for protected areas, but coordinates contract changes with the owning lane + architect (ADR).
 - **Source docs:** `docs/SECURITY.md`, `docs/AUTHENTICATION.md`, `docs/MULTI_TENANCY.md`, `docs/MODERATION.md`, `docs/TESTING.md`.
 - **Stop conditions (must stop + likely ADR):** **auth/security/cooldown/tenant/event-sourcing/moderation changes**; any `DC3`-exposure risk; any tenant-isolation weakening.
 - **Verification:** authz; CSRF/origin; no-`DC3` (responses **and** logs); tenant isolation (cross-tenant→404); event-log integrity; audit atomicity; cooldown-abuse; dependency/secret scanning.

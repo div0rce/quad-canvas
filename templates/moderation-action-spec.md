@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/moderation/<action>.md. Reusable moderation action spec. -->
-# Moderation Action Spec — `<action-name>`
+# Moderation Action Spec: `<action-name>`
 
-> Reminders: **no hard delete — visible state changes via compensating events** · **every action writes an audit entry atomically with its effect** · **no placement-power advantage** · public surfaces sanitized · **no impl before `START IMPLEMENTATION`** · **stop, don't guess** on moderation/audit changes. Conforms to `MODERATION.md`, `EVENT_SOURCING.md`.
+> Reminders: **no hard delete, visible state changes via compensating events** · **every action writes an audit entry atomically with its effect** · **no placement-power advantage** · public surfaces sanitized · **stop, don't guess** on moderation/audit changes. Conforms to `MODERATION.md`, `EVENT_SOURCING.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Moderation/Backend · **Milestone:** `<M##>` · **Linked docs:** `MODERATION.md`
 
@@ -18,7 +18,7 @@
 `<which compensating event(s) produced; projection effect; original event preserved>`
 
 ## 5. Audit Fields
-`<actor, action, target, reason, timestamp, tenantId, related event>` — `DC4`, append-only, atomic with effect.
+`<actor, action, target, reason, timestamp, tenantId, related event>`, `DC4`, append-only, atomic with effect.
 
 ## 6. Approval / Two-Person-Review Needs
 `<required for wide rollback / mass removal / permanent ban?>`

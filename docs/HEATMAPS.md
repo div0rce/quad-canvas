@@ -1,4 +1,4 @@
-# Quad — Heatmaps
+# Quad: Heatmaps
 
 > **Derived-feature doc.** Heatmaps are **derived projections/visualizations**; the renderer stays generic and this doc doesn't redefine event/analytics semantics or rendering internals. Conforms to [`ANALYTICS.md`](ANALYTICS.md), [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`RENDERING.md`](RENDERING.md), [`PROFILES.md`](PROFILES.md), [`MODERATION.md`](MODERATION.md), [`MULTI_TENANCY.md`](MULTI_TENANCY.md), [`API.md`](API.md), [`FRONTEND.md`](FRONTEND.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions flagged in §9.
 >
@@ -31,7 +31,7 @@ Event log + projections + `analytics_aggregates` (`ANALYTICS.md`). **Derived, ne
 
 ## 6. Derivation Model
 - **Grid/binning:** the canvas is binned (per cell, or coarser tiles at low zoom) into density values.
-- **Normalization:** values normalized (e.g., to a 0–1 scale or percentile) for stable color mapping; **avoid misleading normalization** (document scale; handle sparse data — §9).
+- **Normalization:** values normalized (e.g., to a 0–1 scale or percentile) for stable color mapping; **avoid misleading normalization** (document scale; handle sparse data, §9).
 - **Time windows:** per-window aggregates (live, daily, term, archived).
 - **Scope:** per canvas / per region; tenant-scoped.
 

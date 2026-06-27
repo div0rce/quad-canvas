@@ -1,10 +1,10 @@
-# Quad — engineering Development Workflow
+# Quad: engineering Development Workflow
 
 > **This document owns the operating model for building Quad with engineering: how engineers plan, implement, verify, review, stop, and avoid architecture drift while working *from this corpus*.** It is **process, not app architecture**. It conforms to [`process/SPEC_PLAN.md`](../process/SPEC_PLAN.md) and all completed docs.
 >
-> **Altitude:** workflow + governance. **No** code, and **no** concrete `process/*` role guides, `templates/*`, playbook files, CI files, or scripts — those are **Phase 4** scaffolding. **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
+> **Altitude:** workflow + governance. **No** code, and **no** concrete `process/*` role guides, `templates/*`, playbook files, CI files, or scripts, those are **Phase 4** scaffolding. **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
 >
-> **Status:** the spec corpus is complete and the **foundation is built and merged** (`@quad/*` packages, `apps/web`/`apps/api` shells, `@quad/testing` harness); the **G1 foundation checkpoint** is recorded in `docs/CHECKPOINTS.md` §4a. **Product behaviour is added only within its milestone** (`MILESTONES.md`) — never ahead of it.
+> **Status:** the spec corpus is complete and the **foundation is built and merged** (`@quad/*` packages, `apps/web`/`apps/api` shells, `@quad/testing` harness); the **G1 foundation checkpoint** is recorded in `docs/CHECKPOINTS.md` §4a. **Product behaviour is added only within its milestone** (`MILESTONES.md`), never ahead of it.
 
 ---
 
@@ -20,13 +20,13 @@ The corpus is large precisely so that engineering roles can implement Quad **mil
 | Doc-update + PR discipline | Full test strategy (`TESTING.md`) / review detail (`REVIEW_PROCESS.md`) |
 
 ## 3. Core Principles
-- **`PROC-DP-1` Spec-first** — implement *against* a spec + milestone; never invent product requirements (`PROC-INV-1`).
-- **`PROC-DP-2` Docs are source of truth** — a contract change updates the doc/spec in the **same PR** (`PROC-INV-2`).
-- **`PROC-DP-3` Small milestone PRs** — one milestone, small diff, no unrelated rewrites (`PROC-INV-3`).
-- **`PROC-DP-4` Tests before claims** — no "it works" without commands + results (`PROC-INV-4`).
-- **`PROC-DP-5` No architecture drift** — `@quad/core` contracts, clean boundaries, hard rules (`§12`).
-- **`PROC-DP-6` Stop instead of guessing** — hit a stop condition → ask (`§8`).
-- **`PROC-DP-7` No product behaviour ahead of its milestone** — the foundation is built; product features follow `MILESTONES.md` and their checkpoint gates.
+- **`PROC-DP-1` Spec-first**: implement *against* a spec + milestone; never invent product requirements (`PROC-INV-1`).
+- **`PROC-DP-2` Docs are source of truth**: a contract change updates the doc/spec in the **same PR** (`PROC-INV-2`).
+- **`PROC-DP-3` Small milestone PRs**: one milestone, small diff, no unrelated rewrites (`PROC-INV-3`).
+- **`PROC-DP-4` Tests before claims**: no "it works" without commands + results (`PROC-INV-4`).
+- **`PROC-DP-5` No architecture drift**: `@quad/core` contracts, clean boundaries, hard rules (`§12`).
+- **`PROC-DP-6` Stop instead of guessing**: hit a stop condition → ask (`§8`).
+- **`PROC-DP-7` No product behaviour ahead of its milestone**: the foundation is built; product features follow `MILESTONES.md` and their checkpoint gates.
 
 ## 4. Engineer Operating Model (roles)
 Each role becomes a concrete `process/<role>-guidelines.md` in Phase 4; here are their lanes. All obey the global rules (Phase 4 `process/engineering-rules.md`).
@@ -67,12 +67,12 @@ Before writing code for a task, the engineer:
 2. **Identifies the owning spec/doc** the work implements against.
 3. **Identifies contracts touched** (API/WS/event/DB/`@quad/core` types).
 4. **Identifies tests required** (per `TESTING.md`/the spec).
-5. **Identifies stop conditions** (`§8`) — and stops *now* if any apply before guessing.
+5. **Identifies stop conditions** (`§8`), and stops *now* if any apply before guessing.
 
 ## 7. Implementation Protocol
 - **One milestone per PR**; **small diff**; **no unrelated rewrites** (`PROC-INV-3`).
 - **Update docs/specs with any contract change in the same PR** (`PROC-INV-2`).
-- **Keep package boundaries clean** — contracts in `@quad/core`; DB I/O only in `@quad/db`; realtime only in `@quad/realtime`; no business logic in components.
+- **Keep package boundaries clean**: contracts in `@quad/core`; DB I/O only in `@quad/db`; realtime only in `@quad/realtime`; no business logic in components.
 - Implement against the spec's acceptance criteria; add the spec's required tests.
 - Leave the codebase green (lint/typecheck/tests) before declaring done.
 
@@ -87,7 +87,7 @@ flowchart TD
   Q5 -- no --> Q6{"PR too large or tests missing?"} -- yes --> STOP
   Q6 -- no --> GO["proceed"]
 ```
-A stop condition means **pause and request review/clarification with options + a recommendation** — not silently choose. (Contract/auth/cooldown/event-sourcing/tenant/moderation changes typically also require an **ADR**.)
+A stop condition means **pause and request review/clarification with options + a recommendation**, not silently choose. (Contract/auth/cooldown/event-sourcing/tenant/moderation changes typically also require an **ADR**.)
 
 ## 9. Verification Protocol
 Before claiming done, run and report (with output): **lint · typecheck · unit · integration · relevant e2e · security tests · performance tests where relevant · doc/spec consistency check**. Critical subsystems (event sourcing, cooldown, auth, WS, rendering, moderation, tenant isolation) are **never** "manually verified only" (`PROC-INV-4`). Full matrix → `TESTING.md`.
@@ -122,7 +122,7 @@ Each maps to a code-review rejection reason (`§14`) and a test where feasible.
 - **No bypassing auth/cooldown/moderation/audit** (`SECURITY.md` invariants).
 - **No fabricated test results**; **no claiming verification without commands + results.**
 - **No untested event-sourcing changes** (`ES-INV-*`).
-- **No product behaviour ahead of its milestone** — implement features only within their milestone.
+- **No product behaviour ahead of its milestone**: implement features only within their milestone.
 
 ## 14. Review Model
 - **Self-review checklist** (pre-request): spec linked · acceptance met · tests green · docs updated · guardrails respected · diff small/scoped.
@@ -145,7 +145,7 @@ Each maps to a code-review rejection reason (`§14`) and a test where feasible.
 A PR **must** update docs/specs (same PR) when it changes: a **contract** (API/WS/event/DB/`@quad/core` type) · **behavior** · adds a **new endpoint/event/schema** · adds a **migration** · introduces a **new security/performance assumption**. No undocumented behavior; no invisible architecture (`PROC-INV-2`).
 
 ## 17. Branch / PR Discipline
-- **One milestone per PR**; soft size cap ≈ 400 non-generated changed lines / ~10 files — larger ⇒ split the milestone.
+- **One milestone per PR**; soft size cap ≈ 400 non-generated changed lines / ~10 files, larger ⇒ split the milestone.
 - **Commit/PR messages** state the milestone, contracts touched, and tests run (architecture-level expectation; exact format → `REVIEW_PROCESS.md`).
 - **No `git commit` unless explicitly asked** (`PROC-INV-12`); branch from the default branch, never commit straight to it.
 
@@ -160,7 +160,7 @@ A PR **must** update docs/specs (same PR) when it changes: a **contract** (API/W
 | Phase 4 `process/*`, `process/playbooks/*`, `templates/*` | the concrete engineers/playbooks/templates implementing §4/§10 |
 
 ## 19. Engineering Workflow Invariants (`PROC-INV-*`)
-- **`PROC-INV-1`** Spec-first — every implementation traces to a spec/doc + milestone; engineers never invent product requirements.
+- **`PROC-INV-1`** Spec-first, every implementation traces to a spec/doc + milestone; engineers never invent product requirements.
 - **`PROC-INV-2`** Docs are source of truth; a contract/behavior change updates the doc/spec in the same PR.
 - **`PROC-INV-3`** One milestone per PR; small, scoped diff; no unrelated rewrites.
 - **`PROC-INV-4`** Tests accompany every feature; critical subsystems are automated; no verification claim without commands + results.
@@ -174,7 +174,7 @@ A PR **must** update docs/specs (same PR) when it changes: a **contract** (API/W
 - **`PROC-INV-12`** No `git commit` unless explicitly asked.
 
 ## 20. Diagrams
-- **Milestone workflow** — §5. **Stop-condition decision tree** — §8.
+- **Milestone workflow**: §5. **Stop-condition decision tree**, §8.
 ### 20.1 Contract-change workflow
 ```mermaid
 flowchart LR
@@ -207,7 +207,7 @@ flowchart LR
 
 ## 22. Document Control
 - **Path:** `docs/ENGINEERING_WORKFLOW.md`
-- **Purpose:** The operating model for engineering development of Quad — planning, implementation, verification, review, stop conditions, and drift control built on this corpus.
+- **Purpose:** The operating model for engineering development of Quad, planning, implementation, verification, review, stop conditions, and drift control built on this corpus.
 - **Dependencies:** `process/SPEC_PLAN.md`, `ARCHITECTURE`, `PRODUCT`, `PRINCIPLES`, `NON_GOALS`, all Phase 2 contract docs, `SECURITY`, `PERFORMANCE`, `DEPLOYMENT`. **Consumed by:** `MILESTONES`, `CHECKPOINTS`, `TESTING`, `CODE_QUALITY`, `REVIEW_PROCESS`, Phase-4 `process/*`/`templates/*`/`ENGINEERING_CONTEXT.md`.
 - **Acceptance checklist:** ☑ all 22 parts ☑ process-not-architecture ☑ principles (spec-first, docs-as-truth, small PRs, tests-before-claims, stop-not-guess, no pre-`START IMPLEMENTATION`) ☑ engineer roles ☑ workflow phases ☑ task intake ☑ implementation protocol ☑ stop conditions (tree) ☑ verification protocol ☑ playbook shapes ☑ artifact expectations ☑ drift controls ☑ safety rails ☑ review model ☑ failure handling ☑ doc-update rules ☑ PR discipline (no commit unless asked) ☑ future-file relationships ☑ `PROC-INV-1…12` ☑ 4 Mermaid diagrams ☑ no role/playbook/template files created ☑ versions referenced not declared ☑ tenant-neutral.
 - **Open questions:** see §21.

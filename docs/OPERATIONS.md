@@ -1,4 +1,4 @@
-# Quad — Operations & Runbooks
+# Quad: Operations & Runbooks
 
 > **Engineering-process doc.** Owns operator procedures, recurring operations, and semester/tenant lifecycle ops. Conforms to `DEPLOYMENT.md`, `SECURITY.md`, `DISASTER_RECOVERY.md`, `MODERATION.md`, `COOLDOWN.md`, `ARCHIVES.md`. Does not rewrite contracts; contradictions → unresolved risks. No code/scripts/configs; no versions; tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -12,11 +12,11 @@ Operations is how humans (platform operators, tenant admins) run Quad safely and
 | Operator roles/permissions + emergency procedure | Threat model (`SECURITY.md`) / moderation rules (`MODERATION.md`) |
 
 ## 3. Principles
-- **`OP-DP-1` Scripted/repeatable** where possible — prefer runbooks over ad-hoc.
-- **`OP-DP-2` Audited operator actions** — consequential ops are logged (`DC4`).
-- **`OP-DP-3` Least privilege** — operators get only what a task needs.
-- **`OP-DP-4` No silent production changes** — changes go through config/deploy/migration, not manual DB edits.
-- **`OP-DP-5` Tenant-scoped operations** — act within a tenant; cross-tenant only as operator, audited.
+- **`OP-DP-1` Scripted/repeatable** where possible, prefer runbooks over ad-hoc.
+- **`OP-DP-2` Audited operator actions**: consequential ops are logged (`DC4`).
+- **`OP-DP-3` Least privilege**: operators get only what a task needs.
+- **`OP-DP-4` No silent production changes**: changes go through config/deploy/migration, not manual DB edits.
+- **`OP-DP-5` Tenant-scoped operations**: act within a tenant; cross-tenant only as operator, audited.
 
 ## 4. Runbook Categories
 Deploy · rollback · incident response · tenant freeze · session revocation · secret rotation · moderation escalation · archive generation · replay asset regeneration · projection rebuild · tenant onboarding · semester rollover. Each runbook states: trigger · preconditions · steps · verification · audit · comms.
@@ -29,10 +29,10 @@ Deploy · rollback · incident response · tenant freeze · session revocation �
 All elevated actions are audited (`OPS-INV-2`); cross-tenant is operator-only (`OPS-INV-4`).
 
 ## 6. Emergency Controls
-- **Freeze canvas / tenant-wide placement restrict** (audited) — primary incident lever (`MODERATION.md` §19, `COOLDOWN.md` §16); never an individual advantage.
-- **Revoke sessions** (targeted/tenant-wide) — on compromise/abuse (`AUTHENTICATION.md`).
-- **Secret rotation** — on suspected compromise (`DEPLOYMENT.md` §10).
-- **Escalate incident** — route to operator + preserve evidence (`SECURITY.md` §19).
+- **Freeze canvas / tenant-wide placement restrict** (audited), primary incident lever (`MODERATION.md` §19, `COOLDOWN.md` §16); never an individual advantage.
+- **Revoke sessions** (targeted/tenant-wide), on compromise/abuse (`AUTHENTICATION.md`).
+- **Secret rotation**: on suspected compromise (`DEPLOYMENT.md` §10).
+- **Escalate incident**: route to operator + preserve evidence (`SECURITY.md` §19).
 
 ## 7. Scheduled-Job Operations
 Operate (monitor/retry/backfill) the background jobs (`BACKEND.md` §15): cooldown recompute, projection jobs, archive/replay generation, analytics/leaderboard/heatmap projections, cleanup/retention. Jobs are idempotent; a failed job is retried/backfilled, not skipped. Job health is on dashboards (`OBSERVABILITY.md`).

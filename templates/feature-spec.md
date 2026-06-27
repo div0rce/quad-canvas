@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/features/<feature-name>.md and fill in. Reusable feature spec. -->
-# Feature Spec — `<feature-name>`
+# Feature Spec: `<feature-name>`
 
-> Reminders: **no implementation before `START IMPLEMENTATION`** · **contract changes update `@quad/core` + owning docs/specs in the same PR** · **stop, don't guess** on contract/auth/security/cooldown/tenant/event-sourcing/moderation/migration/perf-risk changes. Tenant-neutral (Rutgers Quad = tenant #1 example). Versions → `docs/TECH_BASELINE.md`.
+> Reminders: **contract changes update `@quad/core` + owning docs/specs in the same PR** · **stop, don't guess** on contract/auth/security/cooldown/tenant/event-sourcing/moderation/migration/perf-risk changes. Tenant-neutral (Rutgers Quad = tenant #1 example). Versions → `docs/TECH_BASELINE.md`.
 
 - **Status:** `<draft | ready | implemented>`
 - **Owner lane:** `<owner-lane>` · **Milestone:** `<M##>` · **Linked docs:** `<linked-docs>`

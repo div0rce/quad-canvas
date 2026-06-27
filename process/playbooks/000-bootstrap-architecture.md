@@ -616,7 +616,7 @@ Build a production-quality collaborative pixel canvas inspired by Reddit's r/pla
 
 This is **not** a Reddit clone.
 
-It is a semester-long collaborative social experiment where thousands of Rutgers students work together—and against each other—to create one massive piece of digital artwork.
+It is a semester-long collaborative social experiment where thousands of Rutgers students work together, and against each other, to create one massive piece of digital artwork.
 
 Every student has equal influence:
 
