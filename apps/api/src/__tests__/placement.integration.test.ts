@@ -6,6 +6,7 @@ import { buildApp } from '../app.js';
 import { placePixel } from '../services/placement.js';
 import type { PlacementDeps } from '../services/placement.js';
 import { InMemorySessionStore } from '../auth/session-store.js';
+import { InMemoryRateCounter } from '../services/rate-counter.js';
 
 // Requires the local Docker Compose Postgres, migrated (see vitest.integration.config.ts).
 const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgresql://quad:quad@127.0.0.1:5432/quad';
@@ -147,6 +148,26 @@ describe('placement service', () => {
     const r2 = await placePixel(dyn, bPrincipal, t, { x: 1, y: 0, color: 1, idempotencyKey: 'dc2' });
     expect(r2.ok).toBe(true);
     expect(r2.ok && r2.result.cooldownMs).toBe(500);
+  });
+
+  it('uses the rate-counter fast-path for the dynamic cooldown load', async () => {
+    const s = await seed();
+    const userB = await prisma.user.create({ data: { email: 'rcb@example.edu', publicHandle: 'rcb', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: s.tenantId, userId: userB.id, role: 'participant', status: 'active' } });
+    const t = { id: s.tenantId, palette: 'default' };
+    const counter = new InMemoryRateCounter(60);
+    const dyn = { ...deps(0), dynamicCooldown: { minMs: 0, maxMs: 1000, saturationRatePerMin: 2 }, rateCounter: counter };
+
+    // Reads the counter (0) for the cooldown, then records this placement.
+    const r1 = await placePixel(dyn, principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'rc1' });
+    expect(r1.ok && r1.result.cooldownMs).toBe(0);
+    expect(await counter.recent(s.canvasId)).toBe(1);
+
+    // Now the counter reads 1 → 1000*(1/2) = 500ms.
+    const bPrincipal = { userId: userB.id as domain.UserId, tenantId: s.tenantId as domain.TenantId, role: 'participant' as const };
+    const r2 = await placePixel(dyn, bPrincipal, t, { x: 1, y: 0, color: 1, idempotencyKey: 'rc2' });
+    expect(r2.ok && r2.result.cooldownMs).toBe(500);
+    expect(await counter.recent(s.canvasId)).toBe(2);
   });
 
   it('idempotency replay returns the original result and appends one event', async () => {
