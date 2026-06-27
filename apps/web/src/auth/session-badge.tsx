@@ -29,7 +29,11 @@ export function SessionBadge(): React.ReactElement | null {
       <button
         type="button"
         onClick={() => {
-          void signOut().then(() => window.location.reload());
+          // Reload regardless of outcome (re-reads /session) and never leak an unhandled rejection on
+          // a network failure — `.then` alone would skip the reload and reject unhandled.
+          void signOut()
+            .catch(() => undefined)
+            .finally(() => window.location.reload());
         }}
       >
         Sign out

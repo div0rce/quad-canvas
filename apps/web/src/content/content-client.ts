@@ -9,7 +9,9 @@ export async function fetchProfile(handle: string): Promise<dto.ProfileResponse 
   try {
     const res = await fetch(`${API_BASE}/api/v1/profiles/${encodeURIComponent(handle)}`, { credentials: 'include' });
     if (!res.ok) return null;
-    return (await res.json()) as dto.ProfileResponse;
+    const body = (await res.json()) as unknown;
+    if (!body || typeof body !== 'object') return null; // a 200 with an unexpected body degrades to "not found"
+    return body as dto.ProfileResponse;
   } catch {
     return null;
   }
@@ -19,7 +21,9 @@ export async function fetchLeaderboard(): Promise<dto.LeaderboardResponse | null
   try {
     const res = await fetch(`${API_BASE}/api/v1/leaderboards`);
     if (!res.ok) return null;
-    return (await res.json()) as dto.LeaderboardResponse;
+    const body = (await res.json()) as unknown;
+    if (!body || typeof body !== 'object') return null;
+    return body as dto.LeaderboardResponse;
   } catch {
     return null;
   }
