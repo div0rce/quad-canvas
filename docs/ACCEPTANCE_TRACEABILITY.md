@@ -29,7 +29,7 @@
 implemented + verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look
 preview, mobile pinch-zoom/drag-pan).
 
-**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The eight partials above are its exact
+**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The three partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.
 
 ---
