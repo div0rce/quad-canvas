@@ -16,7 +16,8 @@
     "format": "turbo run format",
     "check": "turbo run lint typecheck test build",
     "load:gate": "node scripts/load-gate.mjs",
-    "dr:drill": "bash scripts/dr-drill.sh"
+    "dr:drill": "bash scripts/dr-drill.sh",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
     "turbo": "^2",

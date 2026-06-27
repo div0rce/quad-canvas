@@ -58,6 +58,11 @@ jobs:
       - name: Security audit
         run: pnpm audit --audit-level high
 
+      # Rollback-safety gate: forward migrations must be additive (no DROP/RENAME of tables or columns
+      # the prior app reads, no destructive data ops) so an app rollback needs no DB rollback.
+      - name: Migration safety
+        run: pnpm check:migrations
+
       - name: Lint
         run: pnpm lint
 
