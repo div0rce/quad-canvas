@@ -12,7 +12,7 @@ Conventions for **security specs**. Conforms to `docs/SECURITY.md`, `docs/AUTHEN
   - **Auth/session/CSRF/origin/security tests** specified for affected paths.
 - **Same-PR updates:** `docs/SECURITY.md` (mitigation matrix) + affected owning doc/spec; new control may need an ADR.
 - **Tests/evidence:** authz, CSRF/origin, no-`DC3` (response + log), tenant isolation, event-log integrity, audit atomicity, cooldown-abuse, dependency/secret scanning.
-- **Stop conditions:** **protected-area changes (auth/tenant/cooldown/event-sourcing/moderation/integrity) stop and likely require an ADR.** **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** **protected-area changes (auth/tenant/cooldown/event-sourcing/moderation/integrity) stop and likely require an ADR.**
 
 ## Document Control
 - **Path:** `specs/security/README.md` · **Templates:** `test-plan-spec.md` (+ `feature-spec.md`/`adr.md`) · **Depends on:** `SECURITY`, `AUTHENTICATION`, `MULTI_TENANCY`, `MODERATION`, `TESTING`. · **Next:** `specs/moderation/README.md`.

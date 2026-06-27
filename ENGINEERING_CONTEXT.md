@@ -1,6 +1,6 @@
 # ENGINEERING_CONTEXT.md — Repo-Wide Engineering Entry Point
 
-You are working in **Quad**, a multi-tenant collaborative pixel-canvas platform (Rutgers Quad = tenant #1, **config only**). This file is the entry point for engineering work. **Foundation is in place:** the spec corpus is complete and the workspace foundation — the `@quad/*` packages, the `apps/web` / `apps/api` shells, and the `@quad/testing` integration harness — is built and **merged to `main`**. **Product features are not started**; build them milestone-by-milestone against the corpus (`docs/MILESTONES.md`) and never add product behaviour ahead of its milestone.
+You are working in **Quad**, a multi-tenant collaborative pixel-canvas platform (Rutgers Quad = tenant #1, **config only**). This file is the entry point for engineering work. **The system is built and merged to `main`:** the `@quad/*` packages, the `apps/api` and `apps/web` apps, the realtime/auth/moderation/archive/cooldown subsystems, the CI gates, and a deployable full-stack compose + edge proxy. Continue **milestone-by-milestone against the corpus** (`docs/MILESTONES.md`); keep docs in lockstep and never add product behaviour ahead of its milestone.
 
 ## Read order (every task)
 1. **`process/engineering-rules.md`** — the rules every engineer follows.
@@ -14,7 +14,7 @@ You are working in **Quad**, a multi-tenant collaborative pixel-canvas platform 
 - **No fabricated verification** — claims need commands + real results.
 - **No `git commit`/merge unless explicitly asked.**
 - **No secrets / no production data.**
-- **No product behaviour ahead of its milestone** — the foundation is built; product features follow `docs/MILESTONES.md`.
+- **No product behaviour ahead of its milestone** — the system is built; further work follows `docs/MILESTONES.md`.
 
 ## Role selection guide
 - Planning/sequencing → `process/planner-guidelines.md` · Architecture/ADRs → `process/architect-guidelines.md`

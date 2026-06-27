@@ -14,7 +14,7 @@ Conventions for **moderation action specs**. Conforms to `docs/MODERATION.md`, `
   - **Reversal/appeal posture** — actions reversible; prior audit retained.
 - **Same-PR updates:** `@quad/core` (compensating event types) + `docs/MODERATION.md`/`docs/EVENT_SOURCING.md` + this spec.
 - **Tests/evidence:** permission; atomic audit; compensating-event correctness; no-hard-delete; sanitized replay; tenant isolation.
-- **Stop conditions:** **moderation/audit changes are stop conditions** (ADR-0009 if architectural). **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** **moderation/audit changes are stop conditions** (ADR-0009 if architectural).
 
 ## Document Control
 - **Path:** `specs/moderation/README.md` · **Template:** `templates/moderation-action-spec.md` · **Depends on:** `MODERATION`, `EVENT_SOURCING`, `SECURITY`, `ARCHIVES`. · **Next:** `specs/testing/README.md`.

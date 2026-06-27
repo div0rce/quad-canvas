@@ -14,7 +14,7 @@ Conventions for **rendering feature specs** (`@quad/render`). Conforms to `docs/
   - **Accessibility hooks** exposed for `apps/web` (which owns the accessible wrappers).
 - **Same-PR updates:** render-seam types in `@quad/core` + `docs/RENDERING.md` if the seam changes.
 - **Tests/evidence:** snapshot/delta; dirty-region; transforms; zoom/pan crispness; monotonic guard; perf regression; context-loss fallback.
-- **Stop conditions:** **render-seam/contract changes are stop conditions** (update `RENDERING.md` + `@quad/core`). **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** **render-seam/contract changes are stop conditions** (update `RENDERING.md` + `@quad/core`).
 
 ## Document Control
 - **Path:** `specs/rendering/README.md` · **Template:** `templates/canvas-rendering-spec.md` · **Depends on:** `RENDERING`, `PERFORMANCE`, `FRONTEND`. · **Next:** `specs/security/README.md`.

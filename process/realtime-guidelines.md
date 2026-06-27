@@ -1,9 +1,9 @@
 # Realtime Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
 - **Lane:** `@quad/realtime` — WebSocket server/client helpers, Redis pub/sub fan-out, presence, reconnect behavior, WS contract tests.
-- **May touch (after `START IMPLEMENTATION`):** `@quad/realtime/**`, `specs/websockets/*`; consumes `@quad/core` WS types; integrates with `apps/api`.
+- **May touch:** `@quad/realtime/**`, `specs/websockets/*`; consumes `@quad/core` WS types; integrates with `apps/api`.
 - **Must not touch without review:** `@quad/core` message *definitions* (coordinate with architect), `apps/api` domain logic, `@quad/db`.
 - **Source docs:** `docs/WEBSOCKETS.md`, `docs/EVENT_SOURCING.md` (ordering), `docs/SECURITY.md` (origin/auth), `docs/PERFORMANCE.md` (fan-out budget).
 - **Stop conditions:** WS message contract change; any attempt to accept authoritative writes over WS; auth/origin handshake change.

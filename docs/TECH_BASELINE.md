@@ -2,9 +2,9 @@
 
 > **This is the single source of truth for technology versions and ecosystem assumptions.** No other doc or code file may independently declare a major version. When a version assumption changes, it changes *here first*, and dependent docs are updated in the same PR.
 >
-> **Scope:** *major-version assumptions and ecosystem constraints only.* Exact, pinned versions (with patch levels and lockfile) are deferred to the future `package.json` files per package — created in Phase 4 as scaffolding and finalized at `START IMPLEMENTATION`. This document tells an implementer *which major to install and what to watch for*; `package.json` records *exactly what was installed*.
+> **Scope:** *major-version assumptions and ecosystem constraints only.* Exact, pinned versions (with patch levels) live in each package's `package.json` and the committed `pnpm-lock.yaml`. This document tells an implementer *which major to install and what to watch for*; `package.json` records *exactly what was installed*.
 >
-> **Verification status:** Next.js, Prisma, and Auth.js baselines were verified against current documentation via Context7 on **2026-06-23**. All other entries are stated from prior knowledge and **must be re-verified before implementation** (see §5). Everything in this file is an *assumption to be confirmed*, not a frozen contract.
+> **Verification status:** Next.js, Prisma, and Auth.js baselines were verified against current documentation via Context7 on **2026-06-23**; the rest were confirmed as the workspace was built. The installed versions of record are the `package.json` files + lockfile. Use §5 when **bumping a major** to re-check the constraints below.
 
 ---
 
@@ -204,7 +204,7 @@ Two principles:
 **Version assumption.** Modern **Docker Engine (28.x)** and **Compose v2** (the `docker compose` plugin, not legacy `docker-compose`). Multi-stage Dockerfiles per app; `.dockerignore` discipline.
 
 **Compatibility risks.**
-- ⚠️ **Docker is not installed on this machine** (`docker` not found) — required before any local-infra or integration testing; install before implementation.
+- **Docker** is required for local infra + integration testing (the compose Postgres/Redis the integration suite runs against, and the production image builds).
 - Apple Silicon vs amd64 image arch must match the deploy target (build multi-arch or pin platform).
 
 **Re-verify:** installed Engine/Compose versions; base-image tags for Node/Postgres/Redis.
@@ -225,9 +225,9 @@ Two principles:
 
 ---
 
-## 5. Re-Verification Checklist (before `START IMPLEMENTATION`)
+## 5. Major-Version Checklist (when bumping a major)
 
-Run this immediately before writing code; record results in the future `package.json` and, if any major shifts, update §2 here + open an ADR if a contract is affected.
+Run this before changing any major version below; reflect the result in the relevant `package.json` + lockfile, update §2 here in the same PR, and open an ADR if a contract is affected.
 
 - [ ] **Node:** confirm current Active LTS; install 22.12+ or 24 LTS locally; pin `.nvmrc` + `engines`. Stop using Node 26.
 - [ ] **Install Docker** (Engine + Compose v2) and verify `docker compose` works.
@@ -244,7 +244,7 @@ Run this immediately before writing code; record results in the future `package.
 
 - **Path:** `docs/TECH_BASELINE.md`
 - **Purpose:** The single authoritative source of technology major-version assumptions and ecosystem constraints for Quad; prevents version drift across the corpus and the future codebase.
-- **Dependencies:** `docs/PRODUCT.md` (drives which capabilities the stack must serve), `process/SPEC_PLAN.md` (standing rule §0.3). Depended on by every version-specific doc: `ARCHITECTURE`, `FRONTEND`, `BACKEND`, `DATABASE`, `DEPLOYMENT`, and all root config in Phase 4.
+- **Dependencies:** `docs/PRODUCT.md` (drives which capabilities the stack must serve), `process/SPEC_PLAN.md` (standing rule §0.3). Depended on by every version-specific doc: `ARCHITECTURE`, `FRONTEND`, `BACKEND`, `DATABASE`, `DEPLOYMENT`, and the root config.
 - **Acceptance checklist:** ☑ all 14 technologies covered ☑ major-version assumption per tech ☑ "why it belongs" per tech ☑ compatibility risks per tech ☑ re-verify-before-impl notes ☑ exact patch versions deferred to `package.json` ☑ Context7-verified entries dated ☑ Node-intersection constraint stated ☑ no app code / package files created.
 - **Open questions:** Auth.js Fastify-vs-Next integration path (→ `AUTHENTICATION.md`/`ADR-0006`); Redis vs Valkey (→ `DEPLOYMENT.md`); Postgres major + host (→ `DEPLOYMENT.md`/`ADR-0010`).
 - **Next recommended:** `docs/PRODUCT.md`.

@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/testing/<feature-or-milestone>.md. Reusable test plan. -->
 # Test Plan — `<feature-or-milestone>`
 
-> Reminders: **tests before claims** (commands + results) · **critical subsystems never manual-only** · **integration uses real Postgres/Redis** · **no production data / no fabricated results** · **no impl before `START IMPLEMENTATION`**. Conforms to `TESTING.md`.
+> Reminders: **tests before claims** (commands + results) · **critical subsystems never manual-only** · **integration uses real Postgres/Redis** · **no production data / no fabricated results**. Conforms to `TESTING.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Testing · **Milestone:** `<M##>` · **Linked docs:** `TESTING.md`, `<spec>`
 

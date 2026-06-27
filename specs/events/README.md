@@ -13,7 +13,7 @@ Conventions for **event-sourcing event specs**. Conforms to `docs/EVENT_SOURCING
   - **Projection/replay/archive effects must be specified** (incl. sanitized-public replay).
 - **Same-PR updates:** `@quad/core` event types + `docs/EVENT_SOURCING.md` + this spec.
 - **Tests/evidence:** append-only; ordering; idempotency; projection correctness; rebuild determinism; schema-version compatibility.
-- **Stop conditions:** **changing event semantics is a stop condition** (ADR if architectural). **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** **changing event semantics is a stop condition** (ADR if architectural).
 
 ## Document Control
 - **Path:** `specs/events/README.md` · **Template:** `templates/domain-event-spec.md` · **Depends on:** `EVENT_SOURCING`, `DATABASE`, `REPLAY`, `ARCHIVES`, `MODERATION`, `@quad/core`. · **Next:** `specs/ui/README.md`.

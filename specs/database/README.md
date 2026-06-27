@@ -14,7 +14,6 @@ Conventions for **schema/migration specs**. Conforms to `docs/DATABASE.md`, `doc
   - **The event log is append-only** — no destructive migration on it.
 - **Same-PR updates:** `docs/DATABASE.md` + this spec (+ `@quad/db` schema at implementation).
 - **Tests/evidence:** migration up/down; expand/contract safety; tenant isolation; projection-rebuild if event/projection touched.
-- **Stop conditions:** any data-loss/destructive-log risk → **stop + review**; **no implementation before `START IMPLEMENTATION`.**
-
+- **Stop conditions:** any data-loss/destructive-log risk → **stop + review**.
 ## Document Control
 - **Path:** `specs/database/README.md` · **Template:** `templates/database-migration-spec.md` · **Depends on:** `DATABASE`, `DEPLOYMENT`, `DISASTER_RECOVERY`. · **Next:** `specs/events/README.md`.

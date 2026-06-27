@@ -15,7 +15,7 @@ Conventions for **REST endpoint specs**. Conforms to `docs/API.md`, `docs/BACKEN
   - **No `DC3` in public/participant responses** (`DC2` only).
 - **Same-PR updates:** `@quad/core` DTOs + `docs/API.md` + this spec, together.
 - **Tests/evidence:** contract, route behavior, authz, tenant-isolation, idempotency, error-model, no-`DC3` (`docs/TESTING.md`).
-- **Stop conditions:** any contract change → stop + (ADR if architectural). **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** any contract change → stop + (ADR if architectural).
 
 ## Document Control
 - **Path:** `specs/api/README.md` · **Template:** `templates/api-endpoint-spec.md` · **Depends on:** `API`, `BACKEND`, `SECURITY`, `@quad/core`. · **Next:** `specs/websockets/README.md`.

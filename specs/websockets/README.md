@@ -14,7 +14,6 @@ Conventions for **WS message/event specs**. Conforms to `docs/WEBSOCKETS.md`, `d
   - **No `DC3`**; `DC2` only; presence = counts, not identities.
 - **Same-PR updates:** `@quad/core` message types + `docs/WEBSOCKETS.md` + this spec.
 - **Tests/evidence:** contract, subscription authz, tenant isolation, reconnect convergence, duplicate/out-of-order, no-`DC3`.
-- **Stop conditions:** new/changed message contract → stop + update; **no implementation before `START IMPLEMENTATION`.**
-
+- **Stop conditions:** new/changed message contract → stop + update.
 ## Document Control
 - **Path:** `specs/websockets/README.md` · **Template:** `templates/websocket-event-spec.md` · **Depends on:** `WEBSOCKETS`, `EVENT_SOURCING`, `SECURITY`, `@quad/core`. · **Next:** `specs/database/README.md`.

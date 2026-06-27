@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/ui/<Component>.md. Reusable UI component spec. -->
 # UI Component Spec — `<ComponentName>`
 
-> Reminders: **no business logic in React components** (orchestrate only) · **`DC2` only, never `DC3`** · types from `@quad/core`/`@quad/ui` · **no impl before `START IMPLEMENTATION`** · **stop, don't guess** on contract changes. Conforms to `FRONTEND.md`.
+> Reminders: **no business logic in React components** (orchestrate only) · **`DC2` only, never `DC3`** · types from `@quad/core`/`@quad/ui` · **stop, don't guess** on contract changes. Conforms to `FRONTEND.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Frontend · **Milestone:** `<M##>` · **Linked docs:** `FRONTEND.md`, `@quad/ui`
 

@@ -1,9 +1,9 @@
 # Testing Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
 - **Lane:** test strategy execution, the critical-subsystem matrix, test plans, fixtures, and **no-fabricated-results** enforcement.
-- **May touch (after `START IMPLEMENTATION`):** test suites across packages, `@quad/testing`, `specs/testing/*`, `docs/TESTING.md`.
+- **May touch:** test suites across packages, `@quad/testing`, `specs/testing/*`, `docs/TESTING.md`.
 - **Must not touch without review:** production code beyond what a test needs (coordinate with the owning lane); contracts.
 - **Source docs:** `docs/TESTING.md`, `docs/PERFORMANCE.md`, `docs/SECURITY.md`, `docs/REVIEW_PROCESS.md`.
 - **Stop conditions:** a touched critical subsystem lacks matrix tests; a request to weaken/ skip a merge-blocking test; flaky-test masking.

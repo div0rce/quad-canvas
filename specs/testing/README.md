@@ -15,7 +15,7 @@ Conventions for **test-plan specs**. Conforms to `docs/TESTING.md`, `docs/PERFOR
   - **Merge-blocking criteria** stated explicitly.
 - **Same-PR updates:** `docs/TESTING.md` if a layer/gate changes; the plan ships with the feature/milestone PR.
 - **Tests/evidence:** the plan *is* the evidence contract — commands + expected outcomes + which failures block merge.
-- **Stop conditions:** a touched critical subsystem lacking matrix tests → **block/stop**. **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** a touched critical subsystem lacking matrix tests → **block/stop**.
 
 ## Document Control
 - **Path:** `specs/testing/README.md` · **Template:** `templates/test-plan-spec.md` · **Depends on:** `TESTING`, `PERFORMANCE`, `SECURITY`, `REVIEW_PROCESS`. · **Next:** `process/*` role guides batch.

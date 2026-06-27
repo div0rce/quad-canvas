@@ -6,7 +6,7 @@
 
 *One student. One pixel. One cooldown. One semester-long work of art.*
 
-**Status:** 🏗️ Foundation in place — the specification corpus is complete and the workspace foundation (`@quad/*` packages, `apps/web` / `apps/api` shells, `@quad/testing` harness) is built and merged. Product features build next, milestone-by-milestone; see [Project Status](#project-status).
+**Status:** ✅ Built and merged to `main` — the full stack (`@quad/*` packages; the `apps/api` and `apps/web` apps with placement, realtime + presence, auth, moderation, archives/replay, profiles/leaderboards, dynamic cooldown; M50s ops hardening; the CI gates; and a deployable full-stack compose + edge proxy). Milestone groups **G1–G5 have passed** and all MVP acceptance criteria are met. See [Project Status](#project-status).
 
 </div>
 
@@ -100,8 +100,8 @@ The intended technology stack is below. **Exact major versions and ecosystem ass
 ```text
 quad-canvas/
 ├── apps/
-│   ├── web/                 # Next.js client (canvas UI, profiles, replay) — scaffolding until START IMPLEMENTATION
-│   └── api/                 # Fastify server (REST + WS, event store, projector, cron) — scaffolding until START IMPLEMENTATION
+│   ├── web/                 # Next.js client — canvas + pan/zoom, placement, auth, profiles, leaderboards, archives, replay player
+│   └── api/                 # Fastify server — REST + WS, event store, projector, auth, moderation, archives, cooldown
 ├── packages/
 │   ├── core/                # @quad/core — canonical domain types, DTOs, WS schemas, domain events, cooldown + tenant config types
 │   ├── db/                  # @quad/db — Prisma schema, client, migrations, repositories
@@ -160,7 +160,7 @@ The full governance model, per-role guide instructions, and playbook formats liv
 
 ## Getting Started
 
-The foundation is runnable today. (Foundation only — product features build per [`docs/MILESTONES.md`](docs/MILESTONES.md); their developer workflow activates as those milestones land.)
+The full stack is runnable today — `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build` brings up Postgres + Redis + migrate + API + web + the edge proxy. Further work follows [`docs/MILESTONES.md`](docs/MILESTONES.md), one milestone per PR.
 
 ```bash
 # 1. Prerequisites: Node 22 + pnpm 10 + Docker (see docs/TECH_BASELINE.md)
@@ -187,14 +187,18 @@ docker compose down
 
 ## Project Status
 
-The specification corpus is **complete** and the **workspace foundation is built and merged to `main`**. The build follows a deliberate, spec-driven sequence so product features proceed milestone-by-milestone without loss of architectural context:
+The specification corpus is **complete** and the **product is built and merged to `main`**, end-to-end and verified:
 
-1. **Specification corpus — complete**: product, architecture, and engineering-process docs; specs, templates, role guides, ADRs; the cross-corpus consistency audit and the first foundation tasks.
-2. **Workspace foundation — built & merged**: pnpm/Turborepo workspace, strict TypeScript, lockfile-based CI (`verify`); `@quad/core` / `@quad/config` / `@quad/db` + leaf packages; `apps/api` (Fastify health shell) and `apps/web` (Next tenant shell); and the `@quad/testing` local integration harness (Docker Postgres/Redis).
-3. **Next — foundation checkpoint (G1)**: verify the foundation end-to-end before product milestones begin (see [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md)).
-4. **Then — product milestones**: canvas, event sourcing, cooldown, auth, WebSockets, moderation, and derived features — each built against the corpus.
+| Area | State |
+| --- | --- |
+| Corpus | Complete — product/architecture/process docs, specs, templates, role guides, ADRs, consistency audit |
+| Packages & apps | `@quad/*` packages; `apps/api` (REST + WS, event store, projector, auth, moderation, archives, cooldown) and `apps/web` (canvas + pan/zoom, placement, auth, profiles, leaderboards, archives, replay player) |
+| Checkpoints | **G1–G5 passed**; all MVP acceptance criteria (`P-AC-1…13`) met and verified |
+| Quality gates | CI `verify`: security audit · migration-safety · lint · typecheck · unit · build · integration (real Postgres/Redis) · load gate |
+| Deploy | Reproducible full-stack `docker-compose.prod.yml` + edge proxy, verified end-to-end; backup/restore drill |
+| Remaining | `LG-9` (legal/ToS/university approval) and a live cloud deployment — both external/organizational |
 
-**Product feature code is built milestone-by-milestone ([`docs/MILESTONES.md`](docs/MILESTONES.md)); no product behaviour is added ahead of its milestone.** Track progress in [`process/SPEC_PLAN.md`](process/SPEC_PLAN.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), and [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md).
+Further work follows [`docs/MILESTONES.md`](docs/MILESTONES.md) one milestone per PR, docs in lockstep. Live current state: [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) §4 and [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md).
 
 ---
 

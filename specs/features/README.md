@@ -10,7 +10,6 @@ Conventions for **product/application feature specs**. Conforms to `docs/PRODUCT
 - **Same-PR updates:** any contract touched updates `@quad/core` + the owning doc/spec; new behavior updates docs (`PROC-INV-2`).
 - **Tests/evidence:** acceptance criteria map to tests (`docs/TESTING.md` matrix); commands + results required.
 - **Stop conditions:** **product ambiguity is a stop condition** — clarify before building; never invent requirements; check `NON_GOALS.md` anti-backdoor rules.
-- **No implementation before `START IMPLEMENTATION`.**
 
 ## Document Control
 - **Path:** `specs/features/README.md` · **Template:** `templates/feature-spec.md` · **Depends on:** `PRODUCT`, `PRINCIPLES`, `NON_GOALS`, `MILESTONES`. · **Next:** `specs/api/README.md`.

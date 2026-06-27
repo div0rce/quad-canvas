@@ -4,7 +4,7 @@
 >
 > **Altitude:** sequence + acceptance shape. **No** code, package files, templates, specs, or scaffolding (Phase 4 + `START IMPLEMENTATION` own those). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1).
 >
-> **Hard gate:** these milestones execute **only after `START IMPLEMENTATION`** (`MILESTONE-INV-6`). **Status:** the signal has been given, the **foundation group (M0–M9) is built and merged to `main`**, and the **G1 foundation checkpoint has PASSED** (`docs/CHECKPOINTS.md` §4a). Product groups begin at **M10** (gate **G2**): the **backend placement loop (M10–M12)** has landed — server-authoritative placement → `PixelPlaced` event → projection, with the read path — verified by Docker-backed integration tests. **G2 is not yet reached** (WS/render/frontend, M14–M19, remain; see `docs/CHECKPOINTS.md` §4b).
+> **Status:** the sequence is **built and merged to `main`** — every milestone group is implemented and the checkpoints **G1–G5 have PASSED**, with all MVP acceptance criteria (`P-AC-1…13`) met and verified (`docs/CHECKPOINTS.md` §4, `docs/ACCEPTANCE_TRACEABILITY.md`). Remaining for full launch (**G6**): `LG-9` (legal/ToS/university approval) and a live cloud deployment — both external/organizational. This document remains the dependency-ordered map; further work follows it one milestone per PR.
 
 ---
 

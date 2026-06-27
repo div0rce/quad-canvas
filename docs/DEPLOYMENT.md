@@ -2,7 +2,7 @@
 
 > **This document owns deployment: environment strategy, topology, CI/CD shape, secrets posture, migrations, release/rollback, tenant onboarding, and infrastructure assumptions.** It conforms to all completed docs and does **not** rewrite their contracts.
 >
-> **Altitude:** topology + strategy. **No** real Dockerfiles/compose/CI/env/IaC/migration files (Phase 4 scaffolds; implementation pins). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1). The deployment **provider** is deferred to **`ADR-0010`**.
+> **Altitude:** topology + strategy. **No** real Dockerfiles/compose/CI/env/IaC/migration files in this doc — those live in the repo (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.prod.yml`, `deploy/Caddyfile`, `.github/workflows/ci.yml`). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1). The deployment **provider** is deferred to **`ADR-0010`**.
 
 ---
 

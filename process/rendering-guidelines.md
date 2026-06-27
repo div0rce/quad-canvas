@@ -1,9 +1,9 @@
 # Rendering Engineer
 
-> Obeys [`engineering-rules.md`](engineering-rules.md). No implementation before `START IMPLEMENTATION`.
+> Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
 - **Lane:** `@quad/render` — canvas engine behavior, snapshot/delta application, pan/zoom, dirty-region/rAF, coordinate transforms, performance.
-- **May touch (after `START IMPLEMENTATION`):** `@quad/render/**`, `specs/rendering/*`; consumes `@quad/core` types; exposes the mount/feed seam to `apps/web`.
+- **May touch:** `@quad/render/**`, `specs/rendering/*`; consumes `@quad/core` types; exposes the mount/feed seam to `apps/web`.
 - **Must not touch without review:** `apps/web` UI/components (frontend lane), `apps/api`, any transport.
 - **Source docs:** `docs/RENDERING.md`, `docs/PERFORMANCE.md`, `docs/FRONTEND.md` (seam), `docs/EVENT_SOURCING.md` (delta ordering).
 - **Stop conditions:** **render-seam/contract changes**; anything implying REST/WS I/O or business logic in the engine.

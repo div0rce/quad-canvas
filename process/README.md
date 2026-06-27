@@ -1,6 +1,6 @@
 # `process/` — Quad Engineering Operating System
 
-This folder is how engineering coding operates inside Quad. It turns the doc corpus into safe, milestone-by-milestone implementation. **No application implementation has begun — the `START IMPLEMENTATION` gate is still closed.**
+This folder is how engineering coding operates inside Quad. It turns the doc corpus into safe, milestone-by-milestone implementation. **The foundation and the MVP product are built and merged to `main`;** further work follows the same milestone-by-milestone discipline, one milestone per PR.
 
 ## Layout
 - **`engineering-rules.md`** — rules **every** engineer follows (read first).
@@ -18,8 +18,8 @@ Pick the role whose **lane** owns the files/packages the task touches (e.g., `ap
 - **`docs/REVIEW_PROCESS.md`** — the review gate `reviewer-engineer` enforces.
 - **`templates/`** + **`specs/`** — what engineers author against.
 
-## Standing gate
-**No implementation before `START IMPLEMENTATION`.** Until then, engineers author docs/specs/scaffolding only — never app code.
+## Standing discipline
+**Build against the corpus, one milestone per PR.** Docs move with the change in the same PR; verify with real commands and results; never add product behaviour ahead of its milestone.
 
 ## Document Control
 - **Path:** `process/README.md` · **Depends on:** `ENGINEERING_WORKFLOW`, `MILESTONES`, `REVIEW_PROCESS`, `SPEC_PLAN`. · **Next:** `process/engineering-rules.md`.

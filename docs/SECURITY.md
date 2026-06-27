@@ -236,7 +236,7 @@ Quad holds verified-student identity, an immutable history, and a fairness guara
 
 ## 17. Secrets & Configuration Posture
 
-- **No secrets in the repo** — ever; only a documented `.env.example` (no real values) is added later (Phase 4 scaffolding).
+- **No secrets in the repo** — ever; only documented example env files with no real values (`.env.example`, `.env.prod.example`).
 - **Rotation posture** — secrets/credentials are rotatable; session-signing/secret rotation supported without data loss.
 - **Environment separation** — distinct secrets/config per local/staging/prod; no prod secrets in dev.
 - Concrete secrets manager/provider → `DEPLOYMENT.md`.

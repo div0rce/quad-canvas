@@ -14,7 +14,7 @@ Conventions for **UI component specs**. Conforms to `docs/FRONTEND.md`, `docs/RE
   - **Canvas-adjacent UI must avoid per-pixel React re-render** (feed `@quad/render`, not React state).
 - **Same-PR updates:** shared types in `@quad/core`/`@quad/ui` + `docs/FRONTEND.md` if a UI contract changes.
 - **Tests/evidence:** component tests; a11y (axe + keyboard); privacy (`DC2` only); render-seam contract (without engine internals).
-- **Stop conditions:** needs a new shared contract/DTO → stop + update core/docs. **No implementation before `START IMPLEMENTATION`.**
+- **Stop conditions:** needs a new shared contract/DTO → stop + update core/docs.
 
 ## Document Control
 - **Path:** `specs/ui/README.md` · **Template:** `templates/ui-component-spec.md` · **Depends on:** `FRONTEND`, `RENDERING`, `CODE_QUALITY`. · **Next:** `specs/rendering/README.md`.
