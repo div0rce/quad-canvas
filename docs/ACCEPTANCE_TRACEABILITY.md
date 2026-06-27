@@ -13,7 +13,7 @@
 | `P-AC-2` | A placement updates all viewers in real time | ✅ | WS fan-out of `PixelPlaced`; "fan-out" WS integration test | — |
 | `P-AC-3` | Cooldown identical for all tenant users **and always within 5–20 min** | ✅ | Global per-canvas cooldown; the production composition **clamps** the configured fixed value into 5–20 (`clampCooldownMs`, unit-tested), and the dynamic path is bounded by construction | — |
 | `P-AC-4` | Cooldown moves with load **and changes gradually (no oscillation)** | ◑ | Load-responsive + clamped (`dynamicCooldownMs`, monotonic; integration) | The 60-s fixed window resets abruptly (can step/oscillate) — add smoothing (sliding window / EWMA) |
-| `P-AC-5` | **Quick-look** handle+time, **full history on click**; email never shown | ◑ | Full ordered history on click (inspector, sanitized DC2; integration) | The separate lightweight **quick-look** (handle+time on hover/preview) is not built |
+| `P-AC-5` | Quick-look handle+time, full history on click; email never shown | ✅ | **Hover quick-look** (the cell's current handle · time, debounced, DC2; touch users get the same via tap→inspector) + full ordered history on click (inspector, sanitized); email never shown (`quickLookLabel` unit-tested) | — |
 | `P-AC-6` | Profile shows term + lifetime stats and a heatmap | ✅ | Profile returns lifetime + current-term counts + a **per-day contribution histogram**; the page shows the stats + a **contribution heatmap** (`heatLevel` buckets, unit-tested) (integration) | — |
 | `P-AC-7` | Leaderboards rank real attributable activity; resist gaming | ✅ | Rank by count; banned/handle-less omitted; allow-listed category/window (integration) | — |
 | `P-AC-8` | Term-end freeze + archive (final image, stats, replay), browsable | ✅ | Freeze/archive; downloadable PNG final image; faithful replay; **term statistics** (`/archives/{term}/stats`: totals, participants, DC2 top placers) on the archive page; browsable (integration) | — |
@@ -25,11 +25,11 @@
 
 ## Summary
 
-**10 of 13 fully met and verified** (`P-AC-1, 2, 3, 6, 7, 8, 9, 10, 12, 13`). **3 partial** — core
-implemented + verified, with one named sub-capability outstanding each (cooldown smoothing, quick-look
-preview, mobile pinch-zoom/drag-pan).
+**11 of 13 fully met and verified** (`P-AC-1, 2, 3, 5, 6, 7, 8, 9, 10, 12, 13`). **2 partial** — core
+implemented + verified, with one named sub-capability outstanding each (cooldown smoothing, mobile
+pinch-zoom/drag-pan).
 
-**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The three partials above are its exact
+**`LG-1` is NOT yet passed** — it requires *all* `P-AC-1…13`. The two partials above are its exact
 remaining work; each is tracked as its own follow-up milestone.
 
 ---
