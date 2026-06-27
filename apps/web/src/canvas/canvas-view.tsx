@@ -1,20 +1,29 @@
 'use client';
 
-// apps/web — live canvas view. Drives the framework-agnostic CanvasClient and paints the buffer's
-// dirty regions to a <canvas>. View/read only — placement interaction is gated until auth (M20).
-import { useEffect, useRef } from 'react';
+// apps/web — live canvas view + placement. Drives the framework-agnostic CanvasClient and paints the
+// buffer's dirty regions to a <canvas>. Placement is a TWO-STEP confirm: click a cell to select it,
+// then pick a color and Confirm — the write POSTs to the server (the authoritative path) with the
+// session cookie and an idempotency key, and the result returns as a WS delta. Anonymous users get a
+// clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPaletteByKey } from '@quad/config';
 import type { CanvasBuffer } from '@quad/render';
 import { EMPTY_CELL } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
+import { cellFromPoint, placementStatusMessage } from './placement';
 
 // The API must be reached at the TENANT host so it resolves the tenant from the Host header.
-// Default '' = same-origin (relative URLs) preserves the browser's tenant host. A cross-origin
-// NEXT_PUBLIC_API_BASE only works if it forwards the tenant host (proxy/rewrite).
+// Default '' = same-origin (relative URLs) preserves the browser's tenant host.
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
+
+interface Dims {
+  readonly width: number;
+  readonly height: number;
+  readonly palette: string;
+}
 
 function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKey: string): void {
   if (!canvas) return;
@@ -32,21 +41,156 @@ function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKe
 
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const clientRef = useRef<CanvasClient | null>(null);
+  const [dims, setDims] = useState<Dims | null>(null);
+  const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  const [pendingColor, setPendingColor] = useState<number | null>(null);
+  const [status, setStatus] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
     const client = new CanvasClient({
-      fetchMeta: async () => (await fetch(`${API_BASE}/api/v1/canvas/current`)).json() as Promise<dto.CanvasMetaResponse>,
+      fetchMeta: async () => {
+        const meta = (await (await fetch(`${API_BASE}/api/v1/canvas/current`)).json()) as dto.CanvasMetaResponse;
+        setDims({ width: meta.width, height: meta.height, palette: meta.palette });
+        return meta;
+      },
       fetchSnapshot: async () =>
         (await fetch(`${API_BASE}/api/v1/canvas/current/snapshot`)).json() as Promise<dto.CanvasSnapshotResponse>,
       openSocket: () => new WebSocket(`${wsBase}/api/v1/canvas/current/ws`) as unknown as SocketLike,
       onUpdate: (buffer, ctx) => paint(canvasRef.current, buffer, ctx.palette),
     });
+    clientRef.current = client;
     void client.start();
     return () => {
       client.stop();
+      clientRef.current = null;
     };
   }, []);
 
-  return <canvas ref={canvasRef} aria-label="Live canvas" style={{ imageRendering: 'pixelated', width: '100%' }} />;
+  const onCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !dims || submitting) return; // ignore clicks while a placement is in flight
+      const cell = cellFromPoint(canvas.getBoundingClientRect(), event.clientX, event.clientY, dims.width, dims.height);
+      if (cell) {
+        setSelected(cell); // step 1 — select the cell
+        setPendingColor(null);
+        setStatus('');
+      }
+    },
+    [dims, submitting],
+  );
+
+  const confirm = useCallback(async () => {
+    if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
+    setSubmitting(true);
+    setStatus('Placing…');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        credentials: 'include', // send the session cookie; anonymous → 401
+        body: JSON.stringify({ at: selected, color: pendingColor }),
+      });
+      if (res.status === 201) {
+        // Apply the AUTHORITATIVE result to the buffer so the pixel shows even if the WS is mid-
+        // reconnect; the seq watermark dedupes the matching live delta when it arrives.
+        const result = (await res.json().catch(() => null)) as dto.PlacePixelResultResponse | null;
+        const buffer = clientRef.current?.buffer;
+        if (result && buffer) {
+          buffer.applyDelta({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq });
+          paint(canvasRef.current, buffer, dims?.palette ?? 'default');
+        }
+        setStatus(placementStatusMessage(201));
+        setSelected(null);
+        setPendingColor(null);
+      } else {
+        const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
+        setStatus(placementStatusMessage(res.status, body?.error?.code, body?.error?.message));
+      }
+    } catch {
+      setStatus('Network error — could not reach the server.');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selected, pendingColor, submitting, dims]);
+
+  const cancel = useCallback(() => {
+    setSelected(null);
+    setPendingColor(null);
+    setStatus('');
+  }, []);
+
+  const palette = dims ? getPaletteByKey(dims.palette) : null;
+
+  return (
+    <div>
+      <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+        <canvas
+          ref={canvasRef}
+          onClick={onCanvasClick}
+          aria-label="Live canvas — click a cell to place a pixel"
+          style={{ imageRendering: 'pixelated', width: '100%', display: 'block', cursor: dims ? 'crosshair' : 'default' }}
+        />
+        {selected && dims && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: `${(selected.x / dims.width) * 100}%`,
+              top: `${(selected.y / dims.height) * 100}%`,
+              width: `${100 / dims.width}%`,
+              height: `${100 / dims.height}%`,
+              outline: '2px solid #CC0033',
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+      </div>
+
+      {selected && (
+        <div
+          role="dialog"
+          aria-label="Place a pixel"
+          style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}
+        >
+          <span>
+            Cell ({selected.x}, {selected.y}):
+          </span>
+          <div role="group" aria-label="Choose a color" style={{ display: 'flex', gap: '0.25rem' }}>
+            {palette?.colors.map((c) => (
+              <button
+                key={c.index}
+                type="button"
+                aria-label={c.name}
+                aria-pressed={pendingColor === c.index}
+                disabled={submitting}
+                onClick={() => setPendingColor(c.index)}
+                style={{
+                  width: 28,
+                  height: 28,
+                  background: c.hex,
+                  border: pendingColor === c.index ? '3px solid #000' : '1px solid #999',
+                  cursor: 'pointer',
+                }}
+              />
+            ))}
+          </div>
+          <button type="button" onClick={() => void confirm()} disabled={pendingColor === null || submitting}>
+            {submitting ? 'Placing…' : 'Confirm'}
+          </button>
+          <button type="button" onClick={cancel} disabled={submitting}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: '0.5rem 0 0' }}>
+        {status}
+      </p>
+    </div>
+  );
 }
