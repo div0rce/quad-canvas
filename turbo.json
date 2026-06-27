@@ -21,6 +21,7 @@
     },
     "test:integration": {
       "dependsOn": ["^build", "db:generate"],
+      "passThroughEnv": ["DATABASE_URL", "REDIS_URL"],
       "cache": false
     },
     "test:e2e": {
