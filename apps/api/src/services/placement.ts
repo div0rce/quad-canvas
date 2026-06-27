@@ -12,6 +12,7 @@ import { getPaletteByKey } from '@quad/config';
 import type { PlacementRepository, PlacedRow } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import { dynamicCooldownMs, type CooldownConfig } from './cooldown.js';
+import type { RateCounter } from './rate-counter.js';
 
 /** Window over which the recent placement rate (per minute) is measured for the dynamic cooldown. */
 const LOAD_WINDOW_MS = 60_000;
@@ -23,6 +24,8 @@ export interface PlacementDeps {
   readonly cooldownMs: number;
   /** When set, the cooldown is computed from the recent placement rate (load-based, bounded). */
   readonly dynamicCooldown?: CooldownConfig;
+  /** Fast-path load source for the dynamic cooldown (Redis window counter); else the DB count. */
+  readonly rateCounter?: RateCounter;
   /** Injectable clock (tests). */
   readonly now: () => Date;
   /** Fan-out bus — a new placement is published so WS subscribers (any node) receive it. */
@@ -122,8 +125,10 @@ export async function placePixel(
   // idempotency-replayed request returns the floor above, since it short-circuits before this.)
   let effectiveCooldownMs = deps.cooldownMs;
   if (deps.dynamicCooldown) {
-    const since = new Date(deps.now().getTime() - LOAD_WINDOW_MS);
-    const recentRatePerMin = await deps.repo.countRecentPlacements(canvas.id, since);
+    // Fast path: the Redis window counter when wired; otherwise the indexed DB count (fallback).
+    const recentRatePerMin = deps.rateCounter
+      ? await deps.rateCounter.recent(canvas.id)
+      : await deps.repo.countRecentPlacements(canvas.id, new Date(deps.now().getTime() - LOAD_WINDOW_MS));
     effectiveCooldownMs = dynamicCooldownMs(recentRatePerMin, deps.dynamicCooldown);
   }
 
@@ -148,6 +153,14 @@ export async function placePixel(
   }
   // Broadcast only genuinely-new placements (a duplicate replay was already broadcast originally).
   if (outcome.kind === 'placed') {
+    // Count this placement toward the rate fast-path (best-effort — load is an estimate, not truth).
+    if (deps.rateCounter) {
+      try {
+        await deps.rateCounter.record(canvas.id);
+      } catch {
+        // swallow — the counter is advisory; a failure must never fail the (committed) placement
+      }
+    }
     const broadcast: ws.PixelPlaced = {
       type: 'PixelPlaced',
       at: { x: outcome.row.x, y: outcome.row.y },

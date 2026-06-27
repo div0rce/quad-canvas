@@ -14,6 +14,7 @@ import { AuthService } from './auth/auth-service.js';
 import { RedisRateLimiter } from './rate-limit/rate-limiter.js';
 import type { ReadinessCheck } from './routes/health.js';
 import { createGracefulShutdown } from './shutdown.js';
+import { RedisRateCounter, type RateCounter } from './services/rate-counter.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -65,6 +66,16 @@ async function main(): Promise<void> {
     cleanups.push(async () => {
       await bus?.close();
     });
+    // Redis fast-path for the dynamic-cooldown load (offloads the per-placement DB count). Falls back
+    // to the indexed DB count when Redis is absent.
+    let rateCounter: RateCounter | undefined;
+    if (DYNAMIC_COOLDOWN && REDIS_URL) {
+      const rcRedis = new Redis(REDIS_URL);
+      cleanups.push(async () => {
+        await rcRedis.quit();
+      });
+      rateCounter = new RedisRateCounter(rcRedis);
+    }
     placement = {
       repo: createPlacementRepository(prisma),
       cooldownMs: COOLDOWN_MS,
@@ -79,6 +90,7 @@ async function main(): Promise<void> {
             },
           }
         : {}),
+      ...(rateCounter ? { rateCounter } : {}),
     };
     // Server-side sessions (Redis where available). The verification front-door that issues
     // sessions is a follow-on; until then this validates sessions only (none exist yet → 401).
