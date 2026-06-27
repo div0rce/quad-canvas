@@ -1,0 +1,14 @@
+# Build context excludes — node_modules and build outputs are regenerated in the image.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+**/coverage
+packages/db/src/generated
+.git
+.github
+**/.env
+**/.env.*
+**/*.log
+scratchpad
