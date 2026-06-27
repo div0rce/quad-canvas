@@ -313,6 +313,8 @@ export interface PlacementRepository {
   getPixel(canvasId: string, x: number, y: number): Promise<PixelRow | null>;
   /** All placed cells for the canvas plus the sequence high-water (the projection snapshot). */
   getSnapshot(canvasId: string): Promise<Snapshot>;
+  /** Reconstruct the projection as of a per-canvas `seq` by folding the event log (point-in-time replay). */
+  reconstructAt(canvasId: string, seq: number): Promise<Snapshot>;
   /** Cursor-paginated placement history for one cell (oldest→newest), DC2 attribution. */
   getPixelHistory(canvasId: string, x: number, y: number, query: HistoryQuery): Promise<HistoryPage>;
   /** The persisted result for an idempotency key (tenant-scoped), or null — for replay. */
@@ -555,6 +557,27 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       });
       const last = await prisma.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
       return { cells, seq: last?.seq ?? 0 };
+    },
+
+    async reconstructAt(canvasId, seq) {
+      // Fold the event log up to `seq` into the cell state — the same rules the projection applies:
+      // a PixelPlaced sets the cell; a PixelRolledBack reverts it (to its newColor, or clears it).
+      const events = await prisma.pixelEvent.findMany({
+        where: { canvasId, seq: { lte: seq } },
+        orderBy: { seq: 'asc' },
+        select: { x: true, y: true, type: true, newColor: true },
+      });
+      const cells = new Map<string, SnapshotCellRow>();
+      for (const e of events) {
+        const key = `${e.x},${e.y}`;
+        if (e.type === 'PixelPlaced' && e.newColor !== null) {
+          cells.set(key, { x: e.x, y: e.y, color: e.newColor });
+        } else if (e.type === 'PixelRolledBack') {
+          if (e.newColor !== null) cells.set(key, { x: e.x, y: e.y, color: e.newColor });
+          else cells.delete(key);
+        }
+      }
+      return { cells: [...cells.values()], seq };
     },
 
     async getPixelHistory(canvasId, x, y, query) {

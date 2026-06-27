@@ -94,5 +94,26 @@ export function makeArchiveRoutes(repo: PlacementRepository): FastifyPluginAsync
       void reply.header('Cache-Control', CACHE); // immutable archive
       return reply.send(response);
     });
+
+    // Point-in-time replay: the archived canvas reconstructed as of `seq` (fold the event log).
+    app.get('/api/v1/archives/:term/at/:seq', async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const { term, seq } = request.params as { term: string; seq: string };
+      const seqNum = Number(seq);
+      if (!Number.isInteger(seqNum) || seqNum < 0) {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'seq must be a non-negative integer.');
+      }
+      const archive = await repo.findArchiveByTerm(request.tenant.id, term);
+      if (!archive) return err(reply, request, 404, 'NOT_FOUND', 'No archive for that term.');
+      const snap = await repo.reconstructAt(archive.id, seqNum);
+      const response: dto.CanvasSnapshotResponse = {
+        width: archive.width,
+        height: archive.height,
+        seq: snap.seq as domain.PerCanvasSequence,
+        cells: snap.cells.map((c) => ({ x: c.x, y: c.y, color: c.color as domain.ColorIndex })),
+      };
+      void reply.header('Cache-Control', CACHE); // immutable past term
+      return reply.send(response);
+    });
   };
 }
