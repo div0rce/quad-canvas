@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { ordinal } from './content-client';
+import { ordinal, heatLevel } from './content-client';
+
+describe('heatLevel', () => {
+  it('buckets a day count 0–4 relative to the busiest day', () => {
+    expect(heatLevel(0, 10)).toBe(0);
+    expect(heatLevel(1, 10)).toBe(1);
+    expect(heatLevel(5, 10)).toBe(2);
+    expect(heatLevel(10, 10)).toBe(4);
+  });
+
+  it('guards empty input', () => {
+    expect(heatLevel(3, 0)).toBe(0);
+    expect(heatLevel(-1, 10)).toBe(0);
+  });
+});
 
 describe('ordinal', () => {
   it('formats 1st/2nd/3rd/4th', () => {

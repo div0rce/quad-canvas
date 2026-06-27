@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { dto } from '@quad/core';
 import { fetchProfile } from '@/content/content-client';
+import { ContributionHeatmap } from '@/content/contribution-heatmap';
 
 export default function ProfilePage(): React.ReactElement {
   const params = useParams();
@@ -48,6 +49,8 @@ export default function ProfilePage(): React.ReactElement {
             <dt>Joined</dt>
             <dd>{new Date(data.joinedAt).toLocaleDateString()}</dd>
           </dl>
+          <h2 style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>Contributions</h2>
+          <ContributionHeatmap contributions={data.contributions} />
         </>
       )}
     </main>
