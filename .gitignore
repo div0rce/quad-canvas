@@ -2,10 +2,11 @@
 node_modules/
 .pnpm-store/
 
-# Environment / secrets (keep .env.example tracked)
+# Environment / secrets (keep example env files tracked)
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # Build / generated outputs
 dist/

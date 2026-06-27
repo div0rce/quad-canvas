@@ -1,0 +1,79 @@
+# Quad — production-shaped full-stack compose (API + datastores + one-shot migrate).
+# ----------------------------------------------------------------------------
+# A single-host reference deployment that proves the "build → migrate → deploy → smoke" shape
+# (DEPLOYMENT.md §7): the API image is built once, a one-shot `migrate` applies the additive
+# migration history, then `api` starts only after the datastores are healthy AND migrate succeeded.
+# Secrets are injected from the environment / a `.env` file (DEPLOY-INV-2) — copy `.env.prod.example`
+# to `.env.prod` and set real values; never commit it. Web (Next standalone) deployment is a follow-up.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# ----------------------------------------------------------------------------
+name: quad
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quad}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-quad}
+    volumes:
+      - quad_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quad} -d ${POSTGRES_DB:-quad}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8
+    # Persist (appendonly) so cooldown/session keys survive a restart (COOL-INV-12 — not improperly evicted).
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - quad_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: apply the additive migration history, then exit. The API waits for this to complete.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: build
+    command: ["pnpm", "--filter", "@quad/db", "run", "db:migrate:deploy"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      QUAD_DYNAMIC_COOLDOWN: ${QUAD_DYNAMIC_COOLDOWN:-1}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  quad_pg:
+  quad_redis:
