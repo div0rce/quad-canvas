@@ -42,6 +42,9 @@ export default function ModerationPage(): React.ReactElement {
   return (
     <main style={{ padding: '1rem', maxWidth: 640 }}>
       <h1>Moderation queue</h1>
+      <p>
+        <a href="/policy">Content policy ▸</a>
+      </p>
       {message && (
         <p role="status" aria-live="polite">
           {message}

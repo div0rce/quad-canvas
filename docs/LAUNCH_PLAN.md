@@ -40,6 +40,7 @@ Launch readiness is the conjunction of these dimensions. Each names its **owning
 ### 2.3 Content-policy dependency — *blocking; owner: tenant + product*
 - A written **content standard** defining what "offensive"/removable means must exist and be approved before public launch — moderation cannot be fair or defensible without it (resolves `P-Q-11`, `P-MOD`).
 - Reporting categories and moderator guidance derive from this policy.
+- **Artifact:** the written standard is **`docs/CONTENT_POLICY.md`** (prohibited categories, the proportionate audited action ladder, due process/appeals), and it is **available to moderators in-app at `/policy`** (linked from the moderator console). What remains for the gate is the tenant's **formal approval** of this baseline.
 - **Gate:** content policy approved by the tenant and visible to moderators (and, as appropriate, users). **No public launch without it.**
 
 ### 2.4 Analytics / replay / archive readiness — *owner: `ANALYTICS.md`, `REPLAY.md`, `ARCHIVES.md`*
