@@ -13,6 +13,7 @@ import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, placementStatusMessage } from './placement';
 import { ReportControl } from './report-control';
+import { PixelInspector } from './pixel-inspector';
 
 // The API must be reached at the TENANT host so it resolves the tenant from the Host header.
 // Default '' = same-origin (relative URLs) preserves the browser's tenant host.
@@ -48,6 +49,7 @@ export function CanvasView(): React.ReactElement {
   const [pendingColor, setPendingColor] = useState<number | null>(null);
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
 
   useEffect(() => {
     const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
@@ -105,8 +107,8 @@ export function CanvasView(): React.ReactElement {
           paint(canvasRef.current, buffer, dims?.palette ?? 'default');
         }
         setStatus(placementStatusMessage(201));
-        setSelected(null);
         setPendingColor(null);
+        setInspectorNonce((n) => n + 1); // keep the cell selected; refresh its history to show the placement
       } else {
         const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
         setStatus(placementStatusMessage(res.status, body?.error?.code, body?.error?.message));
@@ -188,6 +190,10 @@ export function CanvasView(): React.ReactElement {
           </button>
           <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
         </div>
+      )}
+
+      {selected && dims && (
+        <PixelInspector key={`${selected.x},${selected.y}:${inspectorNonce}`} x={selected.x} y={selected.y} palette={dims.palette} />
       )}
 
       <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: '0.5rem 0 0' }}>
