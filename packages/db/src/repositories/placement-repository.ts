@@ -631,18 +631,22 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async getSnapshot(canvasId) {
-      // Read the high-water seq BEFORE the cells (two statements, Read Committed). A placement that
-      // commits between them must not leave the watermark ahead of the cells, or a client resuming
-      // from the watermark would never receive that pixel's delta (lost pixel). With this order the
-      // cells always cover >= the watermark, so the client at worst re-applies an already-seen,
-      // seq-deduped delta.
-      const last = await prisma.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
-      const cells = await prisma.pixel.findMany({
-        where: { canvasId },
-        select: { x: true, y: true, color: true },
-        orderBy: [{ y: 'asc' }, { x: 'asc' }],
-      });
-      return { cells, seq: last?.seq ?? 0 };
+      // Read the cells and the high-water seq in ONE consistent snapshot (RepeatableRead) so the
+      // (cells, seq) pair can never skew under a concurrent placement: a watermark behind the cells
+      // would let a re-applied older WS delta regress a cell, and a watermark ahead of the cells would
+      // make a resuming client skip a pixel. A single MVCC snapshot rules out both.
+      return prisma.$transaction(
+        async (tx) => {
+          const last = await tx.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
+          const cells = await tx.pixel.findMany({
+            where: { canvasId },
+            select: { x: true, y: true, color: true },
+            orderBy: [{ y: 'asc' }, { x: 'asc' }],
+          });
+          return { cells, seq: last?.seq ?? 0 };
+        },
+        { isolationLevel: 'RepeatableRead' },
+      );
     },
 
     async reconstructAt(canvasId, seq) {
@@ -651,7 +655,9 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       // before its rollback. So fold the cell's FULL event log (a PixelPlaced pushes; a PixelRolledBack
       // pops the most recent survivor), leaving per cell the placements that were never moderated, then
       // show the latest survivor with seq <= the requested seq. Folding only up to `seq` would re-expose
-      // a placement that a later rollback removed (a moderation leak); this does not.
+      // a placement that a later rollback removed (a moderation leak); this does not. Loading the full
+      // log is O(events) per replay — projection checkpoints/keyframes for very long terms are the
+      // documented fold-efficiency follow-up (CHECKPOINTS.md G5).
       const events = await prisma.pixelEvent.findMany({
         where: { canvasId },
         orderBy: { seq: 'asc' },

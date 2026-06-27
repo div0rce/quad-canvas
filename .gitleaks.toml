@@ -1,18 +1,17 @@
-# Secret-scan config for the CI gate (see .github/workflows/ci.yml). Extends gitleaks' default rules
-# and allowlists the documented example/local-dev files, which hold placeholders (e.g.
-# "change-me-in-production") and local-only compose credentials, not real secrets.
+# Secret-scan config for the CI gate (see .github/workflows/ci.yml). Extends gitleaks' default rules.
+# Allowlisting is deliberately NARROW: only the documented example env files are path-exempt, and the
+# known local-dev placeholders are allowlisted by VALUE (regex) so a real secret accidentally added to
+# any deploy/CI file is still caught.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Example/local-dev files contain documented placeholders, not real secrets."
+description = "Documented example env files + known local-dev placeholder values (not real secrets)."
 paths = [
   '''\.env\.example$''',
   '''\.env\.prod\.example$''',
-  '''docker-compose\.ya?ml$''',
-  '''docker-compose\.prod\.ya?ml$''',
-  '''\.github/workflows/ci\.yml$''',
 ]
 regexes = [
   '''change-me-in-production''',
+  '''quad:quad@''',
 ]

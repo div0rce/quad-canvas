@@ -1152,8 +1152,9 @@ describe('archives (HTTP)', () => {
   it('point-in-time replay censors a moderated placement (no re-exposure before its rollback)', async () => {
     const s = await seed({ tenantId: 'ten_rutgers' });
     const t = { id: 'ten_rutgers' as const, palette: 'default' };
-    await placePixel(deps(0), principal(s), t, { x: 7, y: 7, color: 1, idempotencyKey: 'sanA' });
+    const a = await placePixel(deps(0), principal(s), t, { x: 7, y: 7, color: 1, idempotencyKey: 'sanA' });
     const b = await placePixel(deps(0), principal(s), t, { x: 7, y: 7, color: 4, idempotencyKey: 'sanB' }); // overwrites
+    expect(a.ok && b.ok).toBe(true); // setup must succeed, or the replay assertion below is meaningless
     const seqB = b.ok ? b.result.seq : 0;
     // A moderator rolls back (7,7): the color-4 placement is moderated content.
     const mod = await prisma.user.create({ data: { email: 'modsan@scarletmail.rutgers.edu', publicHandle: 'modsan', status: 'active' } });

@@ -149,10 +149,10 @@ The original audit's setup items are **resolved**:
 | M | The default compose logged the full auth token to stdout | **Fixed** — the mail transport is token-free by default; the dev token log is opt-in (`QUAD_LOG_MAIL_TOKEN`) |
 | N | Web responses carried no security headers | **Fixed** — `next.config.ts` sets X-Frame-Options / CSP `frame-ancestors` / nosniff / Referrer-Policy / Permissions-Policy / HSTS |
 | H | Secret scanning was missing in CI | **Fixed** — a pinned `gitleaks` scan gates every PR (`.gitleaks.toml` allowlists example/dev files) |
-| K | Idempotency is placement-only (`/reports`, `/moderation/actions` ignore `Idempotency-Key`) | **Open** — a retry writes a duplicate audit row (the status change itself is idempotent); needs a schema column. Tracked follow-up |
+| K | Idempotency is placement-only (`/reports`, `/moderation/actions` ignore `Idempotency-Key`) | **Open** — a retry writes a duplicate audit row (the status change itself is idempotent); needs an idempotency-key column on `report` / `moderation_actions` (as `pixel_events` already has). Tracked follow-up |
 | J | Auth uses a custom opaque-token session store, not Auth.js | **Open by choice** — the custom store is the deliberate implementation; `ADR-0006` to be updated to record it |
 
-Other hardening in the same pass: keyset pagination tie-breaks + malformed-cursor safety (`listReports`/`listRoster`/`listArchives`), snapshot watermark ordering (no lost pixel on resume), coordinate/seq bounds checks (no Int-overflow 500s), idempotent WS cleanup + protocol-level liveness, blank `HOST`/`PORT` env safety, and frontend fetch/timer/sign-out hardening.
+Other hardening in the same pass: compound `(createdAt, id)` keyset cursors with malformed-cursor safety (`listReports`/`listRoster`/`listArchives`), a consistent-snapshot (`RepeatableRead`) `getSnapshot` so the watermark and cells can't skew (no lost/regressed pixel on resume), coordinate/seq bounds checks (no Int-overflow 500s), idempotent WS cleanup + protocol-level ping/pong liveness, blank `HOST`/`PORT` env safety, and frontend fetch/timer/sign-out hardening.
 
 **No blocking contradictions** for the current build. These drift items, plus `ADR-0010` (provider), `LG-9` (legal), and the live deployment, are the open work toward launch.
 

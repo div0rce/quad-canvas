@@ -56,6 +56,7 @@ async function main(): Promise<void> {
   let sessionStore: SessionStore | undefined;
   let sessionRedis: Redis | undefined;
   let authService: AuthService | undefined;
+  let mailNotDelivered = false; // prod with no real provider → warn (links aren't delivered)
   const readinessChecks: ReadinessCheck[] = [];
   const cleanups: Array<() => Promise<void>> = [];
   if (DATABASE_URL) {
@@ -122,13 +123,16 @@ async function main(): Promise<void> {
     // Verification front-door: tokens share the session Redis (distinct key prefix). The mail
     // transport is a no-op logger by default — production wires the real provider (B6/SMTP).
     const verifications = sessionRedis ? new RedisVerificationStore(sessionRedis) : new InMemoryVerificationStore();
-    // Mail transport. SECURE DEFAULT: never log the verification token (a bearer credential that alone
-    // mints a session). The token-logging dev transport is opt-in only (QUAD_LOG_MAIL_TOKEN=1, for
-    // local flows with no provider); otherwise use the token-free transport. Production wires B6/SMTP
-    // via this same MailTransport seam.
+    // Mail transport. The verification token is a bearer credential (it alone mints a session), so it
+    // must never reach production logs. Log it ONLY outside production (dev needs it to complete the
+    // local flow with no provider) or on an explicit opt-in; in production with no real provider, use
+    // the token-free transport AND warn that links aren't delivered (no silent "success"). Production
+    // wires B6/SMTP via this same MailTransport seam.
+    const isProd = process.env['NODE_ENV'] === 'production';
+    const logToken = !isProd || process.env['QUAD_LOG_MAIL_TOKEN'] === '1';
     const logAuth = (m: string): void => void process.stdout.write(`[auth] ${m}\n`);
-    const mail =
-      process.env['QUAD_LOG_MAIL_TOKEN'] === '1' ? new LogMailTransport(logAuth) : new NullMailTransport(logAuth);
+    const mail = logToken ? new LogMailTransport(logAuth) : new NullMailTransport(logAuth);
+    mailNotDelivered = !logToken; // no real SMTP is wired here; the null transport doesn't deliver
     authService = new AuthService({
       verifications,
       mail,
@@ -160,6 +164,11 @@ async function main(): Promise<void> {
   });
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
+  }
+  if (mailNotDelivered) {
+    app.log.warn(
+      'No mail provider is configured: email verification links are NOT delivered. Wire SMTP/B6 before launch.',
+    );
   }
 
   // Drain in-flight requests (app.close) before closing the DB/Redis/bus; a watchdog forces exit if
