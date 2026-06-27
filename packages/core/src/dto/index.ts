@@ -185,6 +185,13 @@ export interface CanvasLifecycleCommand {
   readonly status: string;
 }
 
+/** Admin: create a new term canvas. Becomes the active canvas (any current active one is frozen). */
+export interface CreateCanvasCommand {
+  readonly term: string;
+  readonly width: number;
+  readonly height: number;
+}
+
 /** One ranked entry in a leaderboard (DC2 only). */
 export interface LeaderboardEntry {
   readonly rank: number;

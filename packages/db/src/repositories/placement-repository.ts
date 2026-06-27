@@ -161,6 +161,25 @@ export interface CanvasLifecycleInput {
   readonly status: string;
 }
 
+export interface CreateCanvasInput {
+  readonly tenantId: string;
+  readonly actorUserId: string;
+  readonly term: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export type CreateCanvasResult =
+  | {
+      readonly kind: 'created';
+      readonly canvas: CurrentCanvasRow;
+      /** The previous active canvas that was archived by this rollover (for a WS notification), or null. */
+      readonly archivedCanvasId: string | null;
+      readonly auditId: string;
+      readonly createdAt: Date;
+    }
+  | { readonly kind: 'duplicate_term' };
+
 export interface RollbackPixelInput {
   readonly tenantId: string;
   readonly canvasId: string;
@@ -282,6 +301,8 @@ export interface PlacementRepository {
   listRoster(tenantId: string, query: { cursor?: string; limit: number }): Promise<RosterPage>;
   /** Atomically set a canvas's lifecycle status + write the DC4 audit record. */
   setCanvasLifecycle(input: CanvasLifecycleInput): Promise<ApplyMemberModerationResult>;
+  /** Create a new term canvas as the active one (freezing any current active); audited. */
+  createCanvas(input: CreateCanvasInput): Promise<CreateCanvasResult>;
   /** Roll a cell back to its prior placement (or empty): compensating event + projection + audit. */
   rollbackPixel(input: RollbackPixelInput): Promise<RollbackResult>;
   /** Roll back every placed cell in a rectangle (one DC4 audit for the region). */
@@ -688,6 +709,39 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           select: { id: true, createdAt: true },
         });
         return { updated: true, auditId: action.id, createdAt: action.createdAt };
+      });
+    },
+
+    async createCanvas(input) {
+      return prisma.$transaction(async (tx): Promise<CreateCanvasResult> => {
+        // Serialize creates per tenant so two concurrent rollovers can't both archive-then-create and
+        // leave two active canvases.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.tenantId})::bigint)`;
+        // Term is unique per tenant — reject a duplicate cleanly (vs a raw constraint error).
+        const existing = await tx.canvas.findUnique({
+          where: { tenantId_termLabel: { tenantId: input.tenantId, termLabel: input.term } },
+          select: { id: true },
+        });
+        if (existing) return { kind: 'duplicate_term' };
+        // A new term supersedes the current one: the old active canvas becomes a past-term ARCHIVE
+        // (it shows in /archives; one active canvas at a time).
+        const active = await tx.canvas.findFirst({ where: { tenantId: input.tenantId, status: 'active' }, select: { id: true } });
+        await tx.canvas.updateMany({ where: { tenantId: input.tenantId, status: 'active' }, data: { status: 'archived' } });
+        const canvas = await tx.canvas.create({
+          data: { tenantId: input.tenantId, termLabel: input.term, status: 'active', width: input.width, height: input.height },
+          select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
+        });
+        const audit = await tx.moderationAction.create({
+          data: {
+            tenantId: input.tenantId,
+            actorUserId: input.actorUserId,
+            actionType: 'canvas_create',
+            targetRef: canvas.id,
+            reason: `created canvas ${input.term}`,
+          },
+          select: { id: true, createdAt: true },
+        });
+        return { kind: 'created', canvas, archivedCanvasId: active?.id ?? null, auditId: audit.id, createdAt: audit.createdAt };
       });
     },
 
