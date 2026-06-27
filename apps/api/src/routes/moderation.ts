@@ -36,10 +36,12 @@ const MEMBER_ACTIONS: Record<string, { status: 'suspended' | 'banned' | 'active'
   reinstate_member: { status: 'active', minRole: 'moderator' },
 };
 
-// Report-queue actions (moderator-level): `targetRef` is the report id.
-const REPORT_ACTIONS: Record<string, 'resolved' | 'dismissed'> = {
+// Report-queue actions (moderator-level): `targetRef` is the report id. `reopen_report` reverses a
+// resolve/dismiss (P-AC-10: triage is reversible) — it sets the report back to `open` and is audited.
+const REPORT_ACTIONS: Record<string, 'resolved' | 'dismissed' | 'open'> = {
   resolve_report: 'resolved',
   dismiss_report: 'dismissed',
+  reopen_report: 'open',
 };
 
 function err(reply: FastifyReply, request: FastifyRequest, status: number, code: dto.ErrorCode, message: string): FastifyReply {
@@ -100,6 +102,7 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           reportId: body.targetRef,
           status: reportStatus,
           actionType: body.actionType,
+          reason: body.reason,
         });
         if (!result.updated) return err(reply, request, 404, 'NOT_FOUND', 'Report not found in this tenant.');
         const response: dto.ModerationActionResponse = {

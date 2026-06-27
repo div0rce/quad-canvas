@@ -139,6 +139,8 @@ export interface ResolveReportInput {
   readonly reportId: string;
   readonly status: string;
   readonly actionType: string;
+  /** The moderator's required explanation — preserved verbatim in the audit record. */
+  readonly reason: string;
 }
 
 export interface RosterRow {
@@ -733,7 +735,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             actorUserId: input.actorUserId,
             actionType: input.actionType,
             targetRef: input.reportId,
-            reason: `report ${input.status}`,
+            reason: input.reason,
           },
           select: { id: true, createdAt: true },
         });
