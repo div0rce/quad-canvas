@@ -88,7 +88,12 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
         });
       });
 
+      // Idempotent: a failed socket emits 'error' AND then 'close', so guard against running twice
+      // (which would double-decrement presence and broadcast a duplicate PresenceUpdated).
+      let closed = false;
       const cleanup = (): void => {
+        if (closed) return;
+        closed = true;
         clearInterval(heartbeat);
         const wasSubscribed = subscribedCanvasId;
         registry.remove(conn.id);
