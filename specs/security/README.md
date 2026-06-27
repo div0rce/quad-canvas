@@ -1,8 +1,8 @@
-# `specs/security/` — Security Specs
+# `specs/security/`: Security Specs
 
 Conventions for **security specs**. Conforms to `docs/SECURITY.md`, `docs/AUTHENTICATION.md`, `docs/MULTI_TENANCY.md`, `docs/MODERATION.md`, `docs/TESTING.md`. Tenant-neutral.
 
-- **What belongs here:** one spec per security-sensitive change or control — each linking **threat → mitigation → test** (the structure from `docs/SECURITY.md`). (No dedicated template; reuse `templates/test-plan-spec.md` for the test plan and `templates/feature-spec.md`/`templates/adr.md` as needed.)
+- **What belongs here:** one spec per security-sensitive change or control, each linking **threat → mitigation → test** (the structure from `docs/SECURITY.md`). (No dedicated template; reuse `templates/test-plan-spec.md` for the test plan and `templates/feature-spec.md`/`templates/adr.md` as needed.)
 - **Owning doc:** `docs/SECURITY.md` (threat model + mitigation matrix).
 - **Naming:** `specs/security/<control-or-threat-slug>.md`.
 - **Required rules:**

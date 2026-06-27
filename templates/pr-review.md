@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy into a PR review. Mirrors docs/REVIEW_PROCESS.md. -->
-# PR Review — `<PR title / M##>`
+# PR Review: `<PR title / M##>`
 
 > Reminders: **evidence over claims** · a reviewer **can reject for missing docs or tests alone** · review is **independent** (reviewer ≠ implementer) · **no merge/commit unless explicitly asked**; never directly to the default branch. Conforms to `REVIEW_PROCESS.md`.
 
@@ -7,7 +7,7 @@
 
 ## 1. Checklist
 - [ ] **Milestone/spec linked** (`<M## / spec>`)
-- [ ] **Scope correct** — one milestone, no unrelated rewrites, within size caps (~400 LOC / ~10 files)
+- [ ] **Scope correct**: one milestone, no unrelated rewrites, within size caps (~400 LOC / ~10 files)
 - [ ] **Contracts touched listed** (`API/WS/event/DB/@quad/core`)
 - [ ] **Docs/specs updated** for any contract/behavior change (same PR); ADR if architectural
 - [ ] **Tests present** for the change + touched critical subsystems (`TESTING.md` matrix)

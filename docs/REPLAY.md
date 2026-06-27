@@ -1,6 +1,6 @@
-# Quad — Replay
+# Quad: Replay
 
-> **Derived-feature doc.** Replay is *derived from* the event log and projections; it does **not** define event semantics, ordering, storage, rendering internals, or moderation rules — it consumes them. Conforms to [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`RENDERING.md`](RENDERING.md), [`MODERATION.md`](MODERATION.md), [`ARCHIVES.md`](ARCHIVES.md), [`API.md`](API.md), [`WEBSOCKETS.md`](WEBSOCKETS.md), [`DATABASE.md`](DATABASE.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions with a core doc are flagged in §10, never silently fixed here.
+> **Derived-feature doc.** Replay is *derived from* the event log and projections; it does **not** define event semantics, ordering, storage, rendering internals, or moderation rules, it consumes them. Conforms to [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`RENDERING.md`](RENDERING.md), [`MODERATION.md`](MODERATION.md), [`ARCHIVES.md`](ARCHIVES.md), [`API.md`](API.md), [`WEBSOCKETS.md`](WEBSOCKETS.md), [`DATABASE.md`](DATABASE.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions with a core doc are flagged in §10, never silently fixed here.
 >
 > No app code/schemas/versions. Tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -18,16 +18,16 @@ Replay lets anyone watch a canvas unfold from blank to final artwork, scrub a ti
 `EVENT_SOURCING.md` (§10 ordering, §14 rebuild, §15 derivation), `RENDERING.md` (§17 same engine), `MODERATION.md` (§15 sanitized), `ARCHIVES.md`, `API.md` (`/archives/{term}/replay`), `WEBSOCKETS.md` (live), `DATABASE.md` (log/checkpoints).
 
 ## 4. Data Sources / Projections Used
-- **Event log** — the authoritative ordered source (per-canvas sequence).
-- **Projection checkpoints/snapshots** — optional keyframes for fast scrubbing (`EVENT_SOURCING.md` §14).
-- **Archived replay assets** — precomputed artifacts for archived terms (`ARCHIVES.md`).
+- **Event log**: the authoritative ordered source (per-canvas sequence).
+- **Projection checkpoints/snapshots**: optional keyframes for fast scrubbing (`EVENT_SOURCING.md` §14).
+- **Archived replay assets**: precomputed artifacts for archived terms (`ARCHIVES.md`).
 Replay derives from these; it is **never** a source of truth.
 
 ## 5. Replay Modes
-- **Full-term replay** — empty → final, applying events in sequence.
-- **Per-pixel replay** — one `(x,y)` cell's color history.
-- **Region replay** — a bounded area over time.
-- **User/profile contribution replay** *(if allowed by profile privacy)* — a user's own placements over time (`PROFILES.md`; never exposes others' `DC3`).
+- **Full-term replay**: empty → final, applying events in sequence.
+- **Per-pixel replay**: one `(x,y)` cell's color history.
+- **Region replay**: a bounded area over time.
+- **User/profile contribution replay** *(if allowed by profile privacy)*, a user's own placements over time (`PROFILES.md`; never exposes others' `DC3`).
 
 ## 6. Replay Controls
 Play · pause · scrub (timeline) · variable speed · jump to timestamp/**sequence** (`P-REPLAY-2`). The scrubber maps UI position to a sequence point.

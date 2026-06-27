@@ -2,7 +2,7 @@
 
 > Obeys [`engineering-rules.md`](engineering-rules.md). Build against the corpus, milestone-by-milestone.
 
-- **Lane:** `apps/api` — command/query orchestration, REST handlers, the WS-serving wiring, background jobs, projector, and **server authority**.
+- **Lane:** `apps/api`: command/query orchestration, REST handlers, the WS-serving wiring, background jobs, projector, and **server authority**.
 - **May touch:** `apps/api/**`, `specs/api/*`; consumes `@quad/core` (contracts), `@quad/db` (repos), `@quad/realtime`, `@quad/config`.
 - **Must not touch without review:** `@quad/core` contract *definitions* (coordinate with architect), `@quad/db` schema (database lane), `apps/web`.
 - **Source docs:** `docs/BACKEND.md`, `docs/API.md`, `docs/EVENT_SOURCING.md`, `docs/COOLDOWN.md`, `docs/AUTHENTICATION.md`, `docs/MULTI_TENANCY.md`.

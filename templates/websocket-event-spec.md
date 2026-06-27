@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to specs/websockets/<message>.md. Reusable WS message/event spec. -->
-# WebSocket Message Spec — `<MessageName>`
+# WebSocket Message Spec: `<MessageName>`
 
 > Reminders: messages are **typed by `@quad/core`** with a `schemaVersion` (no untyped payloads) · **WS broadcasts only; no authoritative writes over WS** · update `WEBSOCKETS.md` same-PR · **stop, don't guess** on contract changes. Tenant-neutral.
 

@@ -1,4 +1,4 @@
-# Quad — Analytics
+# Quad: Analytics
 
 > **Derived-feature doc.** Analytics are **derived projections, never authoritative**; this doc does not redefine event semantics, storage, or contracts. Conforms to [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`DATABASE.md`](DATABASE.md), [`BACKEND.md`](BACKEND.md), [`COOLDOWN.md`](COOLDOWN.md), [`MODERATION.md`](MODERATION.md), [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md), [`MULTI_TENANCY.md`](MULTI_TENANCY.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions flagged in §10.
 >
@@ -43,7 +43,7 @@ flowchart LR
 Incremental where cheap; job-recomputed for heavy aggregates; eventually consistent (§8).
 
 ## 7. Privacy
-**Aggregate-only by default; no `DC3`** ever (`ANALYTICS-INV-3`). User-scoped metrics exist only as **profile-owned** stats under profile privacy (`PROFILES.md`) — never exposing another user's identity beyond `DC2`. Operational telemetry (`DC5`) stays scrubbed of `DC3` (`BE-INV-10`).
+**Aggregate-only by default; no `DC3`** ever (`ANALYTICS-INV-3`). User-scoped metrics exist only as **profile-owned** stats under profile privacy (`PROFILES.md`), never exposing another user's identity beyond `DC2`. Operational telemetry (`DC5`) stays scrubbed of `DC3` (`BE-INV-10`).
 
 ## 8. Public vs Admin/Operator Analytics · Freshness · Rebuild
 - **Public/aggregate:** participation totals, color usage, contested areas (non-identifying).
@@ -70,7 +70,7 @@ Incremental where cheap; job-recomputed for heavy aggregates; eventually consist
 - **`ANALYTICS-INV-4`** Analytics are tenant-scoped; cross-tenant only via audited operator access.
 
 ## 12. Diagrams
-### 12.1 Pipeline — §6.
+### 12.1 Pipeline: §6.
 ### 12.2 Public vs admin access
 ```mermaid
 flowchart TB

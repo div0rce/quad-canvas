@@ -1,11 +1,11 @@
-# Quad — Corpus Consistency Audit
+# Quad: Corpus Consistency Audit
 
 > **Whole-corpus cross-reference + corpus-vs-implementation drift audit** (point-in-time, **2026-06-27**).
 > Evidence-based: findings are verified against the real filesystem (`git ls-files`, targeted `rg`, route
 > and migration listings), not asserted. The original audit gated the *start* of implementation; this
 > revision audits the **built system** against its corpus.
 >
-> **Status:** the system is **built and merged to `main`** — the `@quad/*` packages, the `apps/api` and
+> **Status:** the system is **built and merged to `main`**, the `@quad/*` packages, the `apps/api` and
 > `apps/web` apps, realtime/auth/moderation/archive/replay/cooldown, M50s ops hardening, the CI gates,
 > and a deployable full-stack compose + edge proxy. Milestone-group checkpoints **G1–G5 have passed** and
 > all MVP acceptance criteria (`P-AC-1…13`) are met. The live current state is `CHECKPOINTS.md` §4 and
@@ -33,9 +33,9 @@
 
 ## 2. Naming / Package Consistency
 
-- **Platform = Quad; Rutgers Quad = tenant #1** (config/example only) — no Rutgers literal in code/build config; tenant data lives in `@quad/config`. ✅
-- **Deployable apps = `apps/web` / `apps/api`; packages = `@quad/*`** — the once-flagged stale `@quad/web`/`@quad/api` labels appear **only** in this audit and the historical `SPEC_PLAN.md` §8 tracking notes; no usage in code/config. **Nuance closed.** ✅
-- **`@quad/core` = canonical shared-contract owner** — DTOs/events/ws/cooldown/tenant types declared once in `packages/core/src`; consumed by api + web + db; no duplicate definitions. ✅
+- **Platform = Quad; Rutgers Quad = tenant #1** (config/example only), no Rutgers literal in code/build config; tenant data lives in `@quad/config`. ✅
+- **Deployable apps = `apps/web` / `apps/api`; packages = `@quad/*`**, the once-flagged stale `@quad/web`/`@quad/api` labels appear **only** in this audit and the historical `SPEC_PLAN.md` §8 tracking notes; no usage in code/config. **Nuance closed.** ✅
+- **`@quad/core` = canonical shared-contract owner**: DTOs/events/ws/cooldown/tenant types declared once in `packages/core/src`; consumed by api + web + db; no duplicate definitions. ✅
 
 ---
 
@@ -87,19 +87,19 @@
 
 ## 7. Cooldown / Fairness Consistency
 
-Global per-canvas · bounded **5–20 min** (`clampCooldownMs`) · server-enforced · fail-closed · **load-based dynamic** value (`dynamicCooldownMs`, sliding-window rate counter — gradual, no oscillation) · in-flight timer fixed at placement · no individual advantage. Consistent across `COOLDOWN`, `ADR-0008`, and `apps/api/src/services/cooldown.ts` (`COOL-INV-*`). ✅
+Global per-canvas · bounded **5–20 min** (`clampCooldownMs`) · server-enforced · fail-closed · **load-based dynamic** value (`dynamicCooldownMs`, sliding-window rate counter, gradual, no oscillation) · in-flight timer fixed at placement · no individual advantage. Consistent across `COOLDOWN`, `ADR-0008`, and `apps/api/src/services/cooldown.ts` (`COOL-INV-*`). ✅
 
 ---
 
 ## 8. Rendering Consistency
 
-`@quad/render` owns the engine only — no REST/WS I/O, no business logic; 2D canvas buffer + viewport math; `apps/web` owns transport, gestures (pan/zoom), and a11y wrappers. Consistent across `RENDERING`, `ADR-0005`, `packages/render/src` (`RENDER-INV-*`). ✅
+`@quad/render` owns the engine only, no REST/WS I/O, no business logic; 2D canvas buffer + viewport math; `apps/web` owns transport, gestures (pan/zoom), and a11y wrappers. Consistent across `RENDERING`, `ADR-0005`, `packages/render/src` (`RENDER-INV-*`). ✅
 
 ---
 
 ## 9. Testing / Review / Process Consistency
 
-One milestone per PR · tests before claims · integration on **real Postgres/Redis** (now in CI) · independent review · checkpoint gates required. Consistent across `ENGINEERING_WORKFLOW`, `MILESTONES`, `TESTING`, `REVIEW_PROCESS`, `process/*`, and the actual CI (`Security audit → Migration safety → Lint → Typecheck → Unit → Build → migrate-deploy → Integration → Load gate`). ✅
+One milestone per PR · tests before claims · integration on **real Postgres/Redis** (now in CI) · independent review · checkpoint gates required. Consistent across `ENGINEERING_WORKFLOW`, `MILESTONES`, `TESTING`, `REVIEW_PROCESS`, `process/*`, and the actual CI (`Security audit → Migration safety → Lint → Typecheck → Unit tests → Build → Apply migrations → Integration tests → Load gate`). ✅
 
 ---
 
@@ -118,10 +118,10 @@ ADRs record decisions and stay **Accepted**; their decisions are now reflected i
 
 The original §11 audited that Phase 4 stayed scaffolding-only. That gate is past; the system is built. Current checks:
 
-- **Migrations are additive** — `init` + nullable/index ALTERs; enforced per-PR by the `check:migrations` gate (rollback-safe). ✅
-- **Secrets stay out of the repo** — only `.env.example` / `.env.prod.example` (no real values); `.gitignore` covers `.env*` with the example exceptions. ✅
-- **CI exercises the real stack** — service-container Postgres + Redis, migrate-deploy, full integration suite + load gate. ✅
-- **Deploy verified end-to-end** — compose + edge proxy build → migrate → `/readyz` 200 → web 200 (`DEPLOYMENT.md` §7/§9). ✅
+- **Migrations are additive**: `init` + nullable/index ALTERs; enforced per-PR by the `check:migrations` gate (rollback-safe). ✅
+- **Secrets stay out of the repo**: only `.env.example` / `.env.prod.example` (no real values); `.gitignore` covers `.env*` with the example exceptions. ✅
+- **CI exercises the real stack**: service-container Postgres + Redis, migrate-deploy, full integration suite + load gate. ✅
+- **Deploy verified end-to-end**: compose + edge proxy build → migrate → `/readyz` 200 → web 200 (`DEPLOYMENT.md` §7/§9). ✅
 
 ---
 
@@ -135,7 +135,7 @@ The original audit's non-blocking items are **resolved**:
 | B | `--frozen-lockfile` with no lockfile | Resolved — `pnpm-lock.yaml` committed; CI uses `--frozen-lockfile` |
 | C | Missing `.gitignore` / stray `.DS_Store` | Resolved — `.gitignore` added; no tracked `.DS_Store` |
 | D | Missing `.nvmrc` / `tsconfig.base.json` | Resolved — both present |
-| E | `LICENSE` undecided | Still **launch-gated** (no file; documented in `README` / `LAUNCH_PLAN`) |
+| E | `LICENSE` undecided | Resolved, **MIT** (`LICENSE` at the repo root) |
 | G | `ADR-0010` provider Proposed | Open by design — accept before the live deploy |
 | H | CI scan tooling placeholder | Resolved — `pnpm audit` high/critical gate live |
 
@@ -148,8 +148,8 @@ The original audit's non-blocking items are **resolved**:
 The original §13/§14 (pre-implementation fixes + first-10-tasks plan) are **complete**. Current:
 
 - **M0–M59** implemented across the milestone groups; **G1–G5 checkpoints PASSED** (`CHECKPOINTS.md` §4).
-- **All MVP acceptance criteria `P-AC-1…13` met and verified** — pure logic unit-tested, DB-backed behaviour integration-tested, canvas interaction browser-e2e-tested (`ACCEPTANCE_TRACEABILITY.md`).
-- **Launch gates:** `LG-1…8,10` implemented + verified (acceptance, content policy, moderation reversal, no-anon, load, security/isolation, archive/replay dry run, backup/restore drill, rollback-safety). **Remaining:** `LG-9` (legal/ToS/university approval) and a **live cloud deployment** — both external/organizational, not code tasks.
+- **All MVP acceptance criteria `P-AC-1…13` met and verified**: pure logic unit-tested, DB-backed behaviour integration-tested, canvas interaction browser-e2e-tested (`ACCEPTANCE_TRACEABILITY.md`).
+- **Launch gates:** `LG-1…8,10` implemented + verified (acceptance, content policy, moderation reversal, no-anon, load, security/isolation, archive/replay dry run, backup/restore drill, rollback-safety). **Remaining:** `LG-9` (legal/ToS/university approval) and a **live cloud deployment**: both external/organizational, not code tasks.
 
 ---
 

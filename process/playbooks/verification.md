@@ -1,4 +1,4 @@
-# Playbook — Verification
+# Playbook: Verification
 
 > Reusable scaffold. Obeys `process/engineering-rules.md`. Conforms to `docs/TESTING.md`, `docs/ENGINEERING_WORKFLOW.md` §9.
 
@@ -15,7 +15,7 @@ PASS/FAIL CRITERIA
 <which results mean pass; which are merge-blocking (TESTING.md §7)>
 
 RULES
-- No fabricated results — paste real command output/results.
+- No fabricated results, paste real command output/results.
 - Critical subsystems are never "manually verified only."
 - No production data; no DC3 in logs/fixtures.
 

@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to specs/testing/<feature-or-milestone>.md. Reusable test plan. -->
-# Test Plan — `<feature-or-milestone>`
+# Test Plan: `<feature-or-milestone>`
 
 > Reminders: **tests before claims** (commands + results) · **critical subsystems never manual-only** · **integration uses real Postgres/Redis** · **no production data / no fabricated results**. Conforms to `TESTING.md`.
 

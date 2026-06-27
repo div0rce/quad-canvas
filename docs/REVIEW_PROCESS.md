@@ -1,4 +1,4 @@
-# Quad — PR Review Process
+# Quad: PR Review Process
 
 > **Engineering-process doc.** Owns the formal PR review protocol, evidence, rejection reasons, and merge readiness. Conforms to `ENGINEERING_WORKFLOW.md`, `MILESTONES.md`, `TESTING.md`, `CODE_QUALITY.md`. Does not rewrite contracts; contradictions → unresolved risks. No code/templates (the PR-review template is Phase 4 `templates/pr-review.md`); no versions; tenant-neutral (Rutgers Quad = tenant #1).
 
@@ -12,15 +12,15 @@ Review is the gate that keeps every merge spec-linked, tested, documented, and d
 | Reviewer/self-review roles | Test matrix (`TESTING.md`) / standards (`CODE_QUALITY.md`) |
 
 ## 3. Principles
-- **`R-DP-1` Evidence over claims** — verification means commands + results, not assertions (`PROC-INV-4`).
-- **`R-DP-2` Docs/specs updated with contract changes** — same PR (`PROC-INV-2`).
-- **`R-DP-3` Tests green** — required tests pass (`TESTING.md`).
-- **`R-DP-4` Small scoped PRs** — one milestone; size caps (`ENGINEERING_WORKFLOW.md` §17).
+- **`R-DP-1` Evidence over claims**: verification means commands + results, not assertions (`PROC-INV-4`).
+- **`R-DP-2` Docs/specs updated with contract changes**: same PR (`PROC-INV-2`).
+- **`R-DP-3` Tests green**: required tests pass (`TESTING.md`).
+- **`R-DP-4` Small scoped PRs**: one milestone; size caps (`ENGINEERING_WORKFLOW.md` §17).
 - **`R-DP-5` A reviewer can reject for missing docs or tests alone.**
 
 ## 4. PR Review Checklist
 - [ ] **Milestone/spec linked** (which `M<NN>` + spec).
-- [ ] **Scope correct** — one milestone; no unrelated rewrites; within size caps.
+- [ ] **Scope correct**: one milestone; no unrelated rewrites; within size caps.
 - [ ] **Contracts touched listed** (API/WS/event/DB/`@quad/core`).
 - [ ] **Docs/specs updated** for any contract/behavior change (same PR).
 - [ ] **Tests present** for the change + touched critical subsystems (`TESTING.md` matrix).

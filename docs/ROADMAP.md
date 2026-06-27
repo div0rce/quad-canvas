@@ -1,4 +1,4 @@
-# Quad — Product Roadmap
+# Quad: Product Roadmap
 
 > **This is a product-level roadmap: the order in which user-facing capability becomes real.** It describes *what the product can do for people* at each stage and the product readiness to move between stages.
 >
@@ -12,8 +12,8 @@
 
 Quad grows along two independent axes:
 
-- **Depth** — how complete the experience is for a single tenant (canvas → attribution → profiles/leaderboards → archive/replay → moderation maturity).
-- **Breadth** — how many tenants and how rich the platform (Rutgers only → SSO → second university → many).
+- **Depth**: how complete the experience is for a single tenant (canvas → attribution → profiles/leaderboards → archive/replay → moderation maturity).
+- **Breadth**: how many tenants and how rich the platform (Rutgers only → SSO → second university → many).
 
 We deliberately go **deep before broad**: prove a premium, fair, safe single-tenant experience on **Rutgers Quad** before expanding to other universities. Each stage is gated by *product readiness*, not by a calendar.
 
@@ -29,7 +29,7 @@ flowchart LR
 
 ---
 
-## R0 — Closed Pilot *(prove the core loop is fair, alive, and safe)*
+## R0: Closed Pilot *(prove the core loop is fair, alive, and safe)*
 
 **Product goal.** A small, invited group of verified Rutgers students can experience the heartbeat of Quad: place a pixel, see everyone's pixels live, feel the global cooldown, and explore who placed what.
 
@@ -48,9 +48,9 @@ flowchart LR
 
 ---
 
-## R1 — Public MVP *(one campus, one full term, end to end)*
+## R1: Public MVP *(one campus, one full term, end to end)*
 
-**Product goal.** Rutgers Quad runs a complete term for the whole eligible student body — from blank canvas to frozen, archived final artwork — delivering the full MVP promise in `PRODUCT.md` §17.
+**Product goal.** Rutgers Quad runs a complete term for the whole eligible student body, from blank canvas to frozen, archived final artwork, delivering the full MVP promise in `PRODUCT.md` §17.
 
 **User-facing capabilities (adds to R0).**
 - Open verification for all eligible Rutgers students (`P-AC-1`).
@@ -71,14 +71,14 @@ flowchart LR
 
 ---
 
-## R2 — Hardening & Depth *(make the single-tenant experience excellent)*
+## R2: Hardening & Depth *(make the single-tenant experience excellent)*
 
 **Product goal.** Turn a working MVP into a polished, trustworthy product: deeper insight, smoother sharing, and a safety/operations posture that can survive a contentious term.
 
 **User-facing capabilities.**
 - Richer heatmaps & analytics: most-contested areas, hourly activity, color trends, contribution density (`P-POST-4`).
 - Replay **export** and richer sharing of moments (`P-POST-5`, building on `P-REPLAY-5`).
-- Profile **badges/achievements** — purely recognitional, never affecting placement power (`P-POST-3`; constrained by `NG-UNEQUAL-POWER`).
+- Profile **badges/achievements**: purely recognitional, never affecting placement power (`P-POST-3`; constrained by `NG-UNEQUAL-POWER`).
 - Expanded leaderboard windows/categories (`P-POST-7`).
 - Accessibility enhancements beyond the MVP baseline (`P-POST-8`).
 - Stronger anti-abuse experience (clearer challenges/feedback) at the product surface (`P-POST-6`).
@@ -89,9 +89,9 @@ flowchart LR
 
 ---
 
-## R3 — Breadth *(prove "Rutgers is just tenant #1")*
+## R3: Breadth *(prove "Rutgers is just tenant #1")*
 
-**Product goal.** Onboard a **second university** purely by configuration, with official campus identity sign-in — demonstrating the platform thesis.
+**Product goal.** Onboard a **second university** purely by configuration, with official campus identity sign-in, demonstrating the platform thesis.
 
 **User-facing capabilities.**
 - Official campus **SSO/CAS** as a tenant-configurable sign-in method (`P-POST-1`).
@@ -100,18 +100,18 @@ flowchart LR
 
 **Product readiness to exit R3 → R4.**
 - Two tenants run concurrent terms with zero cross-tenant leakage (`P-AC-13`).
-- Onboarding a tenant is a documented configuration exercise — no code changes (`P-AC-12`).
+- Onboarding a tenant is a documented configuration exercise, no code changes (`P-AC-12`).
 
 ---
 
-## R4 — Platform Maturity *(many campuses, durable safety & operations)*
+## R4: Platform Maturity *(many campuses, durable safety & operations)*
 
 **Product goal.** Quad operates as a multi-campus platform with the safety, analytics, and operational depth to run many simultaneous terms.
 
 **User-facing & operator capabilities.**
 - Multiple tenants onboarded on a repeatable cadence.
 - Advanced abuse detection (behavioral/bot scoring, challenges) matured (`P-POST-6`).
-- Optional **opt-in cross-tenant showcases** — celebration, **not** competitive ranking, and never breaking isolation (`P-POST-7`).
+- Optional **opt-in cross-tenant showcases**: celebration, **not** competitive ranking, and never breaking isolation (`P-POST-7`).
 - Tenant-configurable term cadence (quarters/trimesters) if a non-semester tenant onboards (`P-POST-9`, resolves `P-Q-4`).
 
 **Steady state.** New tenants and terms become routine; the product's job is to stay fair, alive, safe, and permanent at scale.
@@ -120,9 +120,9 @@ flowchart LR
 
 ## What this roadmap deliberately omits
 
-- **Dates/commitments** beyond illustrative term anchoring — owned by `LAUNCH_PLAN.md`.
-- **Engineering sequencing** (which subsystem/PR first) — owned by `MILESTONES.md`.
-- **Any capability that violates a principle or non-goal** — even if "popular," it is not on the roadmap (see `NON_GOALS.md`).
+- **Dates/commitments** beyond illustrative term anchoring, owned by `LAUNCH_PLAN.md`.
+- **Engineering sequencing** (which subsystem/PR first), owned by `MILESTONES.md`.
+- **Any capability that violates a principle or non-goal**: even if "popular," it is not on the roadmap (see `NON_GOALS.md`).
 
 ---
 

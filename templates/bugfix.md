@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to a bugfix task/PR description. Reusable bugfix. -->
-# Bugfix — `<short title>`
+# Bugfix: `<short title>`
 
 > Reminders: **minimal fix + regression test** · **tests before claims** (commands + results) · **contract changes update `@quad/core` + docs/specs same-PR** · **stop, don't guess** on contract/auth/security/cooldown/tenant/event-sourcing/moderation changes. Conforms to `ENGINEERING_WORKFLOW.md`, `TESTING.md`.
 

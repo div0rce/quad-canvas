@@ -1,13 +1,13 @@
-# Quad — Deployment & Infrastructure
+# Quad: Deployment & Infrastructure
 
 > **This document owns deployment: environment strategy, topology, CI/CD shape, secrets posture, migrations, release/rollback, tenant onboarding, and infrastructure assumptions.** It conforms to all completed docs and does **not** rewrite their contracts.
 >
-> **Altitude:** topology + strategy. **No** real Dockerfiles/compose/CI/env/IaC/migration files in this doc — those live in the repo (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.prod.yml`, `deploy/Caddyfile`, `.github/workflows/ci.yml`). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1). The deployment **provider** is deferred to **`ADR-0010`**.
+> **Altitude:** topology + strategy. **No** real Dockerfiles/compose/CI/env/IaC/migration files in this doc, those live in the repo (`apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.prod.yml`, `deploy/Caddyfile`, `.github/workflows/ci.yml`). **No** versions (`TECH_BASELINE.md`). Tenant-neutral (Rutgers Quad = tenant #1). The deployment **provider** is deferred to **`ADR-0010`**.
 
 ---
 
 ## 1. Purpose & Scope
-Define how Quad runs everywhere — from a laptop to production — reproducibly, securely, and rollback-ready, so the architecture's guarantees (fairness, permanence, isolation, performance) hold in the real world. **In scope:** environments, topologies, deployment units, routing, secrets, DB/Redis/object-storage deployment, CI/CD, release/rollback, tenant onboarding, jobs, data protection, DR/perf/security/observability deployment concerns, failure modes, deployment tests, invariants. **Out of scope:** dashboards/alerts (`OBSERVABILITY.md`), runbooks (`OPERATIONS.md`), RPO/RTO + restore drills (`DISASTER_RECOVERY.md`), contract definitions (their docs).
+Define how Quad runs everywhere, from a laptop to production, reproducibly, securely, and rollback-ready, so the architecture's guarantees (fairness, permanence, isolation, performance) hold in the real world. **In scope:** environments, topologies, deployment units, routing, secrets, DB/Redis/object-storage deployment, CI/CD, release/rollback, tenant onboarding, jobs, data protection, DR/perf/security/observability deployment concerns, failure modes, deployment tests, invariants. **Out of scope:** dashboards/alerts (`OBSERVABILITY.md`), runbooks (`OPERATIONS.md`), RPO/RTO + restore drills (`DISASTER_RECOVERY.md`), contract definitions (their docs).
 
 ## 2. Responsibilities vs. Non-Responsibilities
 | Deployment **owns** | It does **not** own |
@@ -18,13 +18,13 @@ Define how Quad runs everywhere — from a laptop to production — reproducibly
 | Migration/release safety rules | RPO/RTO + restore drills (`DISASTER_RECOVERY.md`) |
 
 ## 3. Deployment Principles
-- **`D-DP-1` Reproducible environments** — Docker-first; same image promoted across envs.
-- **`D-DP-2` No secrets in the repo** — injected at runtime, rotatable, per-env (`DEPLOY-INV-2`).
-- **`D-DP-3` Staging mirrors production shape** — same topology, isolated data/secrets.
-- **`D-DP-4` Tenant-neutral deployment** — tenants added by config, never by deploy changes (`DEPLOY-INV-3`).
-- **`D-DP-5` Safe migrations** — controlled step, backup-first, expand/contract (`§11`).
-- **`D-DP-6` Rollback-ready releases** — app images instantly revertible; data migrations forward-fix (`§16`).
-- **`D-DP-7` Observability from day one** — logs/metrics/traces wired before launch.
+- **`D-DP-1` Reproducible environments**: Docker-first; same image promoted across envs.
+- **`D-DP-2` No secrets in the repo**: injected at runtime, rotatable, per-env (`DEPLOY-INV-2`).
+- **`D-DP-3` Staging mirrors production shape**: same topology, isolated data/secrets.
+- **`D-DP-4` Tenant-neutral deployment**: tenants added by config, never by deploy changes (`DEPLOY-INV-3`).
+- **`D-DP-5` Safe migrations**: controlled step, backup-first, expand/contract (`§11`).
+- **`D-DP-6` Rollback-ready releases**: app images instantly revertible; data migrations forward-fix (`§16`).
+- **`D-DP-7` Observability from day one**: logs/metrics/traces wired before launch.
 
 ## 4. Environment Model
 | Env | Purpose | Data/secrets |
@@ -78,19 +78,19 @@ flowchart TB
 ```
 
 ## 8. Application Deployment Units
-- **`apps/web`** — stateless web tier; **no direct DB access** (`DEPLOY-INV-6`); talks to `apps/api`.
-- **`apps/api`** — stateless server tier; REST + WS; scales horizontally.
-- **Background jobs/workers** — cooldown recompute, projection jobs, archive/replay generation, cleanup (`§18`); deployable **in-api or as a separate worker** (topology deferred); must be **idempotent**.
-- **Migration runner** — a **separate, controlled one-shot step** in the pipeline, **not** app boot (`§11`, `DEPLOY-INV-4`).
+- **`apps/web`**: stateless web tier; **no direct DB access** (`DEPLOY-INV-6`); talks to `apps/api`.
+- **`apps/api`**: stateless server tier; REST + WS; scales horizontally.
+- **Background jobs/workers**: cooldown recompute, projection jobs, archive/replay generation, cleanup (`§18`); deployable **in-api or as a separate worker** (topology deferred); must be **idempotent**.
+- **Migration runner**: a **separate, controlled one-shot step** in the pipeline, **not** app boot (`§11`, `DEPLOY-INV-4`).
 
 ## 9. Networking & Routing
-- **Host/subdomain tenant routing** — the edge maps Host → tenant (`MULTI_TENANCY.md` §6); **unknown host → no tenant context** (platform landing / reject; `DEPLOY-INV-10`, `TENANT-INV-1`).
-- **Custom-domain future path** — config maps a custom domain → tenant; TLS provisioning per domain (deferred).
-- **TLS everywhere** — HTTPS + **WSS**; the LB must support **WS upgrade** + long-lived connections.
-- **API/web routing** — web behind CDN; api behind the WS-capable LB; WS connections are stateless re: routing (snapshot-on-reconnect tolerates re-routing, `WEBSOCKETS.md` §12), so strict sticky sessions are not required for correctness (affinity is a nicety).
+- **Host/subdomain tenant routing**: the edge maps Host → tenant (`MULTI_TENANCY.md` §6); **unknown host → no tenant context** (platform landing / reject; `DEPLOY-INV-10`, `TENANT-INV-1`).
+- **Custom-domain future path**: config maps a custom domain → tenant; TLS provisioning per domain (deferred).
+- **TLS everywhere**: HTTPS + **WSS**; the LB must support **WS upgrade** + long-lived connections.
+- **API/web routing**: web behind CDN; api behind the WS-capable LB; WS connections are stateless re: routing (snapshot-on-reconnect tolerates re-routing, `WEBSOCKETS.md` §12), so strict sticky sessions are not required for correctness (affinity is a nicety).
 
 ## 10. Secrets & Environment Variables
-**No real values in the repo** — only a documented `.env.example` (Phase 4). Categories (illustrative; not values):
+**No real values in the repo**, only a documented `.env.example` (Phase 4). Categories (illustrative; not values):
 
 | Category | Examples |
 | --- | --- |
@@ -106,19 +106,19 @@ flowchart TB
 ## 11. Database Deployment
 - **Managed Postgres** expected (`TECH_BASELINE.md`).
 - **Migrations** run as a controlled pipeline step (`§14`), **ordered**, with a **backup before migration**.
-- **Expand/contract (parallel-change):** additive/backward-compatible migrations deploy **before** the app; destructive "contract" steps run only after the app no longer needs the old shape — enabling zero-downtime and safe app rollback.
-- **Rollback posture:** schema rollback is limited (forward-fix preferred, `§16`); the **event log is append-only** — no destructive migration on it.
+- **Expand/contract (parallel-change):** additive/backward-compatible migrations deploy **before** the app; destructive "contract" steps run only after the app no longer needs the old shape, enabling zero-downtime and safe app rollback.
+- **Rollback posture:** schema rollback is limited (forward-fix preferred, `§16`); the **event log is append-only**: no destructive migration on it.
 - **Partitioning/cold-archive:** archived canvas partitions become immutable/cold (`DATABASE.md` §14).
 
 ## 12. Redis/Valkey Deployment
 - Holds **cooldown state, WS pub/sub, presence, sessions** (`DATABASE.md` §16).
-- **Eviction policy:** cooldown (and session) keys must **not** be evicted improperly (early eviction = unfair early placement / forced logout) — configure a policy that protects them (`COOL-INV-12`).
+- **Eviction policy:** cooldown (and session) keys must **not** be evicted improperly (early eviction = unfair early placement / forced logout), configure a policy that protects them (`COOL-INV-12`).
 - **Fail-closed implication:** Redis unavailable → placements reject; viewing continues (`COOL-INV-9`); no durable data lost (`DEPLOY-INV-7`).
 - **Topology/sharding** (single vs cluster; Redis vs Valkey image/license) deferred to `ADR-0010`/`TECH_BASELINE.md`.
 
 ## 13. Object Storage & CDN
 - Stores **archive artifacts, replay assets, final images** (`ARCHIVES.md`).
-- **Access control:** scoped buckets; **signed/controlled URLs**; public archive visibility follows the tenant flag (`MULTI_TENANCY.md` §17) — never world-open by default.
+- **Access control:** scoped buckets; **signed/controlled URLs**; public archive visibility follows the tenant flag (`MULTI_TENANCY.md` §17), never world-open by default.
 - **No `DC3` in artifacts** (`DEPLOY-INV-8`); CDN caches immutable artifacts (`PERFORMANCE.md` B14).
 
 ## 14. CI/CD Pipeline
@@ -151,7 +151,7 @@ All gates must pass before deploy; staging smoke before prod promote (`DEPLOY-IN
 3. Configure **allowed email domains / auth provider**.
 4. Assign the **first tenant admin** (audited).
 5. Check **launch gates** (`LAUNCH_PLAN.md` `LG-*`) before activating the canvas.
-All config + data — **no code change, no redeploy of the platform** (`DEPLOY-INV-3`).
+All config + data, **no code change, no redeploy of the platform** (`DEPLOY-INV-3`).
 
 ```mermaid
 flowchart LR
@@ -166,9 +166,9 @@ Deployed as idempotent, scheduled/triggered work (`BACKEND.md` §15): **cooldown
 
 ## 19. Data Protection
 - **Encryption in transit** (TLS) everywhere; **encryption at rest** for sensitive data (`DC3`) via managed datastores.
-- **Backups** of Postgres (esp. the event log — highest priority) + object storage durability.
-- **Audit-log protection** — append-only, access-controlled, retained (`MODERATION.md`/`SECURITY.md`).
-- **`DC3` handling** — minimized, encrypted, never in logs/artifacts; **object-storage visibility** controlled.
+- **Backups** of Postgres (esp. the event log, highest priority) + object storage durability.
+- **Audit-log protection**: append-only, access-controlled, retained (`MODERATION.md`/`SECURITY.md`).
+- **`DC3` handling**: minimized, encrypted, never in logs/artifacts; **object-storage visibility** controlled.
 
 ## 20. Disaster-Recovery Relationship
 Deployment provides backups + restore *capability*; **RPO/RTO targets, restore drills, and event-log integrity verification** are owned by `DISASTER_RECOVERY.md` (drill is a launch gate, `LG-8`). The event log is the crown-jewel restore target; projections are rebuildable (`EVENT_SOURCING.md` §14).
@@ -212,7 +212,7 @@ Wire **logs, metrics, traces, request/correlation ids** from day one (`SECURITY.
 - **`DEPLOY-INV-11`** CI gates (lint/typecheck/test/build/scan/migration-check) pass before deploy; staging smoke before prod promote.
 
 ## 27. Diagrams
-- **Local topology** — §5. **Staging/production topology** — §7. **CI/CD pipeline** — §14. **Tenant onboarding** — §17.
+- **Local topology**: §5. **Staging/production topology**, §7. **CI/CD pipeline**, §14. **Tenant onboarding**, §17.
 ### 27.1 Migration / release / rollback flow
 ```mermaid
 flowchart LR
@@ -243,4 +243,4 @@ flowchart LR
 - **Dependencies:** `ARCHITECTURE`, `TECH_BASELINE`, `SYSTEM_CONTEXT`, `BACKEND`, `DATABASE`, `MULTI_TENANCY`, `SECURITY`, `PERFORMANCE`, `COOLDOWN`, `WEBSOCKETS`, `ARCHIVES`. **Consumed by:** `OPERATIONS.md`, `OBSERVABILITY.md`, `DISASTER_RECOVERY.md`, `MILESTONES.md`, `ADR-0010`, Phase-4 root config scaffolding.
 - **Acceptance checklist:** ☑ all 29 parts ☑ principles ☑ env model ☑ local/staging/prod topologies ☑ deployment units (web no DB access) ☑ routing (host/subdomain, TLS/WSS, unknown-host) ☑ secrets posture (no values, categories, rotation) ☑ DB (expand/contract, backup-first) ☑ Redis (eviction protection, fail-closed) ☑ object storage/CDN (no `DC3`, controlled URLs) ☑ CI/CD pipeline ☑ release + rollback (forward-fix) ☑ tenant onboarding (config, no redeploy) ☑ jobs ☑ data protection ☑ DR/perf/security/observability deployment concerns ☑ failure modes ☑ deployment tests ☑ `DEPLOY-INV-1…11` ☑ 5 Mermaid diagrams ☑ no real config files ☑ no contracts rewritten ☑ versions referenced not declared ☑ tenant-neutral.
 - **Open questions:** see §28 (`ADR-0010` provider, secrets manager, Redis topology, CDN, RPO/RTO).
-- **Next recommended:** `docs/ENGINEERING_WORKFLOW.md` (how the team works in this repo — playbooks, stop conditions, drift control, the operating model for engineering implementation).
+- **Next recommended:** `docs/ENGINEERING_WORKFLOW.md` (how the team works in this repo, playbooks, stop conditions, drift control, the operating model for engineering implementation).

@@ -1,9 +1,9 @@
-# Quad — Observability
+# Quad: Observability
 
 > **Engineering-process doc.** Owns logs/metrics/traces, dashboards, alerts, and telemetry posture. Conforms to `SECURITY.md`, `PERFORMANCE.md`, `DEPLOYMENT.md`, `BACKEND.md`. Does not rewrite contracts; contradictions → unresolved risks. No code/configs/dashboards-as-files; no versions; tenant-neutral (Rutgers Quad = tenant #1).
 
 ## 1. Purpose & Scope
-Observability makes Quad's behavior visible enough to operate it, hit performance budgets, and detect abuse — without leaking identity. **In scope:** logging/metrics/tracing models, dashboards, alerts, telemetry privacy, retention. **Out of scope:** the threat model (`SECURITY.md`), the budgets themselves (`PERFORMANCE.md`), provider choice (`DEPLOYMENT.md`).
+Observability makes Quad's behavior visible enough to operate it, hit performance budgets, and detect abuse, without leaking identity. **In scope:** logging/metrics/tracing models, dashboards, alerts, telemetry privacy, retention. **Out of scope:** the threat model (`SECURITY.md`), the budgets themselves (`PERFORMANCE.md`), provider choice (`DEPLOYMENT.md`).
 
 ## 2. Responsibilities vs. Non-Responsibilities
 | Observability owns | Doesn't own |
@@ -12,20 +12,20 @@ Observability makes Quad's behavior visible enough to operate it, hit performanc
 | Telemetry privacy + retention posture | Provider/platform (`DEPLOYMENT.md`) |
 
 ## 3. Principles
-- **`O-DP-1` No `DC3` in telemetry** — reference user/correlation ids, never email (`BE-INV-10`, `SEC-INV-5`).
+- **`O-DP-1` No `DC3` in telemetry**: reference user/correlation ids, never email (`BE-INV-10`, `SEC-INV-5`).
 - **`O-DP-2` Request/correlation ids** on every log/trace.
-- **`O-DP-3` Audit ≠ telemetry** — the moderation audit (`DC4`) is a durable authoritative record, separate from operational telemetry (`DC5`).
-- **`O-DP-4` Actionable alerts** — alert on conditions an operator can act on, tied to budgets/SLOs.
-- **`O-DP-5` Budget-driven dashboards** — dashboards track the `PERFORMANCE.md` budgets.
+- **`O-DP-3` Audit ≠ telemetry**: the moderation audit (`DC4`) is a durable authoritative record, separate from operational telemetry (`DC5`).
+- **`O-DP-4` Actionable alerts**: alert on conditions an operator can act on, tied to budgets/SLOs.
+- **`O-DP-5` Budget-driven dashboards**: dashboards track the `PERFORMANCE.md` budgets.
 
 ## 4. Logging Model
-Structured (JSON) logs with: timestamp, level, service, **request/correlation id**, tenant id, event type, and safe context — **never `DC3`**. Security-relevant events (auth failures, authz denials, rate-limit/abuse triggers, tenant-mismatch) are logged at appropriate levels. Logs are `DC5` (operational), distinct from `DC4` audit.
+Structured (JSON) logs with: timestamp, level, service, **request/correlation id**, tenant id, event type, and safe context, **never `DC3`**. Security-relevant events (auth failures, authz denials, rate-limit/abuse triggers, tenant-mismatch) are logged at appropriate levels. Logs are `DC5` (operational), distinct from `DC4` audit.
 
 ## 5. Metrics Model
 Counters/gauges/histograms per tenant/canvas where relevant: placement rate, current cooldown + load score, WS connection counts + fan-out latency, projection lag, error/rejection rates (incl. `COOLDOWN_ACTIVE`/`RATE_LIMITED`), queue depths, job health, latency histograms for `B01–B14`.
 
 ## 6. Tracing Model
-Distributed traces spanning the request/command lifecycle (`BACKEND.md` §5) — resolve→authn→authz→validate→cooldown→append→projection→publish — with the correlation id, to locate latency and failures. Traces carry no `DC3`.
+Distributed traces spanning the request/command lifecycle (`BACKEND.md` §5), resolve→authn→authz→validate→cooldown→append→projection→publish, with the correlation id, to locate latency and failures. Traces carry no `DC3`.
 
 ## 7. Dashboards
 API health · WS health · **placement hot path** (B06/B07/B09/B10) · cooldown/load score · database/projection lag · Redis health · moderation/report queue depth · archive/replay job health · security events. Each dashboard ties to budgets/SLOs.

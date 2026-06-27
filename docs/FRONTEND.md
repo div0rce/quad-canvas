@@ -1,8 +1,8 @@
-# Quad — Frontend Architecture (`apps/web`)
+# Quad: Frontend Architecture (`apps/web`)
 
 > **This document defines the web application: its shell, routes, component architecture, state model, integration seams, and the UX/accessibility/privacy/security responsibilities it owns.** It conforms to [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md), [`NON_GOALS.md`](NON_GOALS.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md); IDs are cited (`P-*`, `PRIN-*`, `ARCH-INV-*`, `CTX-INV-*`, `B*`, `DC*`).
 >
-> **⚠️ Dependency-order note.** The documentation manifest lists `RENDERING.md` as a dependency of this doc, but **`FRONTEND.md` is authored before `RENDERING.md`.** Therefore this document defines **only the web-app shell, UI/state boundaries, and the integration *seam* with `@quad/render`** — the dedicated canvas engine. **Deep canvas-rendering internals (dirty-region, batching, zoom math, GPU/2D strategy) are deferred to [`RENDERING.md`](RENDERING.md).** Where this doc touches rendering, it describes the *mount/feed contract*, not the algorithm.
+> **⚠️ Dependency-order note.** The documentation manifest lists `RENDERING.md` as a dependency of this doc, but **`FRONTEND.md` is authored before `RENDERING.md`.** Therefore this document defines **only the web-app shell, UI/state boundaries, and the integration *seam* with `@quad/render`**, the dedicated canvas engine. **Deep canvas-rendering internals (dirty-region, batching, zoom math, GPU/2D strategy) are deferred to [`RENDERING.md`](RENDERING.md).** Where this doc touches rendering, it describes the *mount/feed contract*, not the algorithm.
 >
 > **Altitude:** frontend architecture only. **No** backend schemas, REST endpoint specs, WebSocket payload specs, database tables, or rendering algorithms. **No** versions (see [`TECH_BASELINE.md`](TECH_BASELINE.md)). **No** app code or package files.
 >
@@ -12,7 +12,7 @@
 
 ## 1. Purpose & Scope
 
-`apps/web` is the **presentation tier**: it renders the live canvas and surrounding experience, captures user intents, and orchestrates calls to the backend — and nothing more. It is the human-facing surface of the system black box described in `SYSTEM_CONTEXT.md`, operating from the **public-internet (`B1`)** and **authenticated-participant (`B2`)** boundaries.
+`apps/web` is the **presentation tier**: it renders the live canvas and surrounding experience, captures user intents, and orchestrates calls to the backend, and nothing more. It is the human-facing surface of the system black box described in `SYSTEM_CONTEXT.md`, operating from the **public-internet (`B1`)** and **authenticated-participant (`B2`)** boundaries.
 
 **In scope:** Next.js app shell, route/page architecture, component hierarchy, client/server boundary, the client state model, integration seams (REST, WebSocket, `@quad/render`, `@quad/core`, `@quad/config`), mobile-first interaction, accessibility, tenant theming, in-UI privacy, moderation/reporting UI *shells*, error/offline/reconnect UX, and the performance/security/testing responsibilities the frontend owns.
 
@@ -40,19 +40,19 @@
 
 `apps/web` is a Next.js **App Router** application (version baseline in `TECH_BASELINE.md`; Turbopack is the default bundler there). High-level structure:
 
-- **`app/`** — routes via the App Router. A **tenant-aware root layout** establishes theme + session context; nested layouts wrap feature areas. Server Components render shells, SEO, and initial data; Client Components own interactivity.
-- **`components/`** — presentational + container components (the canvas surface, palette, panels, dialogs), composed from `@quad/ui` primitives.
-- **`lib/`** — thin client-side seams: the typed REST client, the WebSocket client wrapper, the `@quad/render` adapter, data-fetching hooks, and tenant/theme bootstrapping from `@quad/config`. **No domain/business logic lives here** — it orchestrates and adapts.
-- **`public/`** — static assets (non-tenant; tenant branding comes from config).
-- **`tests/`** — component, E2E, a11y, and rendering-seam suites (§17).
+- **`app/`**: routes via the App Router. A **tenant-aware root layout** establishes theme + session context; nested layouts wrap feature areas. Server Components render shells, SEO, and initial data; Client Components own interactivity.
+- **`components/`**: presentational + container components (the canvas surface, palette, panels, dialogs), composed from `@quad/ui` primitives.
+- **`lib/`**: thin client-side seams: the typed REST client, the WebSocket client wrapper, the `@quad/render` adapter, data-fetching hooks, and tenant/theme bootstrapping from `@quad/config`. **No domain/business logic lives here**, it orchestrates and adapts.
+- **`public/`**: static assets (non-tenant; tenant branding comes from config).
+- **`tests/`**: component, E2E, a11y, and rendering-seam suites (§17).
 
-The internal folder taxonomy is indicative; the binding rules are the boundaries (§6), state model (§7), and invariants (§18) — not the directory names.
+The internal folder taxonomy is indicative; the binding rules are the boundaries (§6), state model (§7), and invariants (§18), not the directory names.
 
 ---
 
 ## 4. Route / Page Architecture
 
-Routes are tenant-scoped (the active tenant is resolved upstream — mechanism in `MULTI_TENANCY.md`). Each page's *type* and *data sources* are fixed here; concrete endpoints/payloads are deferred.
+Routes are tenant-scoped (the active tenant is resolved upstream, mechanism in `MULTI_TENANCY.md`). Each page's *type* and *data sources* are fixed here; concrete endpoints/payloads are deferred.
 
 | Page / Route (illustrative) | Nature | Auth | Primary data sources | Notes |
 | --- | --- | --- | --- | --- |
@@ -134,11 +134,11 @@ Five state categories. **Every authoritative value is server-owned; the client h
 
 Five seams, each a thin, typed boundary. The frontend owns the *adapter*, not the other side's internals.
 
-1. **REST client** — a thin wrapper issuing authenticated requests, typed end-to-end by **`@quad/core` DTOs**. It carries no business logic and defines no shapes of its own. Endpoint contracts → `API.md`.
-2. **WebSocket client** — connects to the tenant/canvas channel, applies inbound updates, and handles reconnect by re-fetching a snapshot and resubscribing. Messages are typed by **`@quad/core` WS schemas**. Lifecycle/payloads → `WEBSOCKETS.md`.
-3. **`@quad/render` seam (mount/feed)** — `CanvasViewport` **mounts** the engine and **feeds** it: (a) the initial canvas snapshot, (b) a stream of applied deltas, (c) view commands (zoom/pan/select). The engine **emits back** interaction events (hover/long-press target, coordinate under cursor, cell selection) which the React layer turns into UI (inspector, coordinate readout, placement confirm). **This doc defines only this contract; the rendering algorithm is `RENDERING.md`'s** (`FE-INV-7`).
-4. **`@quad/core` contracts** — the single source of shared types (DTOs, WS payloads, domain enums like palette/coordinate types). The web app **imports** them and **never declares parallel types** (`FE-INV-4`, `ARCH-INV-6`).
-5. **`@quad/config` (tenant theme/branding/features)** — supplies the active tenant's theme tokens, palette, title/logo, and feature flags (e.g., whether read-only viewing is enabled). The UI reads tenant facts **only** from here (`FE-INV-6`).
+1. **REST client**, a thin wrapper issuing authenticated requests, typed end-to-end by **`@quad/core` DTOs**. It carries no business logic and defines no shapes of its own. Endpoint contracts → `API.md`.
+2. **WebSocket client**, connects to the tenant/canvas channel, applies inbound updates, and handles reconnect by re-fetching a snapshot and resubscribing. Messages are typed by **`@quad/core` WS schemas**. Lifecycle/payloads → `WEBSOCKETS.md`.
+3. **`@quad/render` seam (mount/feed)**, `CanvasViewport` **mounts** the engine and **feeds** it: (a) the initial canvas snapshot, (b) a stream of applied deltas, (c) view commands (zoom/pan/select). The engine **emits back** interaction events (hover/long-press target, coordinate under cursor, cell selection) which the React layer turns into UI (inspector, coordinate readout, placement confirm). **This doc defines only this contract; the rendering algorithm is `RENDERING.md`'s** (`FE-INV-7`).
+4. **`@quad/core` contracts**, the single source of shared types (DTOs, WS payloads, domain enums like palette/coordinate types). The web app **imports** them and **never declares parallel types** (`FE-INV-4`, `ARCH-INV-6`).
+5. **`@quad/config` (tenant theme/branding/features)**, supplies the active tenant's theme tokens, palette, title/logo, and feature flags (e.g., whether read-only viewing is enabled). The UI reads tenant facts **only** from here (`FE-INV-6`).
 
 ```mermaid
 flowchart LR
@@ -171,7 +171,7 @@ Mobile is the primary target (`P-USER-1`, `PRIN-MOBILE-FIRST`). The interaction 
 - **Pinch-zoom** and **drag-pan** for navigating the canvas (`P-CANVAS-8`), with deep-zoom support and crisp pixels (crispness owned by `RENDERING.md`).
 - **Tap-to-target / tap-to-place** as the touch placement path (`P-JOURNEY-2`).
 - **Touch hover alternative:** since touch has no hover (`P-ATTR-2`), inspection uses **tap-to-inspect / long-press** to reveal coordinate + `DC2` attribution, instead of desktop hover.
-- **Safe confirmation UX:** placement is a **deliberate two-step** — select a cell, then confirm — so a stray tap never wastes the (5–20 min) cooldown (`FE-INV-8`). Desktop mirrors this with a confirm affordance.
+- **Safe confirmation UX:** placement is a **deliberate two-step**: select a cell, then confirm, so a stray tap never wastes the (5–20 min) cooldown (`FE-INV-8`). Desktop mirrors this with a confirm affordance.
 - **Responsive layout:** controls reachable one-handed; the canvas remains the focal element across breakpoints.
 
 Gesture disambiguation (pan vs. place vs. zoom) is a frontend concern; the precise heuristics are an implementation detail flagged in §19.
@@ -196,7 +196,7 @@ Accessibility is a launch concern only at the **baseline** in MVP; richer enhanc
 ## 11. Tenant Theming / Branding Rules
 
 - The active tenant's **theme tokens, palette, title, and logo** come from `@quad/config`; a `TenantThemeProvider` applies them at the root.
-- **No tenant literals** in components or strings — Rutgers Quad's Scarlet theme, domains, and palette are **config values for tenant #1**, identical in mechanism to any future tenant (`PRIN-CONFIG-OVER-CODE`, `ARCH-INV-8`, `FE-INV-6`).
+- **No tenant literals** in components or strings, Rutgers Quad's Scarlet theme, domains, and palette are **config values for tenant #1**, identical in mechanism to any future tenant (`PRIN-CONFIG-OVER-CODE`, `ARCH-INV-8`, `FE-INV-6`).
 - The **color palette is tenant configuration** (`P-CANVAS-4`); the UI renders whatever palette config provides, with no hardcoded color set.
 - The app is effectively **white-label**: swapping the tenant changes branding/palette/feature-flags without code changes (`P-ADMIN-1/2`).
 
@@ -206,7 +206,7 @@ Accessibility is a launch concern only at the **baseline** in MVP; richer enhanc
 
 Built directly on the data classes in `SYSTEM_CONTEXT.md` §7:
 
-- **Show `DC2` (public handle / display name) only.** Attribution everywhere — hover/inspect, pixel history, profiles, leaderboards — uses the public handle (`P-ATTR-3`).
+- **Show `DC2` (public handle / display name) only.** Attribution everywhere, hover/inspect, pixel history, profiles, leaderboards, uses the public handle (`P-ATTR-3`).
 - **Never render or log `DC3`** (full email, internal ids, tokens) anywhere in the UI or client logs (`P-ATTR-4`, `CTX-INV-3`, `FE-INV-5`).
 - **Respect profile privacy settings** (`P-PROF-4`): the UI honors what a user has chosen to expose.
 - **Moderator shells** may surface additional context only as the server provides it for authorized roles; the UI still never invents identity exposure, and any expanded identity view is governed by `MODERATION.md`/`AUTHENTICATION.md`, not decided here.
@@ -217,7 +217,7 @@ Built directly on the data classes in `SYSTEM_CONTEXT.md` §7:
 ## 13. Moderation / Reporting UI Boundaries
 
 - **Reporting** is a participant-facing dialog that submits a report *intent*; triage/decisions happen server-side (`P-JOURNEY-6`, `B3`).
-- **Moderator/admin surfaces are UI shells**: they display server-provided queues/state and submit action *intents*. They **do not** decide authority, perform actions, or write audit entries — all of that is server-side (`P-MOD-4`, `FE-INV-2`).
+- **Moderator/admin surfaces are UI shells**: they display server-provided queues/state and submit action *intents*. They **do not** decide authority, perform actions, or write audit entries, all of that is server-side (`P-MOD-4`, `FE-INV-2`).
 - **Role-gated rendering is UX only.** Hiding a tool from a non-moderator improves UX but is **not** a security control; the server enforces authority regardless (`FE-INV-10`).
 - Tool inventory, action semantics, and audit are owned by `MODERATION.md`.
 
@@ -238,7 +238,7 @@ Built directly on the data classes in `SYSTEM_CONTEXT.md` §7:
 Frontend owns the **client-side share** of the budgets in `PERFORMANCE.md` (it does not define them):
 
 - Keep the UI **feeling instantaneous** (`PRIN-ALIVE`): fast initial canvas paint from the snapshot, responsive controls.
-- **Feed `@quad/render` efficiently:** batch applied deltas and avoid a React re-render per pixel — **React orchestrates; the engine paints** (rendering FPS/dirty-region is `RENDERING.md`'s concern, but the frontend must not create needless React work that starves it).
+- **Feed `@quad/render` efficiently:** batch applied deltas and avoid a React re-render per pixel, **React orchestrates; the engine paints** (rendering FPS/dirty-region is `RENDERING.md`'s concern, but the frontend must not create needless React work that starves it).
 - **Code-split / lazy-load** heavy, non-critical views (e.g., replay), keep the main thread free during canvas interaction, and minimize bundle weight on the canvas path.
 - Measure against the client-side budgets; regressions on the canvas path are gated by tests (`§17`, `PERFORMANCE.md`).
 
@@ -260,11 +260,11 @@ Defense-in-depth; the frontend enforces nothing authoritatively (`B1`/`B2` postu
 
 Frontend test layers (tooling per `TECH_BASELINE.md`; overall strategy in `TESTING.md`):
 
-- **Component tests** — UI logic, state transitions, cooldown display, confirm flow, privacy rendering (`DC2` only), role-gated rendering (UX).
-- **Playwright E2E flows** — onboarding/verification states, place-a-pixel (with confirm), inspect pixel history, profile, leaderboard, replay scrub, report submission.
-- **Mobile/touch tests** — device emulation for pinch-zoom, drag-pan, tap-place, long-press inspect; responsive layout.
-- **Accessibility tests** — automated (axe) + keyboard navigation, ARIA live announcements, focus management, contrast/color-independence.
-- **Rendering-seam tests** — verify the web app feeds `@quad/render` the correct snapshot/deltas/view-commands and correctly handles emitted events, using a **mock/contract of the render seam** — **without** testing rendering internals (those are `RENDERING.md`/`@quad/render`'s tests). This keeps the seam verified while honoring the ownership boundary.
+- **Component tests**: UI logic, state transitions, cooldown display, confirm flow, privacy rendering (`DC2` only), role-gated rendering (UX).
+- **Playwright E2E flows**: onboarding/verification states, place-a-pixel (with confirm), inspect pixel history, profile, leaderboard, replay scrub, report submission.
+- **Mobile/touch tests**: device emulation for pinch-zoom, drag-pan, tap-place, long-press inspect; responsive layout.
+- **Accessibility tests**: automated (axe) + keyboard navigation, ARIA live announcements, focus management, contrast/color-independence.
+- **Rendering-seam tests**: verify the web app feeds `@quad/render` the correct snapshot/deltas/view-commands and correctly handles emitted events, using a **mock/contract of the render seam**, **without** testing rendering internals (those are `RENDERING.md`/`@quad/render`'s tests). This keeps the seam verified while honoring the ownership boundary.
 
 Critical UX (placement confirm, reconnect convergence, privacy non-exposure) must be covered by automated tests, not manual checks only.
 
@@ -272,7 +272,7 @@ Critical UX (placement confirm, reconnect convergence, privacy non-exposure) mus
 
 ## 18. Frontend Invariants (`FE-INV-*`)
 
-- **`FE-INV-1`** No business logic in React components — they render and orchestrate only.
+- **`FE-INV-1`** No business logic in React components, they render and orchestrate only.
 - **`FE-INV-2`** The frontend never decides placement validity, cooldown eligibility, moderation authority, or tenant membership; it displays server decisions.
 - **`FE-INV-3`** Client state is never authoritative for fairness/security; the UI mirrors server truth and converges on reconnect.
 - **`FE-INV-4`** All shared shapes (DTOs/WS payloads) come from `@quad/core`; the web app declares no parallel types.
@@ -306,8 +306,8 @@ Critical UX (placement confirm, reconnect convergence, privacy non-exposure) mus
 ## 20. Document Control
 
 - **Path:** `docs/FRONTEND.md`
-- **Purpose:** Define the `apps/web` architecture — shell, routes, components, state, integration seams, and frontend-owned UX/a11y/privacy/security/testing responsibilities — within the boundaries set by `ARCHITECTURE.md`.
-- **Dependencies:** `ARCHITECTURE.md`, `SYSTEM_CONTEXT.md`, `PRODUCT.md`, `PRINCIPLES.md`, `NON_GOALS.md`, `TECH_BASELINE.md`. **Forward dependency (deferred):** `RENDERING.md` (seam consumer — see dependency-order note). **Consumed by:** `specs/ui`, `RENDERING.md`, `API.md`/`WEBSOCKETS.md` (client expectations), `TESTING.md`.
+- **Purpose:** Define the `apps/web` architecture, shell, routes, components, state, integration seams, and frontend-owned UX/a11y/privacy/security/testing responsibilities, within the boundaries set by `ARCHITECTURE.md`.
+- **Dependencies:** `ARCHITECTURE.md`, `SYSTEM_CONTEXT.md`, `PRODUCT.md`, `PRINCIPLES.md`, `NON_GOALS.md`, `TECH_BASELINE.md`. **Forward dependency (deferred):** `RENDERING.md` (seam consumer, see dependency-order note). **Consumed by:** `specs/ui`, `RENDERING.md`, `API.md`/`WEBSOCKETS.md` (client expectations), `TESTING.md`.
 - **Acceptance checklist:** ☑ all 20 parts present ☑ frontend altitude only (no backend schemas/API/WS payloads/DB tables/rendering algorithms) ☑ dependency-order note (authored before `RENDERING.md`; shell + seams only) ☑ hard boundaries encoded (renders/orchestrates, never decides fairness/security; `@quad/render` seam only; no logic in components; no self-trust) ☑ state model with server-as-truth ☑ mobile-first + a11y + privacy (`DC2` only) ☑ moderation UI = shells ☑ `FE-INV-1…10` ☑ versions referenced not declared ☑ tenant-neutral, no Rutgers hardcoding ☑ no app code/package files.
 - **Open questions:** see §19 (rendering seam shape, data/state libraries, spectator UI, handle exposure).
-- **Next recommended:** `docs/BACKEND.md` (the `apps/api` service architecture — command handling, domain orchestration, transport, jobs).
+- **Next recommended:** `docs/BACKEND.md` (the `apps/api` service architecture, command handling, domain orchestration, transport, jobs).

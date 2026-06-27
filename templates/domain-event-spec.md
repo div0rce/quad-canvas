@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to specs/events/<EventName>.md. Reusable event-sourcing event spec. -->
-# Domain Event Spec — `<EventName>`
+# Domain Event Spec: `<EventName>`
 
 > Reminders: events are **append-only & immutable** (rollbacks are new compensating events) · **declared in `@quad/core`**, versioned · update `EVENT_SOURCING.md` same-PR · **stop, don't guess** on event-sourcing changes. Conforms to `EVENT_SOURCING.md`, `DATABASE.md`.
 

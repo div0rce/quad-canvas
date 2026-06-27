@@ -1,7 +1,7 @@
 <!-- TEMPLATE: copy to specs/database/<migration>.md. Reusable migration spec. -->
-# Database Migration Spec — `<migration-name>`
+# Database Migration Spec: `<migration-name>`
 
-> Reminders: **no schema change without this spec** · **migrations run as a controlled step, not app boot; backup-first** · **the event log is append-only — no destructive migration on it** · update `DATABASE.md` same-PR · **stop, don't guess** on data-loss risk. Conforms to `DATABASE.md`, `DEPLOYMENT.md`.
+> Reminders: **no schema change without this spec** · **migrations run as a controlled step, not app boot; backup-first** · **the event log is append-only, no destructive migration on it** · update `DATABASE.md` same-PR · **stop, don't guess** on data-loss risk. Conforms to `DATABASE.md`, `DEPLOYMENT.md`.
 
 - **Status:** `<draft|ready>` · **Owner lane:** Database · **Milestone:** `<M##>` · **Linked docs:** `DATABASE.md`, `DEPLOYMENT.md`
 

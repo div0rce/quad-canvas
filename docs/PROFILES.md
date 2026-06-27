@@ -1,4 +1,4 @@
-# Quad — Profiles
+# Quad: Profiles
 
 > **Derived-feature doc.** Profile stats are **derived projections**; identity policy here defers mechanics to `AUTHENTICATION.md`. Conforms to [`AUTHENTICATION.md`](AUTHENTICATION.md), [`ANALYTICS.md`](ANALYTICS.md), [`HEATMAPS.md`](HEATMAPS.md), [`LEADERBOARDS.md`](LEADERBOARDS.md), [`MODERATION.md`](MODERATION.md), [`MULTI_TENANCY.md`](MULTI_TENANCY.md), [`DATABASE.md`](DATABASE.md), [`API.md`](API.md), [`FRONTEND.md`](FRONTEND.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions flagged in §10.
 >
@@ -18,13 +18,13 @@ Each student has a per-tenant profile showing their contribution and impact (`P-
 `AUTHENTICATION.md` (§5 identity, §14 handle policy), `ANALYTICS.md` (stats), `HEATMAPS.md` (contribution heatmap), `LEADERBOARDS.md`, `MODERATION.md` (suspended/banned), `MULTI_TENANCY.md` (tenant scope), `DATABASE.md` (§7 `user_stats`), `API.md` (`/profiles/me`,`/profiles/{handle}`), `FRONTEND.md`.
 
 ## 4. Public Profile Data
-Public handle/display identity (**`DC2`**); contribution stats (placements, retained pixels, streaks, per-term + lifetime); optional **contribution heatmap** (`HEATMAPS.md`); **badges** *(future, recognition-only, never placement power — `P-POST-3`, `NG-UNEQUAL-POWER`)*. **Never** the email or internal ids (`PROFILE-INV-2`).
+Public handle/display identity (**`DC2`**); contribution stats (placements, retained pixels, streaks, per-term + lifetime); optional **contribution heatmap** (`HEATMAPS.md`); **badges** *(future, recognition-only, never placement power, `P-POST-3`, `NG-UNEQUAL-POWER`)*. **Never** the email or internal ids (`PROFILE-INV-2`).
 
 ## 5. Private / Self Profile Data
 The owner sees: own settings/preferences, own membership/verification status, own report/moderation-status views (as appropriate). **Own email is visible to self only, never public** (`DC3`). No password (none exists).
 
 ## 6. Public Handle Policy
-**`DC2` public, `DC3` never public** (`P-ATTR-4`, `AUTHENTICATION.md` §14). Whether the handle is a raw NetID, a derived handle, or a chosen display name — and whether it's changeable — is **open (`P-Q-1`)** and owned by product/`AUTHENTICATION.md`; this doc enforces only the `DC2`/`DC3` boundary.
+**`DC2` public, `DC3` never public** (`P-ATTR-4`, `AUTHENTICATION.md` §14). Whether the handle is a raw NetID, a derived handle, or a chosen display name, and whether it's changeable, is **open (`P-Q-1`)** and owned by product/`AUTHENTICATION.md`; this doc enforces only the `DC2`/`DC3` boundary.
 
 ## 7. Profile Stats
 Placements · currently-retained pixels · longest-surviving pixel · current streak · favorite color · per-term contribution · lifetime participation · archive history (which terms the user took part in). All **derived** from analytics/projections (`PROFILE-INV-1`).

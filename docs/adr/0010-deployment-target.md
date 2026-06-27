@@ -1,9 +1,9 @@
-# ADR-0010 — Deployment Target
+# ADR-0010: Deployment Target
 
 - **Status:** **Proposed** (provider not yet selected) · **Date:** 2026-06 · **Deciders:** Architect, DevOps (+ owner) · **Linked docs:** `docs/DEPLOYMENT.md`, `docs/DISASTER_RECOVERY.md`, `docs/OPERATIONS.md`, `docs/TECH_BASELINE.md`
 
 ## 1. Context
-`DEPLOYMENT.md` is deliberately **provider-neutral**. The concrete deployment provider/platform is a real decision with cost, region, and capability implications that should be made closer to launch — not silently assumed now.
+`DEPLOYMENT.md` is deliberately **provider-neutral**. The concrete deployment provider/platform is a real decision with cost, region, and capability implications that should be made closer to launch, not silently assumed now.
 
 ## 2. Decision (Proposed)
 **Defer the provider choice; keep the deployment architecture provider-neutral.** The selected provider(s) must supply these capabilities:

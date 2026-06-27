@@ -1,8 +1,8 @@
-# Quad — REST API Contract
+# Quad: REST API Contract
 
 > **This document owns the REST surface: design principles, transport conventions, the resource model, the complete endpoint catalog, the standard error model, idempotency, caching, and the API↔event-sourcing/WebSocket relationships.** It conforms to [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), [`SYSTEM_CONTEXT.md`](SYSTEM_CONTEXT.md), [`BACKEND.md`](BACKEND.md), [`DATABASE.md`](DATABASE.md), and [`EVENT_SOURCING.md`](EVENT_SOURCING.md); IDs cited (`P-*`, `PRIN-*`, `ARCH-INV-*`, `BE-INV-*`, `ES-INV-*`, `DC*`, `B*`).
 >
-> **Altitude:** the contract — **paths, methods, auth/tenant scope, DTO *names*, and error conventions.** Concrete **DTO declarations live in `@quad/core`** at implementation. **No** route/source files, **no** WebSocket payloads/lifecycle (`WEBSOCKETS.md`), **no** DB tables/Prisma (`DATABASE.md`), **no** event semantics (`EVENT_SOURCING.md`), **no** versions (`TECH_BASELINE.md`), **no** app code.
+> **Altitude:** the contract, **paths, methods, auth/tenant scope, DTO *names*, and error conventions.** Concrete **DTO declarations live in `@quad/core`** at implementation. **No** route/source files, **no** WebSocket payloads/lifecycle (`WEBSOCKETS.md`), **no** DB tables/Prisma (`DATABASE.md`), **no** event semantics (`EVENT_SOURCING.md`), **no** versions (`TECH_BASELINE.md`), **no** app code.
 >
 > **Naming:** platform = **Quad**; **Rutgers Quad** = tenant #1 (example data only). No tenant literal in paths/DTOs (`PRIN-CONFIG-OVER-CODE`).
 
@@ -32,8 +32,8 @@ The REST API is the **command-and-query boundary** between clients and the autho
 
 ## 3. API Design Principles
 
-- **`API-DP-1` Tenant-scoped by default.** Every endpoint operates within the **resolved tenant** (`B4`); the active tenant comes from request context (host/subdomain — `MULTI_TENANCY.md`), not from a path id. Cross-tenant access exists **only** on explicit platform-operator endpoints (`B5`).
-- **`API-DP-2` Typed by `@quad/core`.** Every request/response uses a DTO declared once in `@quad/core` — the same contract the client imports (`ARCH-INV-6`). No untyped payloads.
+- **`API-DP-1` Tenant-scoped by default.** Every endpoint operates within the **resolved tenant** (`B4`); the active tenant comes from request context (host/subdomain, `MULTI_TENANCY.md`), not from a path id. Cross-tenant access exists **only** on explicit platform-operator endpoints (`B5`).
+- **`API-DP-2` Typed by `@quad/core`.** Every request/response uses a DTO declared once in `@quad/core`: the same contract the client imports (`ARCH-INV-6`). No untyped payloads.
 - **`API-DP-3` No duplicated DTOs.** A shape is defined once; there is no parallel/divergent definition in `apps/api` or `apps/web`.
 - **`API-DP-4` No undocumented endpoints.** Every endpoint appears in the catalog (§12); a contract change updates this doc in the **same PR** (`ARCH`/`ENGINEERING_WORKFLOW` governance).
 - **`API-DP-5` No business logic in route handlers.** Routes validate + delegate to domain services (`BE`/`FE` parity; `API-INV-4`).
@@ -64,7 +64,7 @@ The REST API is the **command-and-query boundary** between clients and the autho
 ## 6. Tenant Resolution at the API Boundary
 
 - The tenant is **resolved at the edge** and attached to request context; all downstream queries/commands are tenant-scoped (`BE-INV-5`, `API-INV-1`).
-- **Paths do not embed a tenant id for the active tenant** (it's contextual) — keeping the API tenant-neutral. Operator endpoints that span tenants take an explicit tenant identifier in the path/body.
+- **Paths do not embed a tenant id for the active tenant** (it's contextual), keeping the API tenant-neutral. Operator endpoints that span tenants take an explicit tenant identifier in the path/body.
 - **Cross-tenant access returns `404 NOT_FOUND`** (not 403) to avoid leaking the existence of another tenant's resources (`API-INV-11`, `CTX-INV-2`). Resolution mechanics → `MULTI_TENANCY.md`.
 
 ---
@@ -74,7 +74,7 @@ The REST API is the **command-and-query boundary** between clients and the autho
 - **Single resource:** the resource DTO is returned directly (e.g., `PixelResponse`).
 - **Collections:** `{ "data": [ ...DTO ], "page": { "nextCursor": string|null, "limit": number } }`.
 - **Commands:** return the command result DTO (e.g., `PlacePixelResultResponse`) on success, with the appropriate `2xx`.
-- **No leaking of internal/persistence shapes** — responses are `@quad/core` DTOs, never raw rows.
+- **No leaking of internal/persistence shapes**: responses are `@quad/core` DTOs, never raw rows.
 - Successful reads include cache headers where applicable (§17).
 
 ---
@@ -112,7 +112,7 @@ All errors share one envelope: `{ "error": { "code": string, "message": string, 
 
 - **Public/participant responses expose only `DC2`** (public handle/display name) for attribution; **never `DC3`** (full email/internal ids) (`API-INV-7`, `DB-INV-7`, `CTX-INV-3`).
 - **`me`-style endpoints** may return the caller's own non-public profile fields, but still not raw sensitive identifiers beyond what the caller owns.
-- **Moderator/admin/operator responses are explicitly scoped:** any expanded identity context is available only to authorized roles, tenant-scoped, and governed by `MODERATION.md`/`AUTHENTICATION.md` — never via public/participant endpoints.
+- **Moderator/admin/operator responses are explicitly scoped:** any expanded identity context is available only to authorized roles, tenant-scoped, and governed by `MODERATION.md`/`AUTHENTICATION.md`: never via public/participant endpoints.
 - Output filtering happens at the DTO boundary so a projection that *contains* sensitive fields can never serialize them to an unauthorized caller.
 
 ---
@@ -182,20 +182,20 @@ Active-tenant endpoints are implicitly tenant-scoped (`API-DP-1`). DTO names are
 
 ## 13. Endpoint Specs by Group (Architecture Level)
 
-- **Tenant / meta** — public reads of tenant identity, palette, and feature flags from `@quad/config`; cacheable (short TTL/ETag).
-- **Session / auth state** — `GET /session` reflects the current identity (or anonymous); `auth/verify/*` and `signout` are thin entry points whose mechanics live in `AUTHENTICATION.md` (no passwords, `NG-ANON`).
-- **Canvas snapshot/metadata** — `GET /canvas/current` returns term/state/dimensions/palette ref; `GET /canvas/current/snapshot` returns the current projection for initial paint (then the client subscribes via WS for deltas, `§16`).
-- **Placement command** — `POST /canvas/current/pixels` accepts `PlacePixelCommand` (x, y, color) + `Idempotency-Key`; the server validates, checks cooldown, appends `PixelPlaced`, updates the projection, and publishes via WS; returns `PlacePixelResultResponse` or `429 COOLDOWN_ACTIVE` (`§8/§9`).
-- **Pixel history** — `GET .../pixels/{x}/{y}` (current cell + `DC2` attribution) and `.../history` (ordered per-pixel events as `DC2`), paginated.
-- **Profiles** — `me` (own stats) and `{handle}` (public stats + heatmap, `DC2`, honoring privacy `P-PROF-4`).
-- **Leaderboards** — ranked queries by `category` + `window` (allow-listed), `DC2`, paginated.
-- **Archives** — list + per-term metadata with artifact pointers (immutable; strongly cacheable).
-- **Replay metadata** — `ReplayMetaResponse` pointers; **assets** live in object storage and **derivation** in `EVENT_SOURCING.md`/`REPLAY.md` (sanitized default, §15 there).
-- **Reports** — participants submit reports (rate-limited); status visible to the reporter as appropriate.
-- **Moderation** — reports queue + `ModerationActionCommand`; role+tenant scoped; **every action writes audit; no hard delete** (`§19`).
-- **Admin** — tenant config (config-driven, no code change), canvas lifecycle transitions, roster/role management; admin-scoped.
-- **Analytics** — aggregate/heatmap reads (`ANALYTICS`/`HEATMAPS`).
-- **Health/readiness** — unversioned, tenant-less probes for orchestration/observability.
+- **Tenant / meta**: public reads of tenant identity, palette, and feature flags from `@quad/config`; cacheable (short TTL/ETag).
+- **Session / auth state**: `GET /session` reflects the current identity (or anonymous); `auth/verify/*` and `signout` are thin entry points whose mechanics live in `AUTHENTICATION.md` (no passwords, `NG-ANON`).
+- **Canvas snapshot/metadata**: `GET /canvas/current` returns term/state/dimensions/palette ref; `GET /canvas/current/snapshot` returns the current projection for initial paint (then the client subscribes via WS for deltas, `§16`).
+- **Placement command**: `POST /canvas/current/pixels` accepts `PlacePixelCommand` (x, y, color) + `Idempotency-Key`; the server validates, checks cooldown, appends `PixelPlaced`, updates the projection, and publishes via WS; returns `PlacePixelResultResponse` or `429 COOLDOWN_ACTIVE` (`§8/§9`).
+- **Pixel history**: `GET .../pixels/{x}/{y}` (current cell + `DC2` attribution) and `.../history` (ordered per-pixel events as `DC2`), paginated.
+- **Profiles**: `me` (own stats) and `{handle}` (public stats + heatmap, `DC2`, honoring privacy `P-PROF-4`).
+- **Leaderboards**: ranked queries by `category` + `window` (allow-listed), `DC2`, paginated.
+- **Archives**: list + per-term metadata with artifact pointers (immutable; strongly cacheable).
+- **Replay metadata**: `ReplayMetaResponse` pointers; **assets** live in object storage and **derivation** in `EVENT_SOURCING.md`/`REPLAY.md` (sanitized default, §15 there).
+- **Reports**: participants submit reports (rate-limited); status visible to the reporter as appropriate.
+- **Moderation**: reports queue + `ModerationActionCommand`; role+tenant scoped; **every action writes audit; no hard delete** (`§19`).
+- **Admin**: tenant config (config-driven, no code change), canvas lifecycle transitions, roster/role management; admin-scoped.
+- **Analytics**: aggregate/heatmap reads (`ANALYTICS`/`HEATMAPS`).
+- **Health/readiness**: unversioned, tenant-less probes for orchestration/observability.
 
 ---
 
@@ -213,8 +213,8 @@ DTOs are declared in `@quad/core` (`API-INV-2`):
 
 ## 15. API Relationship to Event Sourcing
 
-- **Commands append events** — `POST` command endpoints produce domain events via the backend (`EVENT_SOURCING.md`); they never write projections directly.
-- **Queries read projections** — `GET` endpoints read derived read models (current canvas, history, stats, leaderboards, analytics).
+- **Commands append events**: `POST` command endpoints produce domain events via the backend (`EVENT_SOURCING.md`); they never write projections directly.
+- **Queries read projections**: `GET` endpoints read derived read models (current canvas, history, stats, leaderboards, analytics).
 - **No route mutates a projection directly** (`API-INV-5`); projections change only as a consequence of appended events.
 
 ```mermaid
@@ -254,36 +254,36 @@ flowchart LR
 ## 18. Rate Limiting & Abuse Posture (API Level)
 
 - **Edge rate limiting** per identity and per IP on all endpoints, stricter on write/auth endpoints (`B1`); `429 RATE_LIMITED` on breach.
-- **Cooldown is separate** from rate limiting — it's the fairness throttle on placement (`429 COOLDOWN_ACTIVE`), not an abuse control.
+- **Cooldown is separate** from rate limiting, it's the fairness throttle on placement (`429 COOLDOWN_ACTIVE`), not an abuse control.
 - **Abuse hooks** (bot signals, suspicious patterns) sit at the boundary; specifics + thresholds are owned by `SECURITY.md` (`P-ABUSE-*`).
 
 ---
 
 ## 19. Moderation / Admin API Safety Rules
 
-- **Role-scoped + tenant-scoped** — moderation/admin endpoints require the appropriate role within the resolved tenant (`B3`); operator endpoints are the only cross-tenant ones (`B5`).
-- **Audit required** — every moderation/admin state change writes an audit entry atomically with its effect (`API-INV-10`, `DB-INV-6`, `BE-INV-8`).
-- **No hard delete** — "removal/rollback" produces compensating events; history is preserved (`PRIN-NO-INVISIBLE-LOSS`).
-- **No fairness bypass** — admin/moderation power never shortens cooldown or grants placement advantage (`P-COOL-6`, `NG-UNEQUAL-POWER`).
+- **Role-scoped + tenant-scoped**: moderation/admin endpoints require the appropriate role within the resolved tenant (`B3`); operator endpoints are the only cross-tenant ones (`B5`).
+- **Audit required**: every moderation/admin state change writes an audit entry atomically with its effect (`API-INV-10`, `DB-INV-6`, `BE-INV-8`).
+- **No hard delete**: "removal/rollback" produces compensating events; history is preserved (`PRIN-NO-INVISIBLE-LOSS`).
+- **No fairness bypass**: admin/moderation power never shortens cooldown or grants placement advantage (`P-COOL-6`, `NG-UNEQUAL-POWER`).
 
 ---
 
 ## 20. API Security Considerations
 
 - **Auth/CSRF** mechanics delegated to `AUTHENTICATION.md`; the API **expects** authenticated, authorized, tenant-scoped calls and enforces authorization server-side (`BE-INV-6`).
-- **Input validation** — every request validated against its `@quad/core` schema; reject malformed input (`422`).
-- **Output filtering** — responses serialize only the DTO's allowed fields; `DC3` is structurally unreachable on public/participant endpoints (`§10`).
-- **Tenant isolation** — enforced on every endpoint; cross-tenant attempts return `404` (`§6`).
-- **Sensitive-data handling** — no `DC3` in URLs, query params, logs, or errors; `Idempotency-Key`/correlation ids are non-sensitive. Threat model → `SECURITY.md`.
+- **Input validation**: every request validated against its `@quad/core` schema; reject malformed input (`422`).
+- **Output filtering**: responses serialize only the DTO's allowed fields; `DC3` is structurally unreachable on public/participant endpoints (`§10`).
+- **Tenant isolation**: enforced on every endpoint; cross-tenant attempts return `404` (`§6`).
+- **Sensitive-data handling**: no `DC3` in URLs, query params, logs, or errors; `Idempotency-Key`/correlation ids are non-sensitive. Threat model → `SECURITY.md`.
 
 ---
 
 ## 21. API Performance Considerations
 
-- **Hot placement path** (`POST .../pixels`) is the latency-critical write — minimal work before the append transaction; cooldown check is a fast Redis read.
-- **Snapshot size** — `GET .../snapshot` may be large; an efficient/binary encoding + compression is expected (shape → `RENDERING.md`), and the client relies on WS deltas afterward rather than re-fetching.
-- **Pixel history query shape** — paginated, index-backed per `(canvas, x, y, sequence)` (`DATABASE.md` §13).
-- **Profiles/leaderboards** — paginated, served from projections; eventually-consistent freshness is acceptable.
+- **Hot placement path** (`POST .../pixels`) is the latency-critical write, minimal work before the append transaction; cooldown check is a fast Redis read.
+- **Snapshot size**: `GET .../snapshot` may be large; an efficient/binary encoding + compression is expected (shape → `RENDERING.md`), and the client relies on WS deltas afterward rather than re-fetching.
+- **Pixel history query shape**: paginated, index-backed per `(canvas, x, y, sequence)` (`DATABASE.md` §13).
+- **Profiles/leaderboards**: paginated, served from projections; eventually-consistent freshness is acceptable.
 - Concrete budgets owned by `PERFORMANCE.md`.
 
 ---
@@ -292,14 +292,14 @@ flowchart LR
 
 API test layers (against real api + Postgres/Redis; strategy → `TESTING.md`):
 
-- **Contract tests** — requests/responses conform to `@quad/core` DTOs; the catalog (§12) matches reality (no undocumented endpoints).
-- **Route behavior tests** — happy paths + the full error model (§8).
-- **Authorization tests** — each auth level enforced; UI-gated actions still rejected server-side.
-- **Tenant isolation tests** — cross-tenant access returns `404`; no data leak (`P-AC-13`).
-- **Idempotency tests** — duplicate `Idempotency-Key` returns the original result; no double event/cooldown.
-- **Cooldown-active tests** — placement during cooldown returns `429 COOLDOWN_ACTIVE` with retry info.
-- **Moderation audit tests** — moderation/admin actions write audit + are reversible (no hard delete).
-- **Privacy tests** — public/participant responses never include `DC3`.
+- **Contract tests**: requests/responses conform to `@quad/core` DTOs; the catalog (§12) matches reality (no undocumented endpoints).
+- **Route behavior tests**: happy paths + the full error model (§8).
+- **Authorization tests**: each auth level enforced; UI-gated actions still rejected server-side.
+- **Tenant isolation tests**: cross-tenant access returns `404`; no data leak (`P-AC-13`).
+- **Idempotency tests**: duplicate `Idempotency-Key` returns the original result; no double event/cooldown.
+- **Cooldown-active tests**: placement during cooldown returns `429 COOLDOWN_ACTIVE` with retry info.
+- **Moderation audit tests**: moderation/admin actions write audit + are reversible (no hard delete).
+- **Privacy tests**: public/participant responses never include `DC3`.
 
 ---
 
@@ -307,7 +307,7 @@ API test layers (against real api + Postgres/Redis; strategy → `TESTING.md`):
 
 - **`API-INV-1`** Every endpoint is tenant-scoped by default; cross-tenant only via operator endpoints.
 - **`API-INV-2`** All request/response DTOs are declared in `@quad/core`; no duplicated/untyped payloads.
-- **`API-INV-3`** No undocumented endpoints — every endpoint is in the catalog; contract changes update this doc in the same PR.
+- **`API-INV-3`** No undocumented endpoints, every endpoint is in the catalog; contract changes update this doc in the same PR.
 - **`API-INV-4`** No business logic in route handlers; routes validate + delegate.
 - **`API-INV-5`** Commands append events; queries read projections; no route mutates a projection directly.
 - **`API-INV-6`** State-changing commands require an `Idempotency-Key` and are duplicate-safe.
@@ -375,7 +375,7 @@ See §15 (commands→events→projections; queries←projections; events→WS).
 ## 26. Document Control
 
 - **Path:** `docs/API.md`
-- **Purpose:** Define Quad's complete REST contract — paths, resource model, DTO names, error/idempotency/caching conventions — that `apps/api` implements and `apps/web` consumes, built on the events/projections of `EVENT_SOURCING.md`/`DATABASE.md`.
+- **Purpose:** Define Quad's complete REST contract, paths, resource model, DTO names, error/idempotency/caching conventions, that `apps/api` implements and `apps/web` consumes, built on the events/projections of `EVENT_SOURCING.md`/`DATABASE.md`.
 - **Dependencies:** `BACKEND.md`, `DATABASE.md`, `EVENT_SOURCING.md`, `ARCHITECTURE.md`, `SYSTEM_CONTEXT.md`, `PRODUCT.md`, `PRINCIPLES.md`. **Consumed by:** `WEBSOCKETS.md`, `AUTHENTICATION.md`, `MODERATION.md`, `PROFILES.md`, `LEADERBOARDS.md`, `ARCHIVES.md`, `REPLAY.md`, `ANALYTICS.md`, `FRONTEND.md` (client), `@quad/core` (DTOs), `specs/api`.
 - **Acceptance checklist:** ☑ all 26 parts present ☑ contract altitude (paths/DTO names/errors; no route/source files or DTO declarations) ☑ design principles (tenant-scoped, `@quad/core`-typed, no dup DTOs, no undocumented endpoints, no logic in routes) ☑ transport conventions ☑ standard error model incl. `COOLDOWN_ACTIVE` vs `RATE_LIMITED` ☑ idempotency contract ☑ privacy (`DC2` only) ☑ complete endpoint catalog (method/path/auth/tenant/req/resp/errors/owner) ☑ per-group specs ☑ DTO naming ☑ API↔ES + API↔WS relationships (no polling) ☑ caching + rate limiting + moderation/admin safety ☑ `API-INV-1…12` ☑ 3 Mermaid diagrams ☑ versions referenced not declared ☑ tenant-neutral (Rutgers = example) ☑ no app code/package files.
 - **Open questions:** see §25 (DTO shapes, WS contracts, auth mechanics, read-only public/participant, rate limits).

@@ -1,4 +1,4 @@
-# Playbook — Refactor
+# Playbook: Refactor
 
 > Reusable scaffold. Obeys `process/engineering-rules.md`. Conforms to `docs/ENGINEERING_WORKFLOW.md`, `docs/CODE_QUALITY.md`. Use `templates/refactor.md` for the written record.
 
@@ -6,7 +6,7 @@
 You are the <owner-lane> engineer. Refactor: <short title>.
 
 OBJECTIVE
-<why; what improves — readability/boundaries/perf-neutral cleanup>
+<why; what improves, readability/boundaries/perf-neutral cleanup>
 
 BEHAVIOR-PRESERVING RULE
 No observable behavior change. Same public APIs/contracts.
@@ -14,7 +14,7 @@ No observable behavior change. Same public APIs/contracts.
 FORBIDDEN SCOPE
 No contract changes. No unrelated subsystems. No new features. Small reversible steps.
 
-CONTRACTS UNCHANGED — CONFIRM
+CONTRACTS UNCHANGED, CONFIRM
 Confirm @quad/core DTOs/WS/events/types are unchanged. If ANY change is needed → this is NOT a refactor → STOP and convert to a feature/ADR.
 
 TESTS PROVING NO BEHAVIOR CHANGE

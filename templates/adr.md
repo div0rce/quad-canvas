@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to docs/adr/<NNNN>-<slug>.md. Reusable ADR. -->
-# ADR-`<NNNN>` — `<title>`
+# ADR-`<NNNN>`: `<title>`
 
 > Reminders: an ADR records an **architectural decision**; affected docs/contracts update in the **same PR**. Tenant-neutral (Rutgers Quad = tenant #1 example). Versions → `docs/TECH_BASELINE.md`.
 
@@ -16,7 +16,7 @@
 `<positive + negative results; what becomes easier/harder; new invariants>`
 
 ## 4. Alternatives Considered
-`<option A — pros/cons>` · `<option B — pros/cons>` · `<why rejected>`
+`<option A, pros/cons>` · `<option B, pros/cons>` · `<why rejected>`
 
 ## 5. Affected Docs / Contracts
 `<docs/specs/@quad/core types updated in the same PR>`

@@ -1,8 +1,8 @@
-# `specs/api/` — REST Endpoint Specs
+# `specs/api/`: REST Endpoint Specs
 
 Conventions for **REST endpoint specs**. Conforms to `docs/API.md`, `docs/BACKEND.md`, `docs/SECURITY.md`. Tenant-neutral.
 
-- **What belongs here:** one spec per endpoint (or tightly-related group) — method/path, auth level, tenant context, request/response DTOs, error codes, idempotency, rate limits, security/privacy, tests.
+- **What belongs here:** one spec per endpoint (or tightly-related group), method/path, auth level, tenant context, request/response DTOs, error codes, idempotency, rate limits, security/privacy, tests.
 - **Template:** [`templates/api-endpoint-spec.md`](../../templates/api-endpoint-spec.md).
 - **Owning doc:** `docs/API.md` (the contract) + `docs/BACKEND.md` (handling).
 - **Naming:** `specs/api/<method>-<path-slug>.md`.

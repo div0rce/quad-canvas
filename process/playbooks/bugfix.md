@@ -1,4 +1,4 @@
-# Playbook — Bugfix
+# Playbook: Bugfix
 
 > Reusable scaffold. Obeys `process/engineering-rules.md`. Conforms to `docs/ENGINEERING_WORKFLOW.md`, `docs/TESTING.md`. Use `templates/bugfix.md` for the written record.
 

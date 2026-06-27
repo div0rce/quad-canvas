@@ -1,4 +1,4 @@
-# Quad — Performance Budgets & Scalability
+# Quad: Performance Budgets & Scalability
 
 > **This document owns Quad's concrete, testable performance budgets, scalability assumptions, and performance-test expectations.** Every budget has a **target** and a **blocking threshold** so claims are verifiable (`PRIN-ALIVE`). It conforms to all Phase 1–3 docs and does **not** rewrite any contract.
 >
@@ -19,11 +19,11 @@ The canvas must *feel instantaneous* at thousands of concurrent users while neve
 | Required performance tests + regression gates | Dashboard/alert specifics (`OBSERVABILITY.md`) |
 
 ## 3. Performance Principles
-- **`P-DP-1` Testable budgets** — every target has a blocking threshold + measurement (`PERF-INV-1`).
-- **`P-DP-2` User-perceived responsiveness** — optimize the journeys users feel, not vanity metrics.
-- **`P-DP-3` Graceful degradation** — shed quality, never correctness (`§18`).
-- **`P-DP-4` Correctness over speed** — never a fairness/security shortcut for latency (`PERF-INV-2`).
-- **`P-DP-5` Mobile-first** — budgets assume mid-tier mobile, not a workstation.
+- **`P-DP-1` Testable budgets**: every target has a blocking threshold + measurement (`PERF-INV-1`).
+- **`P-DP-2` User-perceived responsiveness**: optimize the journeys users feel, not vanity metrics.
+- **`P-DP-3` Graceful degradation**: shed quality, never correctness (`§18`).
+- **`P-DP-4` Correctness over speed**: never a fairness/security shortcut for latency (`PERF-INV-2`).
+- **`P-DP-5` Mobile-first**: budgets assume mid-tier mobile, not a workstation.
 
 ## 4. Critical User Journeys
 Initial canvas load · pan/zoom · place pixel · cooldown display · live WS update · reconnect/resnapshot · report→rollback moderation · replay playback · archive browsing · leaderboard/profile/heatmap loading. Each maps to budget rows (§5) and a perf test (§21).
@@ -50,7 +50,7 @@ Initial canvas load · pan/zoom · place pixel · cooldown display · live WS up
 Budgets are **per tenant/canvas** and hold at the launch load tier (§17). Blocking thresholds **gate launch** (`LG-5`) and, where feasible, **gate merge** on the hot path (§21).
 
 ## 6. Frontend Performance
-- **React boundaries:** the canvas is a client island; **no per-pixel React re-render** — deltas go to `@quad/render`, not React state (`FE-INV-7`, `PERF-INV-4`).
+- **React boundaries:** the canvas is a client island; **no per-pixel React re-render**: deltas go to `@quad/render`, not React state (`FE-INV-7`, `PERF-INV-4`).
 - **Bundle/code-split:** lazy-load heavy/non-critical views (replay, admin); keep the canvas path lean.
 - **Mobile input latency:** gestures handled in the engine, not via heavy state churn; tap→feedback feels immediate.
 - **Accessibility not sacrificed:** keyboard/ARIA parallels remain even under degradation (`FRONTEND.md` §10).
@@ -63,7 +63,7 @@ Budgets are **per tenant/canvas** and hold at the launch load tier (§17). Block
 - **WebGL/tiling upgrade triggers:** sustained sub-budget FPS, or canvas size exceeding the memory cap → `ADR-0005`.
 
 ## 8. API Performance
-- **Hot placement path** (B06): minimal work before the atomic append — resolve tenant, authn (cached session), authz, validate, cooldown read, append.
+- **Hot placement path** (B06): minimal work before the atomic append, resolve tenant, authn (cached session), authz, validate, cooldown read, append.
 - **Idempotency/validation overhead** kept small (indexed key check; schema validation is cheap).
 - **Auth/session lookup** is a fast server-side read (Redis-backed sessions).
 - **Tenant resolution** is an in-memory registry lookup.
@@ -93,7 +93,7 @@ Budgets are **per tenant/canvas** and hold at the launch load tier (§17). Block
 - **Load-score input collection**: cheap reads from Redis/metrics; off the placement path.
 - **Cooldown check latency**: B08.
 - **Fail-closed**: under Redis uncertainty, reject placements (correctness > availability of writes).
-- **Write-load is naturally bounded**: sustained placement rate ≈ `activeUsers / cooldownSeconds` (e.g., 10k users at the 5-min floor ⇒ ~33 placements/s); the dynamic cooldown rises under load, further capping append throughput (`PERF-INV-9`) — a key scalability property.
+- **Write-load is naturally bounded**: sustained placement rate ≈ `activeUsers / cooldownSeconds` (e.g., 10k users at the 5-min floor ⇒ ~33 placements/s); the dynamic cooldown rises under load, further capping append throughput (`PERF-INV-9`), a key scalability property.
 
 ## 13. Event-Sourcing / Rebuild Performance
 - **Projection rebuild**: bounded by canvas event count; **checkpoints/keyframes** keep rebuild/scrub cheap (`EVENT_SOURCING.md` §14).

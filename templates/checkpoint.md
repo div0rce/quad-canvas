@@ -1,5 +1,5 @@
 <!-- TEMPLATE: copy to a checkpoint record. Mirrors docs/CHECKPOINTS.md §5 fields. -->
-# Checkpoint Record — `<checkpoint name / Gx>`
+# Checkpoint Record: `<checkpoint name / Gx>`
 
 > Reminders: **gate before advancing; fix-forward on failure** · **evidence required** (commands + results) · contradictions surfaced, never silently bypassed. Conforms to `CHECKPOINTS.md`.
 

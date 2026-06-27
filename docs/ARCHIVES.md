@@ -1,11 +1,11 @@
-# Quad — Archives
+# Quad: Archives
 
 > **Derived-feature doc.** Archives are *derived from* the event log/projections and sealed as permanent artifacts; this doc does **not** redefine event semantics, storage, or moderation rules. Conforms to [`EVENT_SOURCING.md`](EVENT_SOURCING.md), [`DATABASE.md`](DATABASE.md), [`MODERATION.md`](MODERATION.md), [`REPLAY.md`](REPLAY.md), [`ANALYTICS.md`](ANALYTICS.md), [`LEADERBOARDS.md`](LEADERBOARDS.md), [`MULTI_TENANCY.md`](MULTI_TENANCY.md), [`PRODUCT.md`](PRODUCT.md), [`PRINCIPLES.md`](PRINCIPLES.md). Contradictions flagged in §13, never silently fixed.
 >
 > No app code/schemas/versions. Tenant-neutral (Rutgers Quad = tenant #1).
 
 ## 1. Purpose & Scope
-Each term's canvas is frozen and **archived forever** as a permanent historical artifact — final image, stats, leaderboard snapshot, and a replay (`P-FEAT-8`, `P-ARCH-1…5`, `P-LIFE-*`). **In scope:** lifecycle, freeze window, artifacts, storage, immutability, exceptional post-archive correction, visibility. **Out of scope:** event semantics (`EVENT_SOURCING.md`), replay UX (`REPLAY.md`), moderation rules (`MODERATION.md`).
+Each term's canvas is frozen and **archived forever** as a permanent historical artifact, final image, stats, leaderboard snapshot, and a replay (`P-FEAT-8`, `P-ARCH-1…5`, `P-LIFE-*`). **In scope:** lifecycle, freeze window, artifacts, storage, immutability, exceptional post-archive correction, visibility. **Out of scope:** event semantics (`EVENT_SOURCING.md`), replay UX (`REPLAY.md`), moderation rules (`MODERATION.md`).
 
 ## 2. Responsibilities vs. Non-Responsibilities
 | Archives own | Archives don't own |
@@ -33,9 +33,9 @@ Between **Frozen** and **Archived**: **no new placements** (`P-LIFE-4`); a bound
 
 ## 6. Archive Artifacts
 - **Final image** (downloadable; full-resolution).
-- **Replay metadata/assets** (precomputed; reproducible from log — `REPLAY.md`).
-- **Stats snapshot** (term analytics — `ANALYTICS.md`).
-- **Leaderboard snapshot** (final rankings — `LEADERBOARDS.md`).
+- **Replay metadata/assets** (precomputed; reproducible from log, `REPLAY.md`).
+- **Stats snapshot** (term analytics, `ANALYTICS.md`).
+- **Leaderboard snapshot** (final rankings, `LEADERBOARDS.md`).
 - **Provenance metadata** (term id, sealed-at, source watermark, integrity reference).
 
 ## 7. Storage & Metadata Relationship
@@ -49,7 +49,7 @@ If offensive content is discovered after seal (rare), correction is an **operato
 
 ## 10. Replay / Final-Image Generation Ownership
 - **Replay** for archived terms uses precomputed assets (`REPLAY.md`), always reproducible from the log.
-- **Final image generation** is owned here (the archive pipeline) and typically produced **server-side** from the projection/log for full resolution (not the live client renderer — `RENDERING.md` §18).
+- **Final image generation** is owned here (the archive pipeline) and typically produced **server-side** from the projection/log for full resolution (not the live client renderer, `RENDERING.md` §18).
 
 ## 11. Visibility (tenant config)
 `archiveVisibility` feature flag (`MULTI_TENANCY.md` §17): **public** vs **members-only**. Visibility never exposes `DC3`; attribution is `DC2`.
@@ -68,14 +68,14 @@ If offensive content is discovered after seal (rare), correction is an **operato
 | Cold-storage policy for archived partitions | `DATABASE.md`/`DISASTER_RECOVERY.md` |
 
 ## 14. Archive Invariants (`ARCHIVE-INV-*`)
-- **`ARCHIVE-INV-1`** Sealed archives are immutable and permanent — never deleted/overwritten.
+- **`ARCHIVE-INV-1`** Sealed archives are immutable and permanent, never deleted/overwritten.
 - **`ARCHIVE-INV-2`** Artifacts are derived from the log and reproducible; the log remains source of truth.
 - **`ARCHIVE-INV-3`** Post-archive correction is exceptional, operator-level, audited, and preserves the original artifact.
 - **`ARCHIVE-INV-4`** Public archive artifacts are sanitized (no removed content); no `DC3`.
 - **`ARCHIVE-INV-5`** Archives are tenant-scoped; visibility follows tenant config.
 
 ## 15. Diagrams
-### 15.1 Lifecycle — §4.
+### 15.1 Lifecycle: §4.
 ### 15.2 Archive generation
 ```mermaid
 flowchart LR

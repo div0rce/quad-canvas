@@ -1,13 +1,13 @@
-# `specs/ui/` — UI Component Specs
+# `specs/ui/`: UI Component Specs
 
 Conventions for **UI component specs**. Conforms to `docs/FRONTEND.md`, `docs/RENDERING.md`, `docs/CODE_QUALITY.md`. Tenant-neutral.
 
-- **What belongs here:** one spec per component — purpose, props/contracts, state ownership, accessibility, performance, forbidden business logic, data/privacy exposure, tests.
+- **What belongs here:** one spec per component, purpose, props/contracts, state ownership, accessibility, performance, forbidden business logic, data/privacy exposure, tests.
 - **Template:** [`templates/ui-component-spec.md`](../../templates/ui-component-spec.md).
 - **Owning doc:** `docs/FRONTEND.md`.
 - **Naming:** `specs/ui/<ComponentName>.md` (PascalCase).
 - **Required rules:**
-  - **No business logic in React components** — they render/orchestrate only.
+  - **No business logic in React components**: they render/orchestrate only.
   - **UI is not authoritative** for auth/cooldown/fairness (role gating is UX, not security).
   - **`DC2` only, never `DC3`.**
   - **Accessibility is mandatory** (keyboard nav, ARIA live, focus, contrast, color-not-only; WCAG AA).
