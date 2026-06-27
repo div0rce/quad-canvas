@@ -12,6 +12,7 @@ import { EMPTY_CELL } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, placementStatusMessage } from './placement';
+import { fetchCurrentPixel, quickLookLabel } from './quick-look-client';
 import { formatCountdown, remainingMs } from './cooldown';
 import { ReportControl } from './report-control';
 import { PixelInspector } from './pixel-inspector';
@@ -98,6 +99,58 @@ export function CanvasView(): React.ReactElement {
     [dims, submitting],
   );
 
+  // Quick-look: the current cell's owner + time, lighter than the click-to-open history. On desktop it
+  // follows the pointer (hover); on every device a selected cell shows the same quick-look line (so touch
+  // users — who can't hover — get it by tapping). Pinch-zoom/drag-pan is P-AC-11.
+  const [hover, setHover] = useState<{ label: string; left: number; top: number } | null>(null);
+  const hoverCell = useRef<string>('');
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectedQuickLook, setSelectedQuickLook] = useState<string | null>(null);
+
+  // The selected cell's quick-look (device-agnostic; refreshes after a placement via inspectorNonce).
+  useEffect(() => {
+    if (!selected) {
+      setSelectedQuickLook(null);
+      return;
+    }
+    let active = true;
+    void fetchCurrentPixel(selected.x, selected.y).then((pixel) => {
+      if (active) setSelectedQuickLook(quickLookLabel(pixel));
+    });
+    return () => {
+      active = false;
+    };
+  }, [selected, inspectorNonce]);
+
+  const onCanvasMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !dims) return;
+      const rect = canvas.getBoundingClientRect();
+      const cell = cellFromPoint(rect, event.clientX, event.clientY, dims.width, dims.height);
+      const key = cell ? `${cell.x},${cell.y}` : '';
+      if (key === hoverCell.current) return; // only refetch/reposition when the cell changes
+      hoverCell.current = key;
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+      setHover(null); // hide the previous cell's label at once — never show a stale one during the debounce
+      if (!cell) return;
+      const left = event.clientX - rect.left;
+      const top = event.clientY - rect.top;
+      hoverTimer.current = setTimeout(() => {
+        void fetchCurrentPixel(cell.x, cell.y).then((pixel) => {
+          if (hoverCell.current === key) setHover({ label: quickLookLabel(pixel), left, top });
+        });
+      }, 120);
+    },
+    [dims],
+  );
+
+  const onCanvasLeave = useCallback(() => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverCell.current = '';
+    setHover(null);
+  }, []);
+
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
     setSubmitting(true);
@@ -152,9 +205,32 @@ export function CanvasView(): React.ReactElement {
         <canvas
           ref={canvasRef}
           onClick={onCanvasClick}
+          onMouseMove={onCanvasMove}
+          onMouseLeave={onCanvasLeave}
           aria-label="Live canvas — click a cell to place a pixel"
           style={{ imageRendering: 'pixelated', width: '100%', display: 'block', cursor: dims ? 'crosshair' : 'default' }}
         />
+        {hover && (
+          <div
+            role="status"
+            style={{
+              position: 'absolute',
+              left: hover.left,
+              top: hover.top,
+              transform: 'translate(8px, 8px)',
+              pointerEvents: 'none',
+              background: 'rgba(0,0,0,0.8)',
+              color: '#fff',
+              font: '12px sans-serif',
+              padding: '2px 6px',
+              borderRadius: 4,
+              whiteSpace: 'nowrap',
+              zIndex: 2,
+            }}
+          >
+            {hover.label}
+          </div>
+        )}
         {selected && dims && (
           <div
             aria-hidden
@@ -212,6 +288,12 @@ export function CanvasView(): React.ReactElement {
           </button>
           <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
         </div>
+      )}
+
+      {selected && selectedQuickLook && (
+        <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
+          ({selected.x}, {selected.y}): {selectedQuickLook}
+        </p>
       )}
 
       {selected && dims && (
