@@ -1104,6 +1104,36 @@ describe('archives (HTTP)', () => {
       await app.close();
     }
   });
+
+  it('reconstructs an archived canvas at a point in time (temporal replay)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    const a = await placePixel(deps(0), principal(s), t, { x: 1, y: 1, color: 1, idempotencyKey: 'rcA' });
+    const b = await placePixel(deps(0), principal(s), t, { x: 1, y: 1, color: 4, idempotencyKey: 'rcB' }); // overwrites
+    const seqA = a.ok ? a.result.seq : 0;
+    const seqB = b.ok ? b.result.seq : 0;
+    await prisma.canvas.update({ where: { id: s.canvasId }, data: { status: 'archived' } });
+    const canvas = await prisma.canvas.findUnique({ where: { id: s.canvasId }, select: { termLabel: true } });
+    const term = canvas!.termLabel;
+    const app = await buildApp({ placement: deps(0) });
+    const cellsAt = (body: string) => (JSON.parse(body) as { cells: Array<{ x: number; y: number; color: number }> }).cells;
+    try {
+      const atA = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/at/${seqA}`, headers: { host: 'rutgers.localhost' } });
+      expect(atA.statusCode).toBe(200);
+      expect(cellsAt(atA.body)).toContainEqual({ x: 1, y: 1, color: 1 }); // before the overwrite
+
+      const atB = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/at/${seqB}`, headers: { host: 'rutgers.localhost' } });
+      expect(cellsAt(atB.body)).toContainEqual({ x: 1, y: 1, color: 4 }); // after the overwrite
+
+      const at0 = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/at/0`, headers: { host: 'rutgers.localhost' } });
+      expect(cellsAt(at0.body)).toHaveLength(0); // before any event → empty
+
+      const bad = await app.inject({ method: 'GET', url: `/api/v1/archives/${term}/at/abc`, headers: { host: 'rutgers.localhost' } });
+      expect(bad.statusCode).toBe(422);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe('profiles (HTTP)', () => {
