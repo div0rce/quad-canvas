@@ -7,11 +7,13 @@ import type { domain, dto, ws } from '@quad/core';
 import type { PlacementRepository } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import type { SessionStore } from '../auth/session-store.js';
-import { requireRole, hasMinRole } from '../auth/roles.js';
+import { requireRole, hasMinRole, toRole } from '../auth/roles.js';
 
 function parseCoords(targetRef: string): { x: number; y: number } | null {
   const parts = targetRef.split(',');
-  if (parts.length !== 2) return null;
+  // Require strict integer tokens — `Number('')`/`Number(' ')` are 0, and `Number('1e3')`/`Number('0x10')`
+  // coerce, so an empty or non-decimal component must be rejected before coercion.
+  if (parts.length !== 2 || !parts.every((p) => /^-?\d+$/.test(p.trim()))) return null;
   const x = Number(parts[0]);
   const y = Number(parts[1]);
   if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
@@ -23,9 +25,10 @@ function parseCoords(targetRef: string): { x: number; y: number } | null {
 const MAX_REGION_CELLS = 1024;
 
 function parseRegion(targetRef: string): { x1: number; y1: number; x2: number; y2: number } | null {
-  const parts = targetRef.split(',').map(Number);
-  if (parts.length !== 4 || !parts.every(Number.isInteger)) return null;
-  const [x1, y1, x2, y2] = parts as [number, number, number, number];
+  const raw = targetRef.split(',');
+  // Validate the raw tokens before coercion (an empty component would otherwise become 0).
+  if (raw.length !== 4 || !raw.every((p) => /^-?\d+$/.test(p.trim()))) return null;
+  const [x1, y1, x2, y2] = raw.map(Number) as [number, number, number, number];
   if (x1 < 0 || y1 < 0 || x2 < x1 || y2 < y1) return null;
   return { x1, y1, x2, y2 };
 }
@@ -72,8 +75,10 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         }
         const targetRole = await repo.getMembershipRole(request.tenant.id, body.targetRef);
         if (targetRole === null) return err(reply, request, 404, 'NOT_FOUND', 'Target is not a member of this tenant.');
-        // A moderator may not act on a peer or a higher role.
-        if (hasMinRole(targetRole as domain.Role, principal.role)) {
+        // A moderator may not act on a peer or a higher role. Fail CLOSED on an unrecognized role
+        // (`toRole` → null): an unknown DB value must never bypass the peer-protection check.
+        const tr = toRole(targetRole);
+        if (tr === null || hasMinRole(tr, principal.role)) {
           return err(reply, request, 403, 'FORBIDDEN', 'Cannot moderate a member of equal or higher role.');
         }
         const result = await repo.applyMemberModeration({

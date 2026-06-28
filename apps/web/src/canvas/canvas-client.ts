@@ -44,6 +44,11 @@ export class CanvasClient {
   #snapshotLoaded = false;
   #pending: Array<ws.PixelPlaced | ws.PixelRolledBack> = [];
   #stopped = false;
+  // Bumped on every (re)connect AND close, so a snapshot load that was in flight across a reconnect or
+  // close is recognized as stale and discarded (it must not set #snapshotLoaded for a dead connection).
+  #generation = 0;
+  // Recovery backoff attempt counter; reset to 0 on a successful snapshot load.
+  #retryAttempt = 0;
 
   constructor(options: CanvasClientOptions) {
     this.#opts = options;
@@ -65,6 +70,7 @@ export class CanvasClient {
   }
 
   #connect(): void {
+    this.#generation += 1; // a new connection supersedes any in-flight snapshot load
     const socket = this.#opts.openSocket();
     this.#socket = socket;
     socket.onopen = () => {
@@ -82,27 +88,66 @@ export class CanvasClient {
 
   #onClose(): void {
     this.#socket = null;
+    this.#generation += 1; // invalidate any in-flight snapshot load for the now-dead connection
     if (this.#stopped) return;
     // Queue deltas until we have re-synced against a fresh snapshot.
     this.#snapshotLoaded = false;
-    const delay = this.#opts.reconnectDelayMs ?? 1000;
+    this.#scheduleRecovery(() => this.#reconnect());
+  }
+
+  // Schedule a recovery attempt with exponential backoff + a cap + jitter, so a sustained outage does
+  // not hammer the API roughly once a second forever (thundering herd). The attempt counter resets on
+  // a successful snapshot load (#loadSnapshotAndFlush).
+  #scheduleRecovery(run: () => Promise<void>): void {
+    if (this.#stopped) return;
+    const base = this.#opts.reconnectDelayMs ?? 1000;
+    const ceiling = Math.min(30_000, base * 2 ** this.#retryAttempt);
+    this.#retryAttempt += 1;
+    const delay = ceiling / 2 + Math.random() * (ceiling / 2); // half-jittered: [ceiling/2, ceiling]
     const schedule = this.#opts.schedule ?? ((fn, ms) => setTimeout(fn, ms));
     schedule(() => {
-      void this.#reconnect();
+      void run();
     }, delay);
   }
 
   async #reconnect(): Promise<void> {
     if (this.#stopped || !this.#buffer) return;
     this.#connect();
-    await this.#loadSnapshotAndFlush();
+    try {
+      await this.#loadSnapshotAndFlush();
+    } catch {
+      this.#scheduleResync(); // a failed snapshot fetch must not freeze the live canvas
+    }
+  }
+
+  // Retry the snapshot resync (reusing the open socket, NOT a new connection) after a failed fetch on a
+  // recovery path (reconnect / region-rollback). start()'s initial-load failure is intentionally NOT
+  // routed here — its rejection surfaces the "Could not load" UI.
+  #scheduleResync(): void {
+    this.#scheduleRecovery(() => this.#resync());
+  }
+
+  async #resync(): Promise<void> {
+    // If the socket is gone (a close happened since this was scheduled), let #onClose's reconnect own
+    // recovery — don't load a snapshot for a dead connection (which would set #snapshotLoaded with no
+    // live subscription, dropping deltas until the next reconnect).
+    if (this.#stopped || !this.#buffer || !this.#socket) return;
+    try {
+      await this.#loadSnapshotAndFlush();
+    } catch {
+      this.#scheduleResync();
+    }
   }
 
   async #loadSnapshotAndFlush(): Promise<void> {
+    const gen = this.#generation;
     const snapshot = await this.#opts.fetchSnapshot();
-    if (this.#stopped || !this.#buffer) return;
+    // Discard a load superseded by a reconnect/close while the fetch was in flight (stale generation) —
+    // otherwise it would mark #snapshotLoaded for a connection that is no longer the live one.
+    if (this.#stopped || !this.#buffer || gen !== this.#generation) return;
     this.#buffer.loadSnapshot(snapshot);
     this.#snapshotLoaded = true;
+    this.#retryAttempt = 0; // recovered → reset the backoff
     for (const delta of this.#pending) this.#applyLive(delta);
     this.#pending = [];
     this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
@@ -121,7 +166,7 @@ export class CanvasClient {
       // loaded flag) so none are lost or applied to the stale buffer; the watermark dedupes the rest.
       if (this.#snapshotLoaded && !this.#stopped) {
         this.#snapshotLoaded = false;
-        void this.#loadSnapshotAndFlush();
+        void this.#loadSnapshotAndFlush().catch(() => this.#scheduleResync()); // retry on a failed resync
       }
       return;
     }

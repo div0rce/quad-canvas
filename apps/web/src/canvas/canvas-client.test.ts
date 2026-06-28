@@ -129,6 +129,43 @@ describe('CanvasClient', () => {
     expect(client.buffer?.colorAt(0, 0)).toBe(1);
   });
 
+  it('retries the snapshot resync after a failed fetch on reconnect (no freeze)', async () => {
+    const sockets: Array<ReturnType<typeof fakeSocket>> = [];
+    let snapCalls = 0;
+    const client = new CanvasClient({
+      fetchMeta: () => Promise.resolve(meta),
+      fetchSnapshot: () => {
+        snapCalls += 1;
+        // start() succeeds (1); the reconnect's resync fails once (2) then a retry succeeds (3).
+        return snapCalls === 2 ? Promise.reject(new Error('snapshot 503')) : Promise.resolve(emptySnapshot);
+      },
+      openSocket: () => {
+        const s = fakeSocket();
+        sockets.push(s);
+        return s;
+      },
+      onUpdate: () => undefined,
+      schedule: (fn) => {
+        fn(); // run the reconnect + resync retries immediately
+      },
+    });
+
+    await client.start();
+    expect(sockets).toHaveLength(1);
+
+    // Drop the connection: reconnect (socket 2) → snapshot REJECTS → a resync retry is scheduled →
+    // the retry RESOLVES. The retry re-fetches the snapshot only (reuses socket 2 — no third socket).
+    sockets[0]?.onclose?.();
+    for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0)); // let the fail + retry settle
+    expect(snapCalls).toBeGreaterThanOrEqual(3); // start + failed reconnect + successful retry
+    expect(sockets).toHaveLength(2); // resync reused the reconnect's socket, not a new one
+
+    // Recovered (not frozen): the reconnected socket delivers deltas again.
+    sockets[1]?.onopen?.();
+    sockets[1]?.onmessage?.({ data: JSON.stringify({ type: 'PixelPlaced', at: { x: 0, y: 0 }, color: 1, seq: 1 }) });
+    expect(client.buffer?.colorAt(0, 0)).toBe(1);
+  });
+
   it('does not reconnect after stop()', async () => {
     const sockets: Array<ReturnType<typeof fakeSocket>> = [];
     const client = new CanvasClient({
