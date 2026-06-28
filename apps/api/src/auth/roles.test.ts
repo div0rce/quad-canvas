@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import type { domain } from '@quad/core';
-import { hasMinRole, requireRole } from './roles.js';
+import { hasMinRole, requireRole, toRole } from './roles.js';
 
 describe('hasMinRole', () => {
   it('respects the role hierarchy', () => {
@@ -11,6 +11,16 @@ describe('hasMinRole', () => {
     expect(hasMinRole('admin', 'moderator')).toBe(true);
     expect(hasMinRole('operator', 'admin')).toBe(true);
     expect(hasMinRole('moderator', 'moderator')).toBe(true);
+  });
+});
+
+describe('toRole', () => {
+  it('accepts known roles and rejects everything else (fail closed)', () => {
+    expect(toRole('participant')).toBe('participant');
+    expect(toRole('operator')).toBe('operator');
+    expect(toRole('superuser')).toBeNull();
+    expect(toRole('')).toBeNull();
+    expect(toRole('Moderator')).toBeNull(); // case-sensitive: unknown value → denied
   });
 });
 

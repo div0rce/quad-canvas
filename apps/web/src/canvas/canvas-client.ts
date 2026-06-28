@@ -95,7 +95,33 @@ export class CanvasClient {
   async #reconnect(): Promise<void> {
     if (this.#stopped || !this.#buffer) return;
     this.#connect();
-    await this.#loadSnapshotAndFlush();
+    try {
+      await this.#loadSnapshotAndFlush();
+    } catch {
+      this.#scheduleResync(); // a failed snapshot fetch must not freeze the live canvas
+    }
+  }
+
+  // Retry the snapshot resync with backoff after a failed fetch on a recovery path (reconnect /
+  // region-rollback). It retries #loadSnapshotAndFlush, NOT #reconnect, so it reuses the already-open
+  // socket instead of leaking a second one. start()'s initial-load failure is intentionally NOT routed
+  // here — its rejection surfaces the "Could not load" UI.
+  #scheduleResync(): void {
+    if (this.#stopped) return;
+    const delay = this.#opts.reconnectDelayMs ?? 1000;
+    const schedule = this.#opts.schedule ?? ((fn, ms) => setTimeout(fn, ms));
+    schedule(() => {
+      void this.#resync();
+    }, delay);
+  }
+
+  async #resync(): Promise<void> {
+    if (this.#stopped || !this.#buffer) return;
+    try {
+      await this.#loadSnapshotAndFlush();
+    } catch {
+      this.#scheduleResync();
+    }
   }
 
   async #loadSnapshotAndFlush(): Promise<void> {
@@ -121,7 +147,7 @@ export class CanvasClient {
       // loaded flag) so none are lost or applied to the stale buffer; the watermark dedupes the rest.
       if (this.#snapshotLoaded && !this.#stopped) {
         this.#snapshotLoaded = false;
-        void this.#loadSnapshotAndFlush();
+        void this.#loadSnapshotAndFlush().catch(() => this.#scheduleResync()); // retry on a failed resync
       }
       return;
     }

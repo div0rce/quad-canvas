@@ -12,6 +12,14 @@ const RANK: Record<domain.Role, number> = {
   operator: 4,
 };
 
+/** All known roles, low → high. */
+export const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
+
+/** Narrow an arbitrary string to a known `Role`, or `null` for an unrecognized value (deny / fail closed). */
+export function toRole(role: string): domain.Role | null {
+  return (ROLES as readonly string[]).includes(role) ? (role as domain.Role) : null;
+}
+
 /** True if `role` meets or exceeds `min` in the hierarchy. */
 export function hasMinRole(role: domain.Role, min: domain.Role): boolean {
   return RANK[role] >= RANK[min];

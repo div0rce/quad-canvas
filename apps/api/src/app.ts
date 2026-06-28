@@ -4,7 +4,6 @@ import Fastify from 'fastify';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
-import type { domain } from '@quad/core';
 import { SubscriptionRegistry } from '@quad/realtime';
 import errorsPlugin from './plugins/errors.js';
 import securityHeadersPlugin from './plugins/security-headers.js';
@@ -25,6 +24,7 @@ import { makeProfileRoutes } from './routes/profiles.js';
 import { makeLeaderboardRoutes } from './routes/leaderboards.js';
 import { InMemoryRateLimiter, type RateLimiter } from './rate-limit/rate-limiter.js';
 import { makeRateLimit } from './rate-limit/prehandler.js';
+import { toRole } from './auth/roles.js';
 import type { PlacementDeps } from './services/placement.js';
 import type { SessionStore } from './auth/session-store.js';
 import type { AuthService } from './auth/auth-service.js';
@@ -68,12 +68,6 @@ export interface BuildAppOptions {
   readonly readinessChecks?: readonly ReadinessCheck[];
 }
 
-const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
-
-/** Narrow a DB role string to a known role, or null (fail-closed — never trust an unknown value). */
-function toRole(role: string): domain.Role | null {
-  return (ROLES as readonly string[]).includes(role) ? (role as domain.Role) : null;
-}
 
 /** Build a configured (but not-yet-listening) Fastify instance. */
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {

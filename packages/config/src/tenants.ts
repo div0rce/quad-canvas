@@ -46,5 +46,8 @@ export function getTenantBySlug(slug: string): tenant.TenantConfig | undefined {
  * an unknown host must never silently resolve to Rutgers (or any tenant).
  */
 export function resolveTenantByHost(host: string): tenant.TenantConfig | undefined {
-  return TENANTS.find((t) => t.hosts.includes(host));
+  // Host names are case-insensitive (RFC 4343): a mixed-case `Host` header must still resolve. Lowercase
+  // both sides so a valid host is never missed; an unknown host still returns undefined (no default).
+  const h = host.toLowerCase();
+  return TENANTS.find((t) => t.hosts.some((x) => x.toLowerCase() === h));
 }

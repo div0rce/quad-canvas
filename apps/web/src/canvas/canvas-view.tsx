@@ -275,6 +275,16 @@ export function CanvasView(): React.ReactElement {
     [selectAt],
   );
 
+  // Pointer CANCEL (the OS/browser aborted the gesture, e.g. a scroll/zoom takeover). Same state
+  // cleanup as onPointerUp but WITHOUT selectAt — a canceled gesture is not a tap, so it must not
+  // place a selection. (Reusing onPointerUp here would register a spurious cell selection; dropping
+  // the handler entirely would leak the pointer and wedge the next gesture.)
+  const onPointerCancel = useCallback((e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchRef.current = null;
+    if (pointers.current.size === 0) multiTouched.current = false;
+  }, []);
+
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
     setSubmitting(true);
@@ -330,7 +340,7 @@ export function CanvasView(): React.ReactElement {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         style={{ position: 'relative', overflow: 'hidden', touchAction: 'none', maxWidth: '100%' }}
       >
         <div
