@@ -191,6 +191,8 @@ export interface RollbackPixelInput {
   readonly x: number;
   readonly y: number;
   readonly reason: string;
+  /** Optional idempotency key — a retry returns the original action without re-applying the rollback. */
+  readonly idempotencyKey?: string | null;
 }
 
 export type RollbackResult =
@@ -203,6 +205,8 @@ export type RollbackResult =
       readonly seq: number;
       readonly auditId: string;
       readonly createdAt: Date;
+      /** True when this is an idempotent replay of an earlier rollback (no new state change / broadcast). */
+      readonly replayed?: boolean;
     }
   | { readonly kind: 'absent' }
   | { readonly kind: 'archived' };
@@ -216,6 +220,8 @@ export interface RollbackRegionInput {
   readonly x2: number;
   readonly y2: number;
   readonly reason: string;
+  /** Optional idempotency key — a retry returns the original action without re-applying the rollback. */
+  readonly idempotencyKey?: string | null;
 }
 
 export type RegionRollbackResult =
@@ -227,6 +233,8 @@ export type RegionRollbackResult =
       readonly seq: number;
       readonly auditId: string;
       readonly createdAt: Date;
+      /** True when this is an idempotent replay of an earlier rollback (no new state change / broadcast). */
+      readonly replayed?: boolean;
     }
   | { readonly kind: 'archived' };
 
@@ -918,8 +926,20 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async rollbackPixel(input) {
       const { tenantId, canvasId, actorUserId, x, y, reason } = input;
+      // Namespaced so a client placement key (no prefix) can never pre-occupy a rollback key.
+      const modKey = input.idempotencyKey ? `modrb:${input.idempotencyKey}` : null;
       return prisma.$transaction(async (tx): Promise<RollbackResult> => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
+        // Idempotency: a retried rollback must NOT pop another placement. Under the per-canvas lock a
+        // prior action with this key is already committed + visible, so a findUnique short-circuit is
+        // race-safe (same pattern as appendPlacement). Replay → no state change, no broadcast.
+        if (modKey) {
+          const prior = await tx.moderationAction.findUnique({
+            where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: modKey } },
+            select: { id: true, createdAt: true },
+          });
+          if (prior) return { kind: 'rolledBack', x, y, color: null, seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
+        }
         // Re-check status under the lock — a freeze→archive may have committed since the route read it.
         const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
         if (canvasState?.status === 'archived') return { kind: 'archived' };
@@ -969,7 +989,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x, y } } });
         }
         const audit = await tx.moderationAction.create({
-          data: { tenantId, actorUserId, actionType: 'pixel_rollback', targetRef: `${x},${y}`, reason },
+          data: { tenantId, actorUserId, actionType: 'pixel_rollback', targetRef: `${x},${y}`, reason, ...(modKey ? { idempotencyKey: modKey } : {}) },
           select: { id: true, createdAt: true },
         });
         return { kind: 'rolledBack', x, y, color: revertedColor, seq, auditId: audit.id, createdAt: audit.createdAt };
@@ -978,8 +998,19 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async rollbackRegion(input) {
       const { tenantId, canvasId, actorUserId, x1, y1, x2, y2, reason } = input;
+      const modKey = input.idempotencyKey ? `modrb:${input.idempotencyKey}` : null;
       return prisma.$transaction(async (tx): Promise<RegionRollbackResult> => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
+        // Idempotency: a retried region rollback must NOT pop another placement from every cell. The
+        // per-canvas lock makes a findUnique short-circuit race-safe (a prior action with this key is
+        // committed + visible). Replay → no state change, no broadcast.
+        if (modKey) {
+          const prior = await tx.moderationAction.findUnique({
+            where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: modKey } },
+            select: { id: true, createdAt: true },
+          });
+          if (prior) return { kind: 'rolledBack', cells: [], seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
+        }
         // Re-check status under the lock — an archive may have committed since the route read it.
         const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
         if (canvasState?.status === 'archived') return { kind: 'archived' };
@@ -1047,7 +1078,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           cells.push({ x: p.x, y: p.y, color: revertedColor });
         }
         const audit = await tx.moderationAction.create({
-          data: { tenantId, actorUserId, actionType: 'region_rollback', targetRef: `${x1},${y1},${x2},${y2}`, reason },
+          data: { tenantId, actorUserId, actionType: 'region_rollback', targetRef: `${x1},${y1},${x2},${y2}`, reason, ...(modKey ? { idempotencyKey: modKey } : {}) },
           select: { id: true, createdAt: true },
         });
         return { kind: 'rolledBack', cells, seq, auditId: audit.id, createdAt: audit.createdAt };

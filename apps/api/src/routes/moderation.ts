@@ -130,6 +130,7 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (coords.x < 0 || coords.y < 0 || coords.x >= canvas.width || coords.y >= canvas.height) {
           return err(reply, request, 422, 'VALIDATION_ERROR', 'Coordinate is out of canvas bounds.');
         }
+        const key = request.headers['idempotency-key'];
         const result = await repo.rollbackPixel({
           tenantId: request.tenant.id,
           canvasId: canvas.id,
@@ -137,19 +138,23 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           x: coords.x,
           y: coords.y,
           reason: body.reason,
+          ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
         });
         if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
         if (result.kind === 'absent') return err(reply, request, 404, 'NOT_FOUND', 'No pixel at that coordinate to roll back.');
-        const message: ws.PixelRolledBack = {
-          type: 'PixelRolledBack',
-          at: { x: coords.x, y: coords.y },
-          seq: result.seq as domain.PerCanvasSequence,
-          ...(result.color !== null ? { color: result.color as domain.ColorIndex } : {}),
-        };
-        try {
-          await bus.publish(request.tenant.id, canvas.id, message);
-        } catch {
-          // best-effort broadcast
+        // Broadcast only a genuinely-new rollback — an idempotent replay changed no state.
+        if (!result.replayed) {
+          const message: ws.PixelRolledBack = {
+            type: 'PixelRolledBack',
+            at: { x: coords.x, y: coords.y },
+            seq: result.seq as domain.PerCanvasSequence,
+            ...(result.color !== null ? { color: result.color as domain.ColorIndex } : {}),
+          };
+          try {
+            await bus.publish(request.tenant.id, canvas.id, message);
+          } catch {
+            // best-effort broadcast
+          }
         }
         const response: dto.ModerationActionResponse = {
           id: result.auditId,
@@ -170,6 +175,7 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (region.x2 >= canvas.width || region.y2 >= canvas.height) {
           return err(reply, request, 422, 'VALIDATION_ERROR', 'Region is out of canvas bounds.');
         }
+        const key = request.headers['idempotency-key'];
         const result = await repo.rollbackRegion({
           tenantId: request.tenant.id,
           canvasId: canvas.id,
@@ -179,13 +185,17 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           x2: region.x2,
           y2: region.y2,
           reason: body.reason,
+          ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
         });
         if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
-        const message: ws.RegionRolledBack = { type: 'RegionRolledBack', region };
-        try {
-          await bus.publish(request.tenant.id, canvas.id, message);
-        } catch {
-          // best-effort broadcast
+        // Broadcast only a genuinely-new rollback — an idempotent replay changed no state.
+        if (!result.replayed) {
+          const message: ws.RegionRolledBack = { type: 'RegionRolledBack', region };
+          try {
+            await bus.publish(request.tenant.id, canvas.id, message);
+          } catch {
+            // best-effort broadcast
+          }
         }
         const response: dto.ModerationActionResponse = {
           id: result.auditId,

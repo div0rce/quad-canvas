@@ -158,11 +158,13 @@ model ModerationAction {
   targetRef      String   @map("target_ref")
   reason         String?
   relatedEventId String?  @map("related_event_id")
+  idempotencyKey String?  @map("idempotency_key")
   createdAt      DateTime @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   actor  User   @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, idempotencyKey]) // idempotent rollbacks (tenant-scoped; nulls are distinct)
   @@index([tenantId, createdAt])
   @@map("moderation_actions")
 }
