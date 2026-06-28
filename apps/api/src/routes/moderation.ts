@@ -121,6 +121,17 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
       if (body.actionType === 'pixel_rollback') {
         const coords = parseCoords(body.targetRef);
         if (!coords) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x,y" for a pixel rollback.');
+        const key = request.headers['idempotency-key'];
+        // Honor a keyed retry BEFORE the current-canvas preflight, so idempotency survives a canvas
+        // change since the original (archived / new dimensions): if this exact rollback already ran,
+        // return its original audit rather than 409/422-ing the retry.
+        if (typeof key === 'string' && key !== '') {
+          const prior = await repo.findRollbackReplay(request.tenant.id, `${coords.x},${coords.y}`, key);
+          if (prior) {
+            const replay: dto.ModerationActionResponse = { id: prior.id, actionType: body.actionType, createdAt: prior.createdAt.toISOString() };
+            return reply.status(200).send(replay);
+          }
+        }
         const canvas = await repo.findViewableCanvas(request.tenant.id);
         if (!canvas) return err(reply, request, 404, 'NOT_FOUND', 'No canvas for this tenant.');
         // An archived canvas is sealed — no new events may mutate it, even via moderation.
@@ -130,7 +141,6 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (coords.x < 0 || coords.y < 0 || coords.x >= canvas.width || coords.y >= canvas.height) {
           return err(reply, request, 422, 'VALIDATION_ERROR', 'Coordinate is out of canvas bounds.');
         }
-        const key = request.headers['idempotency-key'];
         const result = await repo.rollbackPixel({
           tenantId: request.tenant.id,
           canvasId: canvas.id,
@@ -169,13 +179,21 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (!region) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x1,y1,x2,y2" with x1≤x2, y1≤y2.');
         const area = (region.x2 - region.x1 + 1) * (region.y2 - region.y1 + 1);
         if (area > MAX_REGION_CELLS) return err(reply, request, 422, 'VALIDATION_ERROR', `Region too large (max ${MAX_REGION_CELLS} cells).`);
+        const key = request.headers['idempotency-key'];
+        // Honor a keyed retry before the current-canvas preflight (idempotency survives a canvas change).
+        if (typeof key === 'string' && key !== '') {
+          const prior = await repo.findRollbackReplay(request.tenant.id, `${region.x1},${region.y1},${region.x2},${region.y2}`, key);
+          if (prior) {
+            const replay: dto.ModerationActionResponse = { id: prior.id, actionType: body.actionType, createdAt: prior.createdAt.toISOString() };
+            return reply.status(200).send(replay);
+          }
+        }
         const canvas = await repo.findViewableCanvas(request.tenant.id);
         if (!canvas) return err(reply, request, 404, 'NOT_FOUND', 'No canvas for this tenant.');
         if (canvas.status === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
         if (region.x2 >= canvas.width || region.y2 >= canvas.height) {
           return err(reply, request, 422, 'VALIDATION_ERROR', 'Region is out of canvas bounds.');
         }
-        const key = request.headers['idempotency-key'];
         const result = await repo.rollbackRegion({
           tenantId: request.tenant.id,
           canvasId: canvas.id,
