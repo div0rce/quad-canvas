@@ -645,6 +645,45 @@ describe('moderation actions (HTTP)', () => {
     }
   });
 
+  it('a retried pixel_rollback with the same Idempotency-Key is applied once (idempotent)', async () => {
+    const s = await seed({ tenantId: 'ten_rutgers' });
+    const t = { id: 'ten_rutgers' as const, palette: 'default' };
+    await placePixel(deps(0), principal(s), t, { x: 8, y: 8, color: 1, idempotencyKey: 'ria' });
+    await placePixel(deps(0), principal(s), t, { x: 8, y: 8, color: 4, idempotencyKey: 'rib' }); // overwrites
+    const mod = await prisma.user.create({ data: { email: 'modrb@scarletmail.rutgers.edu', publicHandle: 'modrb', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const rollback = () =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/moderation/actions',
+          headers: {
+            host: 'rutgers.localhost',
+            'content-type': 'application/json',
+            cookie: `quad_session=${modSession}`,
+            'idempotency-key': 'rb-key-1',
+          },
+          payload: { actionType: 'pixel_rollback', targetRef: '8,8', reason: 'remove the overwrite' },
+        });
+      const a = await rollback();
+      const b = await rollback(); // a retry with the SAME key must NOT pop another placement
+      expect(a.statusCode).toBe(200);
+      expect(b.statusCode).toBe(200);
+      expect((a.json() as { id: string }).id).toBe((b.json() as { id: string }).id); // same audit, not a new rollback
+
+      // The cell reverted to the prior placement (color 1) exactly once — the retry did not revert further.
+      const pixel = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/8/8', headers: { host: 'rutgers.localhost' } });
+      expect(pixel.statusCode).toBe(200);
+      expect((pixel.json() as { color: number }).color).toBe(1);
+      expect(await prisma.pixelEvent.count({ where: { canvasId: s.canvasId, x: 8, y: 8, type: 'PixelRolledBack' } })).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('a moderator rolls back a region (reverts every cell + one audit)', async () => {
     const s = await seed({ tenantId: 'ten_rutgers' });
     const t = { id: 'ten_rutgers' as const, palette: 'default' };
