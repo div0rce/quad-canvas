@@ -20,6 +20,7 @@ export default function ArchiveTermPage(): React.ReactElement {
   const [meta, setMeta] = useState<dto.ReplayMetaResponse | null | undefined>(undefined);
   const [stats, setStats] = useState<dto.ArchiveStatsResponse | null>(null);
   const [missing, setMissing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (!term) return;
@@ -27,14 +28,18 @@ export default function ArchiveTermPage(): React.ReactElement {
     void (async () => {
       const [snap, replay, termStats] = await Promise.all([fetchArchiveSnapshot(term), fetchReplayMeta(term), fetchArchiveStats(term)]);
       if (!active) return;
-      setMeta(replay ?? null);
+      setMeta(replay.status === 'ok' ? replay.data : null);
       setStats(termStats);
-      if (!snap) {
-        setMissing(true);
+      if (snap.status === 'missing') {
+        setMissing(true); // a real 404 — terminal
+        return;
+      }
+      if (snap.status === 'error') {
+        setLoadError(true); // transient — retryable, not "not found"
         return;
       }
       const canvas = canvasRef.current;
-      if (canvas) paintSnapshot(canvas, snap, PALETTE, CELL_PX);
+      if (canvas) paintSnapshot(canvas, snap.data, PALETTE, CELL_PX);
     })();
     return () => {
       active = false;
@@ -66,6 +71,8 @@ export default function ArchiveTermPage(): React.ReactElement {
       <h1>{term}</h1>
       {missing ? (
         <p>No archive for that term.</p>
+      ) : loadError ? (
+        <p>Couldn’t load this archive — reload to try again.</p>
       ) : (
         <>
           <canvas ref={canvasRef} aria-label={`Final canvas for ${term}`} style={{ imageRendering: 'pixelated', maxWidth: '100%' }} />

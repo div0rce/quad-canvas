@@ -297,12 +297,14 @@ export function CanvasView(): React.ReactElement {
         body: JSON.stringify({ at: selected, color: pendingColor }),
       });
       if (res.status === 201) {
-        // Apply the AUTHORITATIVE result to the buffer so the pixel shows even if the WS is mid-
-        // reconnect; the seq watermark dedupes the matching live delta when it arrives.
+        // Paint the placed pixel optimistically so it shows even if the WS is mid-reconnect — but do
+        // NOT pass seq: advancing the watermark to this local placement's seq would drop concurrent
+        // lower-seq deltas from other users still in flight. The seq-less path always applies; the WS
+        // echo of this placement re-applies idempotently and advances the watermark in order.
         const result = (await res.json().catch(() => null)) as dto.PlacePixelResultResponse | null;
         const buffer = clientRef.current?.buffer;
         if (result && buffer) {
-          buffer.applyDelta({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq });
+          buffer.applyDelta({ type: 'PixelPlaced', at: result.at, color: result.color });
           paint(canvasRef.current, buffer, dims?.palette ?? 'default');
         }
         if (result && result.cooldownMs > 0) setCooldownUntil(Date.now() + result.cooldownMs); // display the countdown

@@ -35,12 +35,16 @@ export function makeReportRoutes(repo: PlacementRepository, rateLimit?: PreHandl
         return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef and a non-empty reason are required.');
       }
       const canvas = await repo.findViewableCanvas(request.tenant.id);
+      // Idempotency-Key is optional (older clients omit it → a fresh report each time); when present, a
+      // retry returns the original report instead of a duplicate (API-INV-6).
+      const key = request.headers['idempotency-key'];
       const report = await repo.createReport({
         tenantId: request.tenant.id,
         canvasId: canvas?.id ?? null,
         reporterUserId: principal.userId,
         targetRef: body.targetRef,
         reason: body.reason,
+        ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
       });
       const response: dto.ReportResponse = { id: report.id, status: report.status };
       return reply.status(201).send(response);

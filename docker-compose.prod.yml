@@ -63,8 +63,11 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       QUAD_DYNAMIC_COOLDOWN: ${QUAD_DYNAMIC_COOLDOWN:-1}
+    # Loopback-only: reachable on the host for debugging, NOT off-host. Only the edge proxy is published
+    # publicly — otherwise a direct caller could spoof X-Forwarded-For (with TRUST_PROXY=true) and bypass
+    # the per-IP rate limit. To expose the API directly, pin TRUST_PROXY to the edge's IP/CIDR instead.
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,8 +87,9 @@ services:
     # fronts both on ONE origin and routes /api + /ws to `api` by tenant Host (DEPLOYMENT.md §9). That
     # proxy is a follow-up — so on this WEB_PORT the UI renders, but browser→API calls won't resolve
     # until the proxy is added (also what unblocks the browser e2e). Reach the API directly on API_PORT.
+    # Loopback-only (same rationale as the API): publish only the edge proxy off-host.
     ports:
-      - "${WEB_PORT:-8080}:3000"
+      - "127.0.0.1:${WEB_PORT:-8080}:3000"
     depends_on:
       api:
         condition: service_healthy
