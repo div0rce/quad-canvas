@@ -23,6 +23,7 @@ export default function ReplayPage(): React.ReactElement {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [missing, setMissing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   // Load the term's seq range; start at the final state.
   useEffect(() => {
@@ -30,12 +31,16 @@ export default function ReplayPage(): React.ReactElement {
     let active = true;
     void fetchReplayMeta(term).then((m) => {
       if (!active) return;
-      if (!m) {
-        setMissing(true);
+      if (m.status === 'missing') {
+        setMissing(true); // a real 404 — terminal
         return;
       }
-      setMaxSeq(m.toSeq);
-      setSeq(m.toSeq);
+      if (m.status === 'error') {
+        setLoadError(true); // transient — retryable, not "not found"
+        return;
+      }
+      setMaxSeq(m.data.toSeq);
+      setSeq(m.data.toSeq);
     });
     return () => {
       active = false;
@@ -88,6 +93,8 @@ export default function ReplayPage(): React.ReactElement {
       <h1>Replay — {term}</h1>
       {missing ? (
         <p>No archive for that term.</p>
+      ) : loadError ? (
+        <p>Couldn’t load the replay — reload to try again.</p>
       ) : maxSeq === null ? (
         <p>Loading…</p>
       ) : (

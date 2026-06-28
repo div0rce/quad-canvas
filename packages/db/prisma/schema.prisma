@@ -176,12 +176,14 @@ model Report {
   targetRef      String   @map("target_ref")
   reason         String
   status         String   @default("open")
+  idempotencyKey String?  @map("idempotency_key")
   createdAt      DateTime @default(now()) @map("created_at")
 
   tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   reporter User    @relation(fields: [reporterUserId], references: [id], onDelete: Restrict)
   canvas   Canvas? @relation(fields: [canvasId], references: [id], onDelete: SetNull)
 
+  @@unique([tenantId, idempotencyKey]) // duplicate-safe retries (tenant-scoped; nulls are distinct)
   @@index([tenantId, status, createdAt])
   @@map("reports")
 }

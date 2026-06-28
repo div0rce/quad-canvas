@@ -112,6 +112,8 @@ export interface CreateReportInput {
   readonly reporterUserId: string;
   readonly targetRef: string;
   readonly reason: string;
+  /** Optional idempotency key (from the request header) — a retry returns the original report. */
+  readonly idempotencyKey?: string | null;
 }
 
 export interface ReportRow {
@@ -798,17 +800,38 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     },
 
     async createReport(input) {
-      const report = await prisma.report.create({
-        data: {
-          tenantId: input.tenantId,
-          canvasId: input.canvasId,
-          reporterUserId: input.reporterUserId,
-          targetRef: input.targetRef,
-          reason: input.reason,
-        },
-        select: { id: true, status: true },
-      });
-      return { id: report.id, status: report.status };
+      // Idempotency (API-INV-6): a retried key returns the ORIGINAL report instead of filing a duplicate
+      // in the moderator queue. Pre-check, then create; the unique index is the race-safe backstop for
+      // two concurrent retries (one wins; the loser gets P2002 and reads back the winner's report).
+      const findByKey = (key: string) =>
+        prisma.report.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: key } },
+          select: { id: true, status: true },
+        });
+      if (input.idempotencyKey) {
+        const existing = await findByKey(input.idempotencyKey);
+        if (existing) return { id: existing.id, status: existing.status };
+      }
+      try {
+        const report = await prisma.report.create({
+          data: {
+            tenantId: input.tenantId,
+            canvasId: input.canvasId,
+            reporterUserId: input.reporterUserId,
+            targetRef: input.targetRef,
+            reason: input.reason,
+            ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+          },
+          select: { id: true, status: true },
+        });
+        return { id: report.id, status: report.status };
+      } catch (e) {
+        if (input.idempotencyKey && e && typeof e === 'object' && (e as { code?: string }).code === 'P2002') {
+          const existing = await findByKey(input.idempotencyKey);
+          if (existing) return { id: existing.id, status: existing.status };
+        }
+        throw e;
+      }
     },
 
     async listReports(tenantId, query) {
@@ -870,6 +893,10 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         // A new term supersedes the current one: the old active canvas becomes a past-term ARCHIVE
         // (it shows in /archives; one active canvas at a time).
         const active = await tx.canvas.findFirst({ where: { tenantId: input.tenantId, status: 'active' }, select: { id: true } });
+        // Take the OLD canvas's per-canvas lock (the same key appendPlacement uses) before archiving
+        // it, so an in-flight placement can't commit on a canvas this rollover is sealing. Deadlock-safe:
+        // only createCanvas takes the tenant lock, so the tenant→canvas ordering forms no cycle.
+        if (active) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${active.id})::bigint)`;
         await tx.canvas.updateMany({ where: { tenantId: input.tenantId, status: 'active' }, data: { status: 'archived' } });
         const canvas = await tx.canvas.create({
           data: { tenantId: input.tenantId, termLabel: input.term, status: 'active', width: input.width, height: input.height },
@@ -956,53 +983,68 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         // Re-check status under the lock — an archive may have committed since the route read it.
         const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
         if (canvasState?.status === 'archived') return { kind: 'archived' };
+        // Batch the READS: the placed cells in the region, and ALL their events, in two queries (not
+        // ~2 per cell) so the per-canvas advisory lock is held far more briefly. The per-cell stack
+        // replay + the writes are unchanged (the writes stay per-cell because each reverts to a
+        // different prior color/owner and links its own compensating event).
+        const placed = await tx.pixel.findMany({
+          where: { canvasId, x: { gte: x1, lte: x2 }, y: { gte: y1, lte: y2 } },
+          orderBy: [{ y: 'asc' }, { x: 'asc' }], // deterministic seq assignment (matches the old scan order)
+          select: { x: true, y: true, color: true },
+        });
+        const regionEvents = await tx.pixelEvent.findMany({
+          where: { canvasId, x: { gte: x1, lte: x2 }, y: { gte: y1, lte: y2 } },
+          orderBy: { seq: 'asc' },
+          select: { x: true, y: true, type: true, newColor: true, actorUserId: true },
+        });
+        const eventsByCell = new Map<string, Array<{ type: string; newColor: number | null; actorUserId: string }>>();
+        for (const e of regionEvents) {
+          const key = `${e.x},${e.y}`;
+          let group = eventsByCell.get(key);
+          if (!group) {
+            group = [];
+            eventsByCell.set(key, group);
+          }
+          group.push({ type: e.type, newColor: e.newColor, actorUserId: e.actorUserId });
+        }
         const last = await tx.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
         let seq = last?.seq ?? 0;
         const cells: Array<{ x: number; y: number; color: number | null }> = [];
-        for (let y = y1; y <= y2; y++) {
-          for (let x = x1; x <= x2; x++) {
-            const pixel = await tx.pixel.findUnique({ where: { canvasId_x_y: { canvasId, x, y } }, select: { color: true } });
-            if (!pixel) continue; // skip empty cells
-            // Same replay as the single-cell rollback — honor intervening rollbacks per cell.
-            const events = await tx.pixelEvent.findMany({
-              where: { canvasId, x, y },
-              orderBy: { seq: 'asc' },
-              select: { type: true, newColor: true, actorUserId: true },
-            });
-            const stack: Array<{ color: number; owner: string }> = [];
-            for (const e of events) {
-              if (e.type === 'PixelPlaced' && e.newColor !== null) stack.push({ color: e.newColor, owner: e.actorUserId });
-              else if (e.type === 'PixelRolledBack') stack.pop();
-            }
-            const revertTo = stack.length >= 2 ? stack[stack.length - 2] : null;
-            const revertedColor = revertTo?.color ?? null;
-            seq += 1;
-            const event = await tx.pixelEvent.create({
-              data: {
-                tenantId,
-                canvasId,
-                actorUserId,
-                type: 'PixelRolledBack',
-                seq,
-                x,
-                y,
-                prevColor: pixel.color,
-                newColor: revertedColor,
-                idempotencyKey: `rollback:${randomBytes(16).toString('hex')}`,
-                schemaVersion: 1,
-              },
-              select: { id: true, createdAt: true },
-            });
-            if (revertTo) {
-              await tx.pixel.update({
-                where: { canvasId_x_y: { canvasId, x, y } },
-                data: { color: revertTo.color, ownerUserId: revertTo.owner, lastEventId: event.id, seq, placedAt: event.createdAt },
-              });
-            } else {
-              await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x, y } } });
-            }
-            cells.push({ x, y, color: revertedColor });
+        for (const p of placed) {
+          // Same replay as the single-cell rollback — honor intervening rollbacks per cell (seq order).
+          const stack: Array<{ color: number; owner: string }> = [];
+          for (const e of eventsByCell.get(`${p.x},${p.y}`) ?? []) {
+            if (e.type === 'PixelPlaced' && e.newColor !== null) stack.push({ color: e.newColor, owner: e.actorUserId });
+            else if (e.type === 'PixelRolledBack') stack.pop();
           }
+          const revertTo = stack.length >= 2 ? stack[stack.length - 2] : null;
+          const revertedColor = revertTo?.color ?? null;
+          seq += 1;
+          const event = await tx.pixelEvent.create({
+            data: {
+              tenantId,
+              canvasId,
+              actorUserId,
+              type: 'PixelRolledBack',
+              seq,
+              x: p.x,
+              y: p.y,
+              prevColor: p.color,
+              newColor: revertedColor,
+              idempotencyKey: `rollback:${randomBytes(16).toString('hex')}`,
+              schemaVersion: 1,
+            },
+            select: { id: true, createdAt: true },
+          });
+          if (revertTo) {
+            await tx.pixel.update({
+              where: { canvasId_x_y: { canvasId, x: p.x, y: p.y } },
+              data: { color: revertTo.color, ownerUserId: revertTo.owner, lastEventId: event.id, seq, placedAt: event.createdAt },
+            });
+          } else {
+            await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x: p.x, y: p.y } } });
+          }
+          cells.push({ x: p.x, y: p.y, color: revertedColor });
         }
         const audit = await tx.moderationAction.create({
           data: { tenantId, actorUserId, actionType: 'region_rollback', targetRef: `${x1},${y1},${x2},${y2}`, reason },

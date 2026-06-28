@@ -75,6 +75,12 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
             send({ type: 'Error', code: 'WS_FORBIDDEN', message: 'Canvas is not in this tenant.' });
             return;
           }
+          // Release a prior subscription first — this connection tracks a single canvas, so switching
+          // canvases must drop the old one (else its subscriber count drifts up and never recovers).
+          if (subscribedCanvasId && subscribedCanvasId !== message.canvasId) {
+            registry.unsubscribe(conn.id, subscribedCanvasId);
+            broadcastPresence(subscribedCanvasId);
+          }
           registry.subscribe(conn.id, message.canvasId);
           subscribedCanvasId = message.canvasId;
           send({ type: 'Heartbeat' }); // subscription acknowledgement

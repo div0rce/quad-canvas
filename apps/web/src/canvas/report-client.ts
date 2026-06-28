@@ -5,7 +5,9 @@ const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 export async function submitReport(targetRef: string, reason: string): Promise<number> {
   const res = await fetch(`${API_BASE}/api/v1/reports`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    // Idempotency key so a retry (network hiccup / double submit) returns the original report instead
+    // of filing a duplicate in the moderator queue (same pattern as placement).
+    headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
     credentials: 'include',
     body: JSON.stringify({ targetRef, reason }),
   });

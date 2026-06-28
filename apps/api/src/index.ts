@@ -30,11 +30,19 @@ const parsedPort = rawPort ? Number(rawPort) : 3000;
 const PORT = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 3000;
 const DATABASE_URL = process.env['DATABASE_URL'];
 const REDIS_URL = process.env['REDIS_URL'];
-// Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. '1'/'true' →
-// trust the immediate proxy; any other non-empty value is passed through (IP/CIDR/hop count).
+// Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. A NUMBER is a
+// hop COUNT (`1` = the immediate proxy; request.ip is the entry the LB appended, which a client can't
+// spoof). A literal `true` trusts the ENTIRE X-Forwarded-For chain (spoofable — explicit escape hatch
+// only). An IP/CIDR list is passed through. Anything else (unset/empty) → trust nothing.
 const rawTrustProxy = process.env['TRUST_PROXY']?.trim();
-const TRUST_PROXY: boolean | string =
-  rawTrustProxy === '1' || rawTrustProxy === 'true' ? true : rawTrustProxy && rawTrustProxy !== '' ? rawTrustProxy : false;
+const TRUST_PROXY: boolean | string | number =
+  rawTrustProxy === 'true'
+    ? true
+    : rawTrustProxy && /^\d+$/.test(rawTrustProxy)
+      ? Number(rawTrustProxy)
+      : rawTrustProxy && rawTrustProxy !== ''
+        ? rawTrustProxy
+        : false;
 // Fail-closed: an unset/empty/non-numeric/negative override falls back to the default cooldown
 // (never to 0 by accident). An explicit non-negative number is honoured.
 const MIN_COOLDOWN_MS = cooldown.COOLDOWN_MIN_MINUTES * 60_000;

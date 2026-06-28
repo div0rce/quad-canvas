@@ -4,6 +4,12 @@ import type { dto } from '@quad/core';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
+/** A read that distinguishes a real 404 (terminal "not found") from a transient failure (retryable). */
+export type FetchOutcome<T> =
+  | { readonly status: 'ok'; readonly data: T }
+  | { readonly status: 'missing' }
+  | { readonly status: 'error' };
+
 export async function fetchArchives(): Promise<dto.ArchiveListResponse | null> {
   try {
     // Request the max page (newest first). Terms accumulate slowly; >200 would need cursor paging.
@@ -14,12 +20,13 @@ export async function fetchArchives(): Promise<dto.ArchiveListResponse | null> {
   }
 }
 
-export async function fetchArchiveSnapshot(term: string): Promise<dto.CanvasSnapshotResponse | null> {
+export async function fetchArchiveSnapshot(term: string): Promise<FetchOutcome<dto.CanvasSnapshotResponse>> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/snapshot`);
-    return res.ok ? ((await res.json()) as dto.CanvasSnapshotResponse) : null;
+    if (res.ok) return { status: 'ok', data: (await res.json()) as dto.CanvasSnapshotResponse };
+    return { status: res.status === 404 ? 'missing' : 'error' };
   } catch {
-    return null;
+    return { status: 'error' }; // network/transient — retryable, not "not found"
   }
 }
 
@@ -41,11 +48,12 @@ export async function fetchArchiveStats(term: string): Promise<dto.ArchiveStatsR
   }
 }
 
-export async function fetchReplayMeta(term: string): Promise<dto.ReplayMetaResponse | null> {
+export async function fetchReplayMeta(term: string): Promise<FetchOutcome<dto.ReplayMetaResponse>> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/replay`);
-    return res.ok ? ((await res.json()) as dto.ReplayMetaResponse) : null;
+    if (res.ok) return { status: 'ok', data: (await res.json()) as dto.ReplayMetaResponse };
+    return { status: res.status === 404 ? 'missing' : 'error' };
   } catch {
-    return null;
+    return { status: 'error' }; // network/transient — retryable, not "not found"
   }
 }

@@ -959,6 +959,47 @@ describe('reports queue (HTTP)', () => {
     }
   });
 
+  it('a retried report with the same Idempotency-Key is filed once (duplicate-safe)', async () => {
+    await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
+    await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 } });
+    const reporter = await prisma.user.create({ data: { email: 'ridem@scarletmail.rutgers.edu', publicHandle: 'ridem', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: reporter.id, role: 'participant', status: 'active' } });
+    const mod = await prisma.user.create({ data: { email: 'modidem@scarletmail.rutgers.edu', publicHandle: 'modidem', status: 'active' } });
+    await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
+    const sessions = new InMemorySessionStore();
+    const reporterSession = await sessions.create({ userId: reporter.id, tenantId: 'ten_rutgers' }, 3600);
+    const modSession = await sessions.create({ userId: mod.id, tenantId: 'ten_rutgers' }, 3600);
+    const app = await buildApp({ placement: deps(0), auth: { sessionStore: sessions } });
+    try {
+      const file = () =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/reports',
+          headers: {
+            host: 'rutgers.localhost',
+            'content-type': 'application/json',
+            cookie: `quad_session=${reporterSession}`,
+            'idempotency-key': 'rep-key-1',
+          },
+          payload: { targetRef: 'pixel:1,1', reason: 'spam' },
+        });
+      const a = await file();
+      const b = await file(); // a retry with the same key
+      expect(a.statusCode).toBe(201);
+      expect(b.statusCode).toBe(201);
+      expect((a.json() as { id: string }).id).toBe((b.json() as { id: string }).id); // same report, not a new one
+
+      const queue = await app.inject({
+        method: 'GET',
+        url: '/api/v1/moderation/reports',
+        headers: { host: 'rutgers.localhost', cookie: `quad_session=${modSession}` },
+      });
+      expect((queue.json() as { data: unknown[] }).data).toHaveLength(1); // filed once, not twice
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects anonymous report filing (401)', async () => {
     await prisma.tenant.create({ data: { id: 'ten_rutgers', slug: 'rutgers', publicTitle: 'R', status: 'active' } });
     const app = await buildApp({ placement: deps(0), auth: { sessionStore: new InMemorySessionStore() } });
