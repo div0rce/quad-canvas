@@ -5,15 +5,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { domain, dto } from '@quad/core';
 
-const RANK: Record<domain.Role, number> = {
-  participant: 1,
-  moderator: 2,
-  admin: 3,
-  operator: 4,
-};
-
-/** All known roles, low → high. */
+/** All known roles, low → high. The single source for both parsing (`toRole`) and ordering (`RANK`). */
 export const ROLES: readonly domain.Role[] = ['participant', 'moderator', 'admin', 'operator'];
+
+// Rank map derived from ROLES order so parsing and ordering can never drift apart.
+const RANK = Object.fromEntries(ROLES.map((role, i) => [role, i + 1])) as Record<domain.Role, number>;
 
 /** Narrow an arbitrary string to a known `Role`, or `null` for an unrecognized value (deny / fail closed). */
 export function toRole(role: string): domain.Role | null {
