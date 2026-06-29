@@ -1,8 +1,8 @@
 // Quad — canvas browser e2e (M19). Drives the live canvas in a real browser against the full edge
 // stack and asserts the interaction works: tap-to-select (pointer-up based, robust to pointer
 // capture), wheel zoom, drag pan, and a two-finger PINCH via real touch (CDP) — the DOM parts a
-// build can't verify. (`pinchScale`/`clampPan` are also unit-tested.) Exits non-zero on any failure.
-// A runnable rehearsal (like dr-drill), not a CI gate.
+// build can't verify. (`pinchScale`/`clampPan` are also unit-tested.) Exits non-zero on any failure
+// and runs against the production image set in CI.
 //
 // Prerequisites:
 //   docker compose -f docker-compose.prod.yml --env-file .env.prod.example up -d --build

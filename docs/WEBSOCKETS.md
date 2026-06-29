@@ -54,6 +54,7 @@ WebSockets are how Quad stays **alive** (`PRIN-ALIVE`, `P-CANVAS-7`): after a cl
 8. **Disconnect**, on network loss/close, the client enters reconnect.
 9. **Reconnect**, the client reconnects, resubscribes, waits for the acknowledgement, then **re-fetches the snapshot** (fresh watermark).
 10. **Snapshot refresh after reconnect**, the snapshot is authoritative; the client resumes applying contiguous deltas beyond the new watermark (`§12`).
+11. **Canvas rollover**, when the subscribed canvas is archived, the client resolves the new current canvas metadata, replaces its dimensioned buffer, subscribes to the new canvas, waits for `CanvasSubscribed`, and loads that canvas's snapshot before applying new deltas. Facts confirmed for the archived canvas are ignored after the switch.
 
 ```mermaid
 sequenceDiagram
@@ -241,7 +242,7 @@ flowchart TB
 ## 18. Moderation & Lifecycle Updates Over WS
 
 - **Compensating events** broadcast as `PixelRolledBack`/`RegionRolledBack`/`ArtworkRemoved`, reflecting **sanitized visible state** (removed content stays removed; `EVENT_SOURCING.md` §15/§16).
-- **Canvas lifecycle** changes broadcast as `CanvasLifecycleChanged` (e.g., **frozen** → clients stop offering placement; **archived** → clients switch to read-only/archive view), consistent with `P-LIFE-*`.
+- **Canvas lifecycle** changes broadcast as `CanvasLifecycleChanged` (e.g., **frozen** → clients stop offering placement and refresh the current snapshot; **archived** → live clients resolve and subscribe to the replacement current canvas while the archived canvas remains available through archive views), consistent with `P-LIFE-*`.
 - **Moderation-specific** updates (`ReportStatusUpdated`, `ModerationActionApplied`) go on the **role-gated mod channel** (`§6`), not the public canvas channel.
 
 ---

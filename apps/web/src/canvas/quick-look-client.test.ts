@@ -49,4 +49,9 @@ describe('fetchCurrentPixel', () => {
     vi.stubGlobal('fetch', async () => Promise.reject(new Error('offline')));
     await expect(fetchCurrentPixel(1, 2)).resolves.toEqual({ kind: 'unavailable' });
   });
+
+  it('maps a malformed successful response to unavailable', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ color: 2 }));
+    await expect(fetchCurrentPixel(1, 2)).resolves.toEqual({ kind: 'unavailable' });
+  });
 });

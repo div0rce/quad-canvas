@@ -9,11 +9,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPaletteByKey } from '@quad/config';
 import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
-import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
-import { cellFromPoint, moveCell, placementStatusMessage, type CellArrowKey } from './placement';
+import { cellFromPoint, moveCell, placementIntentIsSettled, placementStatusMessage, type CellArrowKey } from './placement';
 import { fetchCurrentPixel, quickLookLabel, type CurrentPixelResult } from './quick-look-client';
 import { clampPan, pinchScale } from './gestures';
+import {
+  isCanvasMetaResponse,
+  isCanvasSnapshotResponse,
+  isPlacePixelResultResponse,
+  isRecord,
+} from '@/lib/api-response';
 
 const SCALE_MIN = 1; // fit-to-width
 const SCALE_MAX = 8;
@@ -102,14 +107,17 @@ export function CanvasView(): React.ReactElement {
       fetchMeta: async () => {
         const res = await fetch(`${API_BASE}/api/v1/canvas/current`);
         if (!res.ok) throw new Error(`canvas metadata request failed (${res.status})`);
-        const meta = (await res.json()) as dto.CanvasMetaResponse;
+        const meta = (await res.json()) as unknown;
+        if (!isCanvasMetaResponse(meta)) throw new Error('canvas metadata response was malformed');
         setDims({ width: meta.width, height: meta.height, palette: meta.palette });
         return meta;
       },
       fetchSnapshot: async () => {
         const res = await fetch(`${API_BASE}/api/v1/canvas/current/snapshot`);
         if (!res.ok) throw new Error(`canvas snapshot request failed (${res.status})`);
-        return res.json() as Promise<dto.CanvasSnapshotResponse>;
+        const snapshot = (await res.json()) as unknown;
+        if (!isCanvasSnapshotResponse(snapshot)) throw new Error('canvas snapshot response was malformed');
+        return snapshot;
       },
       openSocket: () => new WebSocket(`${wsBase}/api/v1/canvas/current/ws`) as unknown as SocketLike,
       onUpdate: (buffer, ctx) => {
@@ -382,6 +390,7 @@ export function CanvasView(): React.ReactElement {
     setSubmitting(true);
     setStatus('Placing…');
     const fingerprint = JSON.stringify([selected.x, selected.y, pendingColor]);
+    const placementCanvasId = clientRef.current?.canvasId ?? null;
     const priorIntent = placementIntentRef.current;
     const idempotencyKey = priorIntent?.fingerprint === fingerprint ? priorIntent.key : crypto.randomUUID();
     placementIntentRef.current = { fingerprint, key: idempotencyKey };
@@ -392,25 +401,33 @@ export function CanvasView(): React.ReactElement {
         credentials: 'include', // send the session cookie; anonymous → 401
         body: JSON.stringify({ at: selected, color: pendingColor }),
       });
-      if (res.status < 500) placementIntentRef.current = null;
       if (res.status === 201) {
         // Feed the REST result through the controller's normal sequence/gap guard. It may apply the
         // next contiguous event immediately; if another user's lower sequence is missing, it will
         // resnapshot instead of painting stale state or advancing past the gap.
-        const result = (await res.json().catch(() => null)) as dto.PlacePixelResultResponse | null;
-        if (result) clientRef.current?.applyConfirmedPlacement(result);
-        if (result && result.cooldownMs > 0) startCooldown(result.cooldownMs); // display the countdown
+        const body = (await res.json().catch(() => null)) as unknown;
+        const validResult = isPlacePixelResultResponse(body);
+        if (placementIntentIsSettled(res.status, validResult)) placementIntentRef.current = null;
+        if (!validResult) {
+          setStatus('The server returned an invalid placement response. Try again.');
+          return;
+        }
+        clientRef.current?.applyConfirmedPlacement(body, placementCanvasId);
+        if (body.cooldownMs > 0) startCooldown(body.cooldownMs); // display the countdown
         setStatus(placementStatusMessage(201));
         setPendingColor(null);
         setInspectorNonce((n) => n + 1); // keep the cell selected; refresh its history to show the placement
       } else {
-        const body = (await res.json().catch(() => null)) as
-          | { error?: { code?: string; message?: string; details?: { retryAfterMs?: number } } }
-          | null;
+        if (placementIntentIsSettled(res.status, false)) placementIntentRef.current = null;
+        const body = (await res.json().catch(() => null)) as unknown;
+        const error = isRecord(body) && isRecord(body['error']) ? body['error'] : null;
+        const details = error && isRecord(error['details']) ? error['details'] : null;
         // The server is on cooldown — reflect its retry-after as the countdown.
-        const retryAfterMs = body?.error?.details?.retryAfterMs;
+        const retryAfterMs = details?.['retryAfterMs'];
         if (typeof retryAfterMs === 'number' && retryAfterMs > 0) startCooldown(retryAfterMs);
-        setStatus(placementStatusMessage(res.status, body?.error?.code, body?.error?.message));
+        const code = typeof error?.['code'] === 'string' ? error['code'] : undefined;
+        const message = typeof error?.['message'] === 'string' ? error['message'] : undefined;
+        setStatus(placementStatusMessage(res.status, code, message));
       }
     } catch {
       setStatus('Network error — could not reach the server.');

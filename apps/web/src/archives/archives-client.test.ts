@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchArchives } from './archives-client';
+import { fetchArchiveAt, fetchArchiveSnapshot, fetchArchives, fetchReplayMeta } from './archives-client';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -24,5 +24,14 @@ describe('fetchArchives', () => {
 
     const result = await fetchArchives();
     expect(result?.data.map((archive) => archive.term)).toEqual(['S25', 'F24']);
+  });
+});
+
+describe('archive response validation', () => {
+  it('turns malformed successful snapshot and replay responses into retryable errors', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ width: 10, height: 10 }));
+    await expect(fetchArchiveSnapshot('F26')).resolves.toEqual({ status: 'error' });
+    await expect(fetchArchiveAt('F26', 1)).resolves.toBeNull();
+    await expect(fetchReplayMeta('F26')).resolves.toEqual({ status: 'error' });
   });
 });

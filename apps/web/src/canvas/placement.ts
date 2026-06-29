@@ -15,6 +15,11 @@ export interface Cell {
 
 export type CellArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
+/** A response settles an intent only when failure is definitive or a success body was validated. */
+export function placementIntentIsSettled(status: number, validSuccessBody: boolean): boolean {
+  return status < 500 && (status !== 201 || validSuccessBody);
+}
+
 /** Move a keyboard focus cell by one step without leaving the grid. */
 export function moveCell(cell: Cell, key: CellArrowKey, cols: number, rows: number): Cell {
   if (cols <= 0 || rows <= 0) return cell;

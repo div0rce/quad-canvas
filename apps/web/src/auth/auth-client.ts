@@ -1,11 +1,18 @@
 // apps/web — auth client. Thin fetch wrappers over the magic-link front-door + pure message mappers
 // (unit-tested in the node env). The token never appears in the UI's own state beyond the confirm
 // call; the session is an httpOnly cookie the browser carries automatically (credentials: include).
+import { isSessionResponse } from '@/lib/api-response';
+
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
 /** Loose shape check — the server is the authority on eligibility (domain allowlist). */
 export function isLikelyEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+/** Keep the first URL token across React Strict Mode's development effect setup/cleanup replay. */
+export function retainSignInToken(captured: string | null | undefined, search: string): string | null {
+  return captured === undefined ? new URLSearchParams(search).get('token') : captured;
 }
 
 /** Map a verify-request response to a user message. */
@@ -70,7 +77,8 @@ export async function fetchSession(): Promise<SessionInfo> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/session`, { credentials: 'include' });
     if (!res.ok) return { authenticated: false };
-    const body = (await res.json()) as { authenticated: boolean; user?: { handle?: string }; role?: string };
+    const body = (await res.json()) as unknown;
+    if (!isSessionResponse(body)) return { authenticated: false };
     return {
       authenticated: body.authenticated,
       ...(body.user?.handle ? { handle: body.user.handle } : {}),

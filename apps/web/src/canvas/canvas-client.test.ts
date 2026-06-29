@@ -19,9 +19,9 @@ async function nextTurn(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function acknowledge(socket: ReturnType<typeof fakeSocket>): void {
+function acknowledge(socket: ReturnType<typeof fakeSocket>, canvasId = 'canvas_1'): void {
   socket.onopen?.();
-  socket.onmessage?.({ data: JSON.stringify({ type: 'CanvasSubscribed', canvasId: 'canvas_1' }) });
+  socket.onmessage?.({ data: JSON.stringify({ type: 'CanvasSubscribed', canvasId }) });
 }
 
 const meta: dto.CanvasMetaResponse = {
@@ -108,6 +108,40 @@ describe('CanvasClient', () => {
     resolveSnapshot(emptySnapshot);
     await started;
 
+    expect(client.buffer?.colorAt(2, 2)).toBe(5);
+  });
+
+  it('orders mixed REST and WebSocket facts by seq while a snapshot is loading', async () => {
+    const socket = fakeSocket();
+    let resolveSnapshot: (snapshot: dto.CanvasSnapshotResponse) => void = () => undefined;
+    const snapshotPromise = new Promise<dto.CanvasSnapshotResponse>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    const client = new CanvasClient({
+      fetchMeta: () => Promise.resolve(meta),
+      fetchSnapshot: () => snapshotPromise,
+      openSocket: () => socket,
+      onUpdate: () => undefined,
+    });
+
+    const started = client.start();
+    await nextTurn();
+    acknowledge(socket);
+    await nextTurn();
+    // The REST response for seq 2 can beat another actor's lower WS event to the client.
+    client.applyConfirmedPlacement({
+      at: { x: 2, y: 2 },
+      color: 5,
+      seq: 2 as domain.PerCanvasSequence,
+      placedAt: '2026-06-29T00:00:00.000Z',
+      cooldownMs: 0,
+    }, 'canvas_1');
+    socket.onmessage?.({ data: JSON.stringify({ type: 'PixelPlaced', at: { x: 1, y: 1 }, color: 4, seq: 1 }) });
+    resolveSnapshot(emptySnapshot);
+    await started;
+
+    expect(client.buffer?.seq).toBe(2);
+    expect(client.buffer?.colorAt(1, 1)).toBe(4);
     expect(client.buffer?.colorAt(2, 2)).toBe(5);
   });
 
@@ -286,7 +320,60 @@ describe('CanvasClient', () => {
       seq: 1 as domain.PerCanvasSequence,
       placedAt: '2026-01-01T00:00:00.000Z',
       cooldownMs: 300_000,
-    });
+    }, 'canvas_1');
     expect(client.buffer?.colorAt(1, 1)).toBe(8);
+  });
+
+  it('reloads metadata and rejects old REST facts when an archived canvas rolls to a new term', async () => {
+    const sockets: Array<ReturnType<typeof fakeSocket>> = [];
+    const nextMeta: dto.CanvasMetaResponse = {
+      id: 'canvas_2' as domain.CanvasId,
+      term: 'S27',
+      status: 'active',
+      width: 2,
+      height: 2,
+      palette: 'default',
+    };
+    const metas = [meta, nextMeta];
+    const snapshots: dto.CanvasSnapshotResponse[] = [
+      emptySnapshot,
+      { width: 2, height: 2, seq: 2 as domain.PerCanvasSequence, cells: [{ x: 1, y: 1, color: 6 as domain.ColorIndex }] },
+    ];
+    const client = new CanvasClient({
+      fetchMeta: () => Promise.resolve(metas.shift() ?? nextMeta),
+      fetchSnapshot: () => Promise.resolve(snapshots.shift() ?? snapshots[0]!),
+      openSocket: () => {
+        const socket = fakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      onUpdate: () => undefined,
+    });
+
+    const started = client.start();
+    await nextTurn();
+    acknowledge(sockets[0]!);
+    await started;
+    sockets[0]?.onmessage?.({ data: JSON.stringify({ type: 'CanvasLifecycleChanged', status: 'archived', seq: 1 }) });
+    await nextTurn();
+    expect(sockets).toHaveLength(2);
+    acknowledge(sockets[1]!, 'canvas_2');
+    await nextTurn();
+    await nextTurn();
+
+    expect(sockets[1]?.sent[0]).toContain('canvas_2');
+    expect(client.canvasId).toBe('canvas_2');
+    expect(client.buffer?.width).toBe(2);
+    expect(client.buffer?.height).toBe(2);
+    expect(client.buffer?.colorAt(1, 1)).toBe(6);
+
+    client.applyConfirmedPlacement({
+      at: { x: 0, y: 0 },
+      color: 9 as domain.ColorIndex,
+      seq: 3 as domain.PerCanvasSequence,
+      placedAt: '2026-06-29T00:00:00.000Z',
+      cooldownMs: 0,
+    }, 'canvas_1');
+    expect(client.buffer?.colorAt(0, 0)).toBe(-1);
   });
 });

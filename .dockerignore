@@ -6,6 +6,10 @@
 **/*.tsbuildinfo
 **/coverage
 packages/db/src/generated
+# Deployment definitions are build inputs, not application source copied into deploy trees.
+**/Dockerfile
+docker-compose*.yml
+docs
 .git
 .github
 **/.env

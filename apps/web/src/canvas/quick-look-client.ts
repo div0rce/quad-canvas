@@ -1,6 +1,7 @@
 // apps/web — pixel quick-look: the CURRENT cell's owner + time (a lightweight hover preview, distinct
 // from the full click-to-open history in the inspector). Public read; DC2 (handle only, never email).
 import type { dto } from '@quad/core';
+import { isPixelResponse } from '@/lib/api-response';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
@@ -15,7 +16,8 @@ export async function fetchCurrentPixel(x: number, y: number): Promise<CurrentPi
     const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}`);
     if (res.status === 404) return { kind: 'empty' };
     if (!res.ok) return { kind: 'unavailable' };
-    return { kind: 'pixel', pixel: (await res.json()) as dto.PixelResponse };
+    const body = (await res.json()) as unknown;
+    return isPixelResponse(body) ? { kind: 'pixel', pixel: body } : { kind: 'unavailable' };
   } catch {
     return { kind: 'unavailable' };
   }
