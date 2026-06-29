@@ -8,6 +8,24 @@ export interface Rect {
   readonly height: number;
 }
 
+export interface Cell {
+  readonly x: number;
+  readonly y: number;
+}
+
+export type CellArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
+/** Move a keyboard focus cell by one step without leaving the grid. */
+export function moveCell(cell: Cell, key: CellArrowKey, cols: number, rows: number): Cell {
+  if (cols <= 0 || rows <= 0) return cell;
+  const dx = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0;
+  const dy = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0;
+  return {
+    x: Math.min(cols - 1, Math.max(0, cell.x + dx)),
+    y: Math.min(rows - 1, Math.max(0, cell.y + dy)),
+  };
+}
+
 /** Map a pointer position (within a rendered canvas `rect`) to a cell, or null if outside the grid. */
 export function cellFromPoint(
   rect: Rect,
@@ -15,7 +33,7 @@ export function cellFromPoint(
   clientY: number,
   cols: number,
   rows: number,
-): { x: number; y: number } | null {
+): Cell | null {
   if (rect.width <= 0 || rect.height <= 0 || cols <= 0 || rows <= 0) return null;
   const x = Math.floor(((clientX - rect.left) / rect.width) * cols);
   const y = Math.floor(((clientY - rect.top) / rect.height) * rows);

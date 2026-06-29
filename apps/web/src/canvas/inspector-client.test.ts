@@ -1,5 +1,22 @@
-import { describe, it, expect } from 'vitest';
-import { colorHex, colorName } from './inspector-client';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { colorHex, colorName, fetchPixelHistory } from './inspector-client';
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('fetchPixelHistory', () => {
+  it('loads history beyond the first 200-entry page', async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const second = url.includes('cursor=200');
+      return Response.json({
+        data: [{ color: second ? 2 : 1, seq: second ? 201 : 1, placedAt: '2026-01-01T00:00:00.000Z' }],
+        page: { nextCursor: second ? null : '200', limit: 200 },
+      });
+    });
+
+    const result = await fetchPixelHistory(1, 2);
+    expect(result?.data.map((entry) => entry.seq)).toEqual([1, 201]);
+  });
+});
 
 describe('colorHex', () => {
   it('resolves known palette colors', () => {

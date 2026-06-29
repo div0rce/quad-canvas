@@ -2,16 +2,23 @@
 // color lookup. Public read (same tenant-host constraint as the rest of the web app).
 import type { dto } from '@quad/core';
 import { getPaletteByKey } from '@quad/config';
+import { fetchAllPages } from '@/lib/fetch-all-pages';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
-// A cell's full lineage is small; request the max page so all entries (incl. the most recent) are
-// shown without cursor paging. (A pathological >200-placement cell would still be capped — rare.)
+function isHistoryEntry(value: unknown): value is dto.PixelHistoryEntry {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item['color'] === 'number' && typeof item['seq'] === 'number' && typeof item['placedAt'] === 'string';
+}
+
 export async function fetchPixelHistory(x: number, y: number): Promise<dto.PixelHistoryListResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`);
-    if (!res.ok) return null;
-    return (await res.json()) as dto.PixelHistoryListResponse;
+    return await fetchAllPages(
+      `${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`,
+      undefined,
+      isHistoryEntry,
+    );
   } catch {
     return null;
   }

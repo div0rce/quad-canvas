@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replayStep, nextReplaySeq, frameInterval } from './replay';
+import { replayStep, nextReplaySeq, frameInterval, isReplayFrameCurrent } from './replay';
 
 describe('replayStep', () => {
   it('divides the term into ~frames steps, at least 1', () => {
@@ -32,5 +32,13 @@ describe('frameInterval', () => {
   it('floors fast speeds and guards non-positive speed', () => {
     expect(frameInterval(200, 100)).toBe(16); // floored
     expect(frameInterval(200, 0)).toBe(200); // treated as 1x
+  });
+});
+
+describe('isReplayFrameCurrent', () => {
+  it('rejects a stale painted frame after the requested sequence changes', () => {
+    expect(isReplayFrameCurrent(11, 10)).toBe(false);
+    expect(isReplayFrameCurrent(11, null)).toBe(false);
+    expect(isReplayFrameCurrent(11, 11)).toBe(true);
   });
 });

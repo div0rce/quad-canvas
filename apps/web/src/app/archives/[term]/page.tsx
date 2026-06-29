@@ -1,18 +1,19 @@
 'use client';
 
 // apps/web — a past term's final canvas + replay metadata. Paints the archived snapshot (static —
-// no live updates) by loading it into a @quad/render CanvasBuffer. The tenant palette is assumed
-// 'default' (single tenant); carrying the palette in the archive metadata is a follow-up.
+// no live updates) by loading it into a @quad/render CanvasBuffer with the resolved tenant palette.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { dto } from '@quad/core';
 import { fetchArchiveSnapshot, fetchReplayMeta, fetchArchiveStats } from '@/archives/archives-client';
 import { paintSnapshot, archiveImageFilename } from '@/archives/paint-snapshot';
+import { useTenant } from '@/components/tenant-provider';
 
 const CELL_PX = 8;
-const PALETTE = 'default';
 
 export default function ArchiveTermPage(): React.ReactElement {
+  const tenant = useTenant();
   const params = useParams();
   const raw = params['term'];
   const term = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw[0] ?? '') : '';
@@ -39,12 +40,12 @@ export default function ArchiveTermPage(): React.ReactElement {
         return;
       }
       const canvas = canvasRef.current;
-      if (canvas) paintSnapshot(canvas, snap.data, PALETTE, CELL_PX);
+      if (canvas && tenant) paintSnapshot(canvas, snap.data, tenant.palette, CELL_PX);
     })();
     return () => {
       active = false;
     };
-  }, [term]);
+  }, [term, tenant]);
 
   const downloadImage = useCallback(() => {
     const canvas = canvasRef.current;
@@ -66,7 +67,7 @@ export default function ArchiveTermPage(): React.ReactElement {
   return (
     <main style={{ padding: '1rem' }}>
       <p>
-        <a href="/archives">← Archives</a>
+        <Link href="/archives">← Archives</Link>
       </p>
       <h1>{term}</h1>
       {missing ? (
@@ -77,7 +78,7 @@ export default function ArchiveTermPage(): React.ReactElement {
         <>
           <canvas ref={canvasRef} aria-label={`Final canvas for ${term}`} style={{ imageRendering: 'pixelated', maxWidth: '100%' }} />
           <p style={{ color: '#666' }}>
-            <a href={`/archives/${encodeURIComponent(term)}/replay`}>Replay ▸</a> ·{' '}
+            <Link href={`/archives/${encodeURIComponent(term)}/replay`}>Replay ▸</Link> ·{' '}
             <button type="button" onClick={downloadImage} style={{ font: 'inherit', cursor: 'pointer' }}>
               Download image
             </button>

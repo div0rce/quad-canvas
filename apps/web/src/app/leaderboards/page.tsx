@@ -2,6 +2,7 @@
 
 // apps/web — leaderboard (DC2). Ranked top placers; each links to the member's public profile.
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { dto } from '@quad/core';
 import { fetchLeaderboard, ordinal } from '@/content/content-client';
 
@@ -30,9 +31,9 @@ export default function LeaderboardsPage(): React.ReactElement {
           {data.entries.map((e) => (
             <li key={e.handle} style={{ display: 'flex', gap: '0.75rem', padding: '0.25rem 0', borderBottom: '1px solid #eee' }}>
               <span style={{ minWidth: '3.5ch', textAlign: 'right' }}>{ordinal(e.rank)}</span>
-              <a href={`/profiles/${encodeURIComponent(e.handle)}`} style={{ flex: 1 }}>
+              <Link href={`/profiles/${encodeURIComponent(e.handle)}`} style={{ flex: 1 }}>
                 {e.displayName ?? e.handle}
-              </a>
+              </Link>
               <span>{e.pixelsPlaced} px</span>
             </li>
           ))}
