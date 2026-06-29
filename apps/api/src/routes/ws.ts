@@ -7,10 +7,41 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ws as wsmsg } from '@quad/core';
+import { resolveTenantByHost } from '@quad/config';
 import type { SubscriptionRegistry, RealtimeConnection } from '@quad/realtime';
 import type { PlacementRepository } from '@quad/db';
 
 const HEARTBEAT_MS = 30_000;
+const MESSAGE_LIMIT = 120;
+const MESSAGE_WINDOW_MS = 60_000;
+const MAX_CANVAS_ID_LENGTH = 200;
+
+function originMatchesTenant(origin: string | undefined, tenantId: string): boolean {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return resolveTenantByHost(url.hostname)?.id === tenantId;
+  } catch {
+    return false;
+  }
+}
+
+function parseClientMessage(raw: string): wsmsg.ClientToServerMessage | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const value = parsed as Record<string, unknown>;
+  if (value['type'] === 'Pong' || value['type'] === 'PresencePing') return { type: value['type'] };
+  if (value['type'] !== 'SubscribeCanvas' && value['type'] !== 'UnsubscribeCanvas') return null;
+  const canvasId = value['canvasId'];
+  if (typeof canvasId !== 'string' || canvasId.length === 0 || canvasId.length > MAX_CANVAS_ID_LENGTH) return null;
+  return { type: value['type'], canvasId: canvasId as wsmsg.SubscribeCanvas['canvasId'] };
+}
 
 export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepository): FastifyPluginAsync {
   return async (app) => {
@@ -26,6 +57,11 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
 
       if (!tenant) {
         send({ type: 'Error', code: 'WS_TENANT_MISMATCH', message: 'Unknown tenant for this host.' });
+        socket.close();
+        return;
+      }
+      if (!originMatchesTenant(request.headers.origin, tenant.id)) {
+        send({ type: 'Error', code: 'WS_FORBIDDEN', message: 'WebSocket origin is not allowed for this tenant.' });
         socket.close();
         return;
       }
@@ -83,7 +119,10 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
           }
           registry.subscribe(conn.id, message.canvasId);
           subscribedCanvasId = message.canvasId;
-          send({ type: 'Heartbeat' }); // subscription acknowledgement
+          // This explicit acknowledgement is the snapshot/subscription ordering barrier: clients
+          // fetch their authoritative snapshot only after the server has installed the subscription,
+          // so deltas committed during the snapshot request are queued rather than lost in a gap.
+          send({ type: 'CanvasSubscribed', canvasId: message.canvasId });
           broadcastPresence(message.canvasId); // everyone on the canvas sees the new active count
         } else if (message.type === 'UnsubscribeCanvas') {
           registry.unsubscribe(conn.id, message.canvasId);
@@ -100,12 +139,24 @@ export function makeWsRoutes(registry: SubscriptionRegistry, repo: PlacementRepo
       // Process one message at a time per connection (no interleaving), and never let a handler
       // rejection (e.g. a DB error during subscribe lookup) become an unhandled promise rejection.
       let chain: Promise<void> = Promise.resolve();
+      let messageCount = 0;
+      let messageWindowStartedAt = Date.now();
       socket.on('message', (raw) => {
-        let message: wsmsg.ClientToServerMessage;
-        try {
-          message = JSON.parse(raw.toString()) as wsmsg.ClientToServerMessage;
-        } catch {
-          send({ type: 'Error', code: 'WS_PROTOCOL_ERROR', message: 'Invalid JSON.' });
+        const now = Date.now();
+        if (now - messageWindowStartedAt >= MESSAGE_WINDOW_MS) {
+          messageWindowStartedAt = now;
+          messageCount = 0;
+        }
+        messageCount += 1;
+        if (messageCount > MESSAGE_LIMIT) {
+          send({ type: 'Error', code: 'WS_RATE_LIMITED', message: 'WebSocket message rate limit exceeded.' });
+          socket.close();
+          return;
+        }
+
+        const message = parseClientMessage(raw.toString());
+        if (!message) {
+          send({ type: 'Error', code: 'WS_PROTOCOL_ERROR', message: 'Invalid WebSocket message.' });
           return;
         }
         chain = chain.then(() => handle(message)).catch((err: unknown) => {

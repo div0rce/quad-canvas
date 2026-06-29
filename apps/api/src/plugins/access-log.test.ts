@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { buildAccessLog } from './access-log.js';
+import { buildAccessLog, buildRequestLogFields } from './access-log.js';
 
 function req(over: Record<string, unknown>): FastifyRequest {
   return { id: 'r1', method: 'GET', url: '/x', ...over } as unknown as FastifyRequest;
@@ -34,5 +34,11 @@ describe('buildAccessLog', () => {
     const keys = Object.keys(fields);
     expect(keys.sort()).toEqual(['durationMs', 'method', 'reqId', 'route', 'status', 'tenant']);
     expect(JSON.stringify(fields)).not.toMatch(/secret|cookie|authorization|@/i);
+  });
+
+  it('does not repeat the request id already bound by Fastify request.log', () => {
+    const fields = buildRequestLogFields(req({ routeOptions: { url: '/healthz' } }), reply({ statusCode: 200 }));
+    expect(fields).toEqual({ method: 'GET', route: '/healthz', status: 200, durationMs: 0 });
+    expect(fields).not.toHaveProperty('reqId');
   });
 });

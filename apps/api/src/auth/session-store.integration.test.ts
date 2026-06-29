@@ -1,11 +1,13 @@
 import { afterAll, describe, it, expect } from 'vitest';
 import { Redis } from 'ioredis';
 import { RedisSessionStore } from './session-store.js';
+import { RedisVerificationStore } from './verification-store.js';
 
 // Requires the local Docker Compose Redis (see vitest.integration.config.ts).
 const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379';
 const redis = new Redis(REDIS_URL);
 const store = new RedisSessionStore(redis);
+const verifications = new RedisVerificationStore(redis);
 
 afterAll(async () => {
   await redis.quit();
@@ -17,6 +19,12 @@ describe('RedisSessionStore', () => {
     expect(await store.get(id)).toEqual({ userId: 'u1', tenantId: 't1' });
     await store.revoke(id); // immediate revocation (AUTH-INV-8)
     expect(await store.get(id)).toBeNull();
+  });
+
+  it('fails closed on a structurally malformed Redis session', async () => {
+    await redis.set('quad:session:bad-shape', JSON.stringify({ userId: 'u1' }), 'EX', 60);
+    expect(await store.get('bad-shape')).toBeNull();
+    await expect(store.revoke('bad-shape')).resolves.toBeUndefined();
   });
 
   it('honors the TTL', async () => {
@@ -42,5 +50,13 @@ describe('RedisSessionStore', () => {
     expect(await store.get(long)).not.toBeNull();
     await store.revokeAllForUser('mixed'); // index still present → the long session is revoked
     expect(await store.get(long)).toBeNull();
+  });
+});
+
+describe('RedisVerificationStore', () => {
+  it('consumes malformed state once and fails closed', async () => {
+    await redis.set('quad:verify:bad-shape', JSON.stringify({ email: 'user@example.edu' }), 'EX', 60);
+    expect(await verifications.consume('bad-shape')).toBeNull();
+    expect(await redis.get('quad:verify:bad-shape')).toBeNull();
   });
 });

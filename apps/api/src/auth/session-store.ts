@@ -97,6 +97,19 @@ export class InMemorySessionStore implements SessionStore {
 const KEY_PREFIX = 'quad:session:';
 const USER_PREFIX = 'quad:user-sessions:';
 
+function parseSession(raw: string): Session | null {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const session = value as Record<string, unknown>;
+    if (typeof session['userId'] !== 'string' || session['userId'].length === 0) return null;
+    if (typeof session['tenantId'] !== 'string' || session['tenantId'].length === 0) return null;
+    return { userId: session['userId'], tenantId: session['tenantId'] };
+  } catch {
+    return null;
+  }
+}
+
 /** Redis-backed store: opaque id → session JSON with a TTL; deletion is immediate revocation. */
 export class RedisSessionStore implements SessionStore {
   readonly #redis: Redis;
@@ -124,23 +137,16 @@ export class RedisSessionStore implements SessionStore {
 
   async get(sessionId: string): Promise<Session | null> {
     const raw = await this.#redis.get(KEY_PREFIX + sessionId);
-    if (raw === null) return null;
-    try {
-      return JSON.parse(raw) as Session;
-    } catch {
-      return null;
-    }
+    return raw === null ? null : parseSession(raw);
   }
 
   async revoke(sessionId: string): Promise<void> {
     const raw = await this.#redis.get(KEY_PREFIX + sessionId);
     await this.#redis.del(KEY_PREFIX + sessionId);
     if (raw !== null) {
-      try {
-        const session = JSON.parse(raw) as Session;
+      const session = parseSession(raw);
+      if (session) {
         await this.#redis.srem(USER_PREFIX + session.userId, sessionId);
-      } catch {
-        // malformed entry — nothing to unindex
       }
     }
   }

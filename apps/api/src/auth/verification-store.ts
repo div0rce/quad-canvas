@@ -52,6 +52,19 @@ export class InMemoryVerificationStore implements VerificationStore {
 
 const KEY_PREFIX = 'quad:verify:';
 
+function parsePendingVerification(raw: string): PendingVerification | null {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const pending = value as Record<string, unknown>;
+    if (typeof pending['email'] !== 'string' || pending['email'].length === 0) return null;
+    if (typeof pending['tenantId'] !== 'string' || pending['tenantId'].length === 0) return null;
+    return { email: pending['email'], tenantId: pending['tenantId'] };
+  } catch {
+    return null;
+  }
+}
+
 export class RedisVerificationStore implements VerificationStore {
   readonly #redis: Redis;
 
@@ -67,11 +80,6 @@ export class RedisVerificationStore implements VerificationStore {
   async consume(token: string): Promise<PendingVerification | null> {
     // GETDEL is atomic single-use (Redis 6.2+; Compose runs Redis 8).
     const raw = await this.#redis.getdel(KEY_PREFIX + token);
-    if (raw === null) return null;
-    try {
-      return JSON.parse(raw) as PendingVerification;
-    } catch {
-      return null;
-    }
+    return raw === null ? null : parsePendingVerification(raw);
   }
 }

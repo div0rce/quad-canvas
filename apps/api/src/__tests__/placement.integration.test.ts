@@ -18,9 +18,16 @@ function deps(cooldownMs = 0, now: () => Date = () => new Date()): PlacementDeps
 }
 
 async function reset(): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "pixels","pixel_events","Canvas","Membership","User","Tenant" CASCADE',
-  );
+  await prisma.$executeRawUnsafe('ALTER TABLE "pixel_events" DISABLE TRIGGER USER');
+  await prisma.$executeRawUnsafe('ALTER TABLE "moderation_actions" DISABLE TRIGGER USER');
+  try {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "pixels","pixel_events","Canvas","Membership","User","Tenant" CASCADE',
+    );
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "pixel_events" ENABLE TRIGGER USER');
+    await prisma.$executeRawUnsafe('ALTER TABLE "moderation_actions" ENABLE TRIGGER USER');
+  }
 }
 
 interface Seed {
@@ -130,6 +137,15 @@ describe('placement service', () => {
     expect(second.ok === false && typeof second.error.details?.['retryAfterMs']).toBe('number');
   });
 
+  it('uses the database clock for cooldown so API-node clock skew cannot bypass it', async () => {
+    const s = await seed();
+    const skewed = deps(60_000, () => new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const first = await placePixel(skewed, principal(s), { id: s.tenantId, palette: 'default' }, { x: 0, y: 0, color: 0, idempotencyKey: 'skew-1' });
+    expect(first.ok).toBe(true);
+    const second = await placePixel(skewed, principal(s), { id: s.tenantId, palette: 'default' }, { x: 1, y: 0, color: 1, idempotencyKey: 'skew-2' });
+    expect(second).toMatchObject({ ok: false, error: { code: 'COOLDOWN_ACTIVE' } });
+  });
+
   it('scales the cooldown with recent canvas load (dynamic cooldown)', async () => {
     const s = await seed();
     const userB = await prisma.user.create({ data: { email: 'dynb@example.edu', publicHandle: 'dynb', status: 'active' } });
@@ -170,18 +186,38 @@ describe('placement service', () => {
     expect(await counter.recent(s.canvasId)).toBe(2);
   });
 
-  it('idempotency replay returns the original result and appends one event', async () => {
+  it('idempotency replays the same intent and rejects key reuse with a different body', async () => {
     const s = await seed();
     const t = { id: s.tenantId, palette: 'default' };
     const r1 = await placePixel(deps(0), principal(s), t, { x: 1, y: 1, color: 2, idempotencyKey: 'dup' });
     expect(r1.ok).toBe(true);
-    // Replay the SAME key with DIFFERENT params → returns the original placement, not the new one.
-    const r2 = await placePixel(deps(0), principal(s), t, { x: 9, y: 9, color: 5, idempotencyKey: 'dup' });
+    const r2 = await placePixel(deps(0), principal(s), t, { x: 1, y: 1, color: 2, idempotencyKey: 'dup' });
     expect(r2.ok).toBe(true);
     expect(r2.ok && r2.result.at).toEqual({ x: 1, y: 1 });
     expect(r2.ok && r2.result.color).toBe(2);
+
+    const conflict = await placePixel(deps(0), principal(s), t, { x: 9, y: 9, color: 5, idempotencyKey: 'dup' });
+    expect(conflict).toMatchObject({ ok: false, error: { code: 'CONFLICT' } });
     const events = await prisma.pixelEvent.findMany({ where: { canvasId: s.canvasId } });
     expect(events).toHaveLength(1);
+  });
+
+  it('database guards reject update, delete, and truncate on append-only logs', async () => {
+    const s = await seed();
+    await placePixel(deps(0), principal(s), { id: s.tenantId, palette: 'default' }, { x: 1, y: 1, color: 2, idempotencyKey: 'immutable-event' });
+    const action = await prisma.moderationAction.create({
+      data: { tenantId: s.tenantId, actorUserId: s.userId, actionType: 'test_audit', targetRef: 'test', reason: 'integrity test' },
+    });
+
+    await expect(prisma.$executeRawUnsafe(`UPDATE "pixel_events" SET "new_color" = 7 WHERE "id" = '${(await prisma.pixelEvent.findFirstOrThrow()).id}'`)).rejects.toThrow(/append-only/i);
+    await expect(prisma.$executeRawUnsafe(`DELETE FROM "pixel_events" WHERE "canvas_id" = '${s.canvasId}'`)).rejects.toThrow(/append-only/i);
+    await expect(prisma.$executeRawUnsafe('TRUNCATE TABLE "pixel_events" CASCADE')).rejects.toThrow(/append-only/i);
+    await expect(prisma.$executeRawUnsafe(`UPDATE "moderation_actions" SET "reason" = 'changed' WHERE "id" = '${action.id}'`)).rejects.toThrow(/append-only/i);
+    await expect(prisma.$executeRawUnsafe(`DELETE FROM "moderation_actions" WHERE "id" = '${action.id}'`)).rejects.toThrow(/append-only/i);
+    await expect(prisma.$executeRawUnsafe('TRUNCATE TABLE "moderation_actions"')).rejects.toThrow(/append-only/i);
+
+    expect(await prisma.pixelEvent.count()).toBe(1);
+    expect(await prisma.moderationAction.count()).toBe(1);
   });
 
   it('enforces tenant isolation (cannot write another tenant)', async () => {
@@ -481,10 +517,25 @@ describe('moderation actions (HTTP)', () => {
       const action = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'suspend-1', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'suspend_member', targetRef: target.id, reason: 'spam' },
       });
       expect(action.statusCode).toBe(200);
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'suspend-1', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'suspend_member', targetRef: target.id, reason: 'spam' },
+      });
+      expect(replay.statusCode).toBe(200);
+      expect((replay.json() as { id: string }).id).toBe((action.json() as { id: string }).id);
+      const conflict = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'suspend-1', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'reinstate_member', targetRef: target.id, reason: 'spam' },
+      });
+      expect(conflict.statusCode).toBe(409);
       const audits = await prisma.moderationAction.findMany({ where: { tenantId: 'ten_rutgers' } });
       expect(audits).toHaveLength(1);
       expect(audits[0]?.actionType).toBe('suspend_member');
@@ -551,7 +602,7 @@ describe('moderation actions (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'reason-required-1', cookie },
         payload: { actionType: 'suspend_member', targetRef: 'whoever' },
       });
       expect(res.statusCode).toBe(422);
@@ -568,7 +619,7 @@ describe('moderation actions (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'ban-denied-1', cookie },
         payload: { actionType: 'ban_member', targetRef: target.id, reason: 'x' },
       });
       expect(res.statusCode).toBe(403);
@@ -592,7 +643,7 @@ describe('moderation actions (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'rollback-2-2', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'pixel_rollback', targetRef: '2,2', reason: 'offensive' },
       });
       expect(res.statusCode).toBe(200);
@@ -601,7 +652,10 @@ describe('moderation actions (HTTP)', () => {
       const after = await app.inject({ method: 'GET', url: '/api/v1/canvas/current/pixels/2/2', headers: { host: 'rutgers.localhost' } });
       expect(after.statusCode).toBe(404);
       expect(await prisma.moderationAction.findMany({ where: { actionType: 'pixel_rollback' } })).toHaveLength(1);
-      expect(await prisma.pixelEvent.findMany({ where: { type: 'PixelRolledBack' } })).toHaveLength(1);
+      const rollbackEvents = await prisma.pixelEvent.findMany({ where: { type: 'PixelRolledBack' } });
+      expect(rollbackEvents).toHaveLength(1);
+      const rollbackAudit = await prisma.moderationAction.findFirstOrThrow({ where: { actionType: 'pixel_rollback' } });
+      expect(rollbackAudit.relatedEventId).toBe(rollbackEvents[0]?.id);
     } finally {
       await app.close();
     }
@@ -621,7 +675,7 @@ describe('moderation actions (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'rollback-3-3', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'pixel_rollback', targetRef: '3,3', reason: 'remove the overwrite' },
       });
       expect(res.statusCode).toBe(200);
@@ -687,9 +741,12 @@ describe('moderation actions (HTTP)', () => {
   it('a moderator rolls back a region (reverts every cell + one audit)', async () => {
     const s = await seed({ tenantId: 'ten_rutgers' });
     const t = { id: 'ten_rutgers' as const, palette: 'default' };
-    await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'rr1' });
-    await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 2, idempotencyKey: 'rr2' });
-    await placePixel(deps(0), principal(s), t, { x: 0, y: 1, color: 3, idempotencyKey: 'rr3' });
+    const seededPlacements = [
+      await placePixel(deps(0), principal(s), t, { x: 0, y: 0, color: 1, idempotencyKey: 'rr1' }),
+      await placePixel(deps(0), principal(s), t, { x: 1, y: 0, color: 2, idempotencyKey: 'rr2' }),
+      await placePixel(deps(0), principal(s), t, { x: 0, y: 1, color: 3, idempotencyKey: 'rr3' }),
+    ];
+    expect(seededPlacements.every((result) => result.ok), JSON.stringify(seededPlacements)).toBe(true);
     const mod = await prisma.user.create({ data: { email: 'modg@scarletmail.rutgers.edu', publicHandle: 'modg', status: 'active' } });
     await prisma.membership.create({ data: { tenantId: 'ten_rutgers', userId: mod.id, role: 'moderator', status: 'active' } });
     const sessions = new InMemorySessionStore();
@@ -699,7 +756,7 @@ describe('moderation actions (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'region-1', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'region_rollback', targetRef: '0,0,1,1', reason: 'cleanup' },
       });
       expect(res.statusCode).toBe(200);
@@ -738,10 +795,24 @@ describe('admin role assignment (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/roster/roles',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'role-promote-1', cookie },
         payload: { targetRef: target.id, role: 'moderator' },
       });
       expect(res.statusCode).toBe(200);
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'role-promote-1', cookie },
+        payload: { targetRef: target.id, role: 'moderator' },
+      });
+      expect(replay.statusCode).toBe(200);
+      const conflict = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/roster/roles',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'role-promote-1', cookie },
+        payload: { targetRef: target.id, role: 'participant' },
+      });
+      expect(conflict.statusCode).toBe(409);
       const membership = await prisma.membership.findFirst({ where: { tenantId: 'ten_rutgers', userId: target.id } });
       expect(membership?.role).toBe('moderator');
       expect(await sessions.get(targetSession)).toBeNull(); // privilege change rotated the session
@@ -778,7 +849,7 @@ describe('admin role assignment (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/roster/roles',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'role-invalid-1', cookie },
         payload: { targetRef: 'x', role: 'operator' },
       });
       expect(res.statusCode).toBe(422);
@@ -797,7 +868,7 @@ describe('admin role assignment (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/roster/roles',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'role-noop-1', cookie },
         payload: { targetRef: target.id, role: 'participant' },
       });
       expect(res.statusCode).toBe(200);
@@ -857,13 +928,34 @@ describe('admin role assignment (HTTP)', () => {
       const frozen = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/canvas/lifecycle',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'lifecycle-freeze-1', cookie },
         payload: { status: 'frozen' },
       });
       expect(frozen.statusCode).toBe(200);
+      const frozenReplay = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas/lifecycle',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'lifecycle-freeze-1', cookie },
+        payload: { status: 'frozen' },
+      });
+      expect(frozenReplay.statusCode).toBe(200);
+      expect((frozenReplay.json() as { id: string }).id).toBe((frozen.json() as { id: string }).id);
+      const lifecycleConflict = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas/lifecycle',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'lifecycle-freeze-1', cookie },
+        payload: { status: 'archived' },
+      });
+      expect(lifecycleConflict.statusCode).toBe(409);
       expect((frozen.json() as { status: string }).status).toBe('frozen');
       const audits = await prisma.moderationAction.findMany({ where: { actionType: 'canvas_lifecycle' } });
       expect(audits).toHaveLength(1);
+      const lifecycleEvents = await prisma.pixelEvent.findMany({ where: { canvasId: (frozen.json() as { id: string }).id }, orderBy: { seq: 'asc' } });
+      expect(lifecycleEvents.map((event) => [event.type, event.seq])).toEqual([
+        ['PixelPlaced', 1],
+        ['CanvasFrozen', 2],
+      ]);
+      expect(audits[0]?.relatedEventId).toBe(lifecycleEvents[1]?.id);
 
       const after = await app.inject({
         method: 'POST',
@@ -872,6 +964,37 @@ describe('admin role assignment (HTTP)', () => {
         payload: { at: { x: 1, y: 1 }, color: 1 },
       });
       expect(after.statusCode).toBe(404); // no active canvas → placement rejected
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('serializes concurrent lifecycle commands without duplicate events or audits', async () => {
+    const { app, cookie } = await seedAdmin();
+    const canvas = await prisma.canvas.create({
+      data: { tenantId: 'ten_rutgers', termLabel: 'F26', status: 'active', width: 10, height: 10 },
+    });
+    try {
+      const transition = (key: string) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/admin/canvas/lifecycle',
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': key, cookie },
+          payload: { status: 'frozen' },
+        });
+      const [first, second] = await Promise.all([
+        transition('lifecycle-race-freeze-1'),
+        transition('lifecycle-race-freeze-2'),
+      ]);
+      expect([first.statusCode, second.statusCode].filter((status) => status === 200)).toHaveLength(1);
+      expect([first.statusCode, second.statusCode].filter((status) => status === 409)).toHaveLength(1);
+
+      const persisted = await prisma.canvas.findUniqueOrThrow({ where: { id: canvas.id } });
+      const events = await prisma.pixelEvent.findMany({ where: { canvasId: canvas.id } });
+      expect(persisted.status).toBe('frozen');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.type).toBe('CanvasFrozen');
+      expect(await prisma.moderationAction.count({ where: { targetRef: canvas.id, actionType: 'canvas_lifecycle' } })).toBe(1);
     } finally {
       await app.close();
     }
@@ -911,22 +1034,39 @@ describe('admin role assignment (HTTP)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/canvas',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'canvas-create-1', cookie },
         payload: { term: 'S26', width: 20, height: 20 },
       });
       expect(res.statusCode).toBe(201);
       expect(res.json() as object).toMatchObject({ term: 'S26', status: 'active', width: 20 });
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/canvas',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'canvas-create-1', cookie },
+        payload: { term: 'S26', width: 20, height: 20 },
+      });
+      expect(replay.statusCode).toBe(201);
+      expect((replay.json() as { id: string }).id).toBe((res.json() as { id: string }).id);
 
       const current = await prisma.canvas.findFirst({ where: { tenantId: 'ten_rutgers', status: 'active' } });
       expect(current?.termLabel).toBe('S26'); // new one is the active/current canvas
       const old = await prisma.canvas.findFirst({ where: { tenantId: 'ten_rutgers', termLabel: 'F25' } });
       expect(old?.status).toBe('archived'); // previous active term becomes a past-term archive
-      expect(await prisma.moderationAction.findMany({ where: { actionType: 'canvas_create' } })).toHaveLength(1);
+      const createAudits = await prisma.moderationAction.findMany({ where: { actionType: 'canvas_create' } });
+      expect(createAudits).toHaveLength(1);
+      const oldEvents = await prisma.pixelEvent.findMany({ where: { canvasId: old?.id }, orderBy: { seq: 'asc' } });
+      expect(oldEvents.map((event) => [event.type, event.seq])).toEqual([['CanvasArchived', 1]]);
+      const newEvents = await prisma.pixelEvent.findMany({ where: { canvasId: current?.id }, orderBy: { seq: 'asc' } });
+      expect(newEvents.map((event) => [event.type, event.seq])).toEqual([
+        ['CanvasCreated', 1],
+        ['CanvasActivated', 2],
+      ]);
+      expect(createAudits[0]?.relatedEventId).toBe(newEvents[0]?.id);
 
       const dup = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/canvas',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'canvas-create-duplicate', cookie },
         payload: { term: 'S26', width: 10, height: 10 },
       });
       expect(dup.statusCode).toBe(409); // duplicate term
@@ -934,7 +1074,7 @@ describe('admin role assignment (HTTP)', () => {
       const bad = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/canvas',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'canvas-create-invalid', cookie },
         payload: { term: 'F26', width: 0, height: 10 },
       });
       expect(bad.statusCode).toBe(422); // invalid dimensions
@@ -979,7 +1119,7 @@ describe('reports queue (HTTP)', () => {
       const filed = await app.inject({
         method: 'POST',
         url: '/api/v1/reports',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${reporterSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'report-file-1', cookie: `quad_session=${reporterSession}` },
         payload: { targetRef: 'pixel:3,4', reason: 'offensive' },
       });
       expect(filed.statusCode).toBe(201);
@@ -1027,6 +1167,18 @@ describe('reports queue (HTTP)', () => {
       expect(a.statusCode).toBe(201);
       expect(b.statusCode).toBe(201);
       expect((a.json() as { id: string }).id).toBe((b.json() as { id: string }).id); // same report, not a new one
+      const conflict = await app.inject({
+        method: 'POST',
+        url: '/api/v1/reports',
+        headers: {
+          host: 'rutgers.localhost',
+          'content-type': 'application/json',
+          cookie: `quad_session=${reporterSession}`,
+          'idempotency-key': 'rep-key-1',
+        },
+        payload: { targetRef: 'pixel:1,1', reason: 'different reason' },
+      });
+      expect(conflict.statusCode).toBe(409);
 
       const queue = await app.inject({
         method: 'GET',
@@ -1088,7 +1240,7 @@ describe('reports queue (HTTP)', () => {
       const filed = await app.inject({
         method: 'POST',
         url: '/api/v1/reports',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${reporterSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'report-resolve-file-1', cookie: `quad_session=${reporterSession}` },
         payload: { targetRef: 'pixel:1,1', reason: 'bad' },
       });
       const reportId = (filed.json() as { id: string }).id;
@@ -1096,10 +1248,18 @@ describe('reports queue (HTTP)', () => {
       const resolved = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'report-resolve-1', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'resolve_report', targetRef: reportId, reason: 'handled' },
       });
       expect(resolved.statusCode).toBe(200);
+      const resolvedReplay = await app.inject({
+        method: 'POST',
+        url: '/api/v1/moderation/actions',
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'report-resolve-1', cookie: `quad_session=${modSession}` },
+        payload: { actionType: 'resolve_report', targetRef: reportId, reason: 'handled' },
+      });
+      expect(resolvedReplay.statusCode).toBe(200);
+      expect((resolvedReplay.json() as { id: string }).id).toBe((resolved.json() as { id: string }).id);
       const report = await prisma.report.findFirst({ where: { id: reportId } });
       expect(report?.status).toBe('resolved');
       const audits = await prisma.moderationAction.findMany({ where: { actionType: 'resolve_report' } });
@@ -1109,7 +1269,7 @@ describe('reports queue (HTTP)', () => {
       const reopened = await app.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'report-reopen-1', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'reopen_report', targetRef: reportId, reason: 'needs another look' },
       });
       expect(reopened.statusCode).toBe(200);
@@ -1246,7 +1406,7 @@ describe('archives (HTTP)', () => {
       const rb = await modApp.inject({
         method: 'POST',
         url: '/api/v1/moderation/actions',
-        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${modSession}` },
+        headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': 'archive-rollback-1', cookie: `quad_session=${modSession}` },
         payload: { actionType: 'pixel_rollback', targetRef: '7,7', reason: 'remove the overwrite' },
       });
       expect(rb.statusCode).toBe(200);
@@ -1410,7 +1570,7 @@ describe('rate limiting (HTTP)', () => {
         app.inject({
           method: 'POST',
           url: '/api/v1/reports',
-          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', cookie: `quad_session=${sid}` },
+          headers: { host: 'rutgers.localhost', 'content-type': 'application/json', 'idempotency-key': `rate-report-${n}`, cookie: `quad_session=${sid}` },
           payload: { targetRef: `pixel:${n}`, reason: 'spam' },
         });
       expect((await file('1')).statusCode).toBe(201);

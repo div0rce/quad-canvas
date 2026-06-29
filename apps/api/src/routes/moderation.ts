@@ -8,6 +8,7 @@ import type { PlacementRepository } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import type { SessionStore } from '../auth/session-store.js';
 import { requireRole, hasMinRole, toRole } from '../auth/roles.js';
+import { readIdempotencyKey } from './idempotency.js';
 
 function parseCoords(targetRef: string): { x: number; y: number } | null {
   const parts = targetRef.split(',');
@@ -57,6 +58,8 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
     app.post('/api/v1/moderation/actions', { preHandler: requireRole('moderator') }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return err(reply, request, 422, 'VALIDATION_ERROR', idempotency.message);
 
       const body = (request.body ?? {}) as Partial<dto.ModerationActionCommand>;
       if (typeof body.actionType !== 'string' || typeof body.targetRef !== 'string') {
@@ -88,9 +91,13 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           actionType: body.actionType,
           status: memberAction.status,
           reason: body.reason,
+          idempotencyKey: idempotency.key,
         });
-        if (!result.updated) return err(reply, request, 404, 'NOT_FOUND', 'Target is not a member of this tenant.');
+        if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+        if (result.kind === 'not_found') return err(reply, request, 404, 'NOT_FOUND', 'Target is not a member of this tenant.');
         // Suspend/ban revokes ALL of the target's sessions immediately (AUTH-INV-8).
+        // Revocation is itself idempotent and is deliberately retried on an action replay: the
+        // original DB transaction may have committed before a transient session-store failure.
         if (memberAction.status !== 'active') await sessions.revokeAllForUser(body.targetRef);
         const response: dto.ModerationActionResponse = {
           id: result.auditId,
@@ -108,8 +115,10 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           status: reportStatus,
           actionType: body.actionType,
           reason: body.reason,
+          idempotencyKey: idempotency.key,
         });
-        if (!result.updated) return err(reply, request, 404, 'NOT_FOUND', 'Report not found in this tenant.');
+        if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+        if (result.kind === 'not_found') return err(reply, request, 404, 'NOT_FOUND', 'Report not found in this tenant.');
         const response: dto.ModerationActionResponse = {
           id: result.auditId,
           actionType: body.actionType,
@@ -121,13 +130,18 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
       if (body.actionType === 'pixel_rollback') {
         const coords = parseCoords(body.targetRef);
         if (!coords) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x,y" for a pixel rollback.');
-        const key = request.headers['idempotency-key'];
         // Honor a keyed retry BEFORE the current-canvas preflight, so idempotency survives a canvas
         // change since the original (archived / new dimensions): if this exact rollback already ran,
         // return its original audit rather than 409/422-ing the retry.
-        if (typeof key === 'string' && key !== '') {
-          const prior = await repo.findRollbackReplay(request.tenant.id, `${coords.x},${coords.y}`, key);
-          if (prior) {
+        {
+          const prior = await repo.findActionReplay(request.tenant.id, idempotency.key, {
+            actorUserId: principal.userId,
+            actionType: body.actionType,
+            targetRef: `${coords.x},${coords.y}`,
+            reason: body.reason,
+          });
+          if (prior.kind === 'conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+          if (prior.kind === 'replayed') {
             const replay: dto.ModerationActionResponse = { id: prior.id, actionType: body.actionType, createdAt: prior.createdAt.toISOString() };
             return reply.status(200).send(replay);
           }
@@ -148,8 +162,9 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           x: coords.x,
           y: coords.y,
           reason: body.reason,
-          ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
+          idempotencyKey: idempotency.key,
         });
+        if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
         if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
         if (result.kind === 'absent') return err(reply, request, 404, 'NOT_FOUND', 'No pixel at that coordinate to roll back.');
         // Broadcast only a genuinely-new rollback — an idempotent replay changed no state.
@@ -179,11 +194,16 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
         if (!region) return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef must be "x1,y1,x2,y2" with x1≤x2, y1≤y2.');
         const area = (region.x2 - region.x1 + 1) * (region.y2 - region.y1 + 1);
         if (area > MAX_REGION_CELLS) return err(reply, request, 422, 'VALIDATION_ERROR', `Region too large (max ${MAX_REGION_CELLS} cells).`);
-        const key = request.headers['idempotency-key'];
         // Honor a keyed retry before the current-canvas preflight (idempotency survives a canvas change).
-        if (typeof key === 'string' && key !== '') {
-          const prior = await repo.findRollbackReplay(request.tenant.id, `${region.x1},${region.y1},${region.x2},${region.y2}`, key);
-          if (prior) {
+        {
+          const prior = await repo.findActionReplay(request.tenant.id, idempotency.key, {
+            actorUserId: principal.userId,
+            actionType: body.actionType,
+            targetRef: `${region.x1},${region.y1},${region.x2},${region.y2}`,
+            reason: body.reason,
+          });
+          if (prior.kind === 'conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+          if (prior.kind === 'replayed') {
             const replay: dto.ModerationActionResponse = { id: prior.id, actionType: body.actionType, createdAt: prior.createdAt.toISOString() };
             return reply.status(200).send(replay);
           }
@@ -203,8 +223,9 @@ export function makeModerationRoutes(repo: PlacementRepository, sessions: Sessio
           x2: region.x2,
           y2: region.y2,
           reason: body.reason,
-          ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
+          idempotencyKey: idempotency.key,
         });
+        if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
         if (result.kind === 'archived') return err(reply, request, 409, 'CONFLICT', 'Cannot modify an archived canvas.');
         // Broadcast only a genuinely-new rollback — an idempotent replay changed no state.
         if (!result.replayed) {

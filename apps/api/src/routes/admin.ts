@@ -7,6 +7,7 @@ import type { PlacementRepository } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import type { SessionStore } from '../auth/session-store.js';
 import { requireRole } from '../auth/roles.js';
+import { readIdempotencyKey } from './idempotency.js';
 
 const LIFECYCLE_STATUSES = new Set<string>(['active', 'frozen', 'archived']);
 const MAX_CANVAS_DIM = 512;
@@ -31,9 +32,30 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
     app.post('/api/v1/admin/canvas/lifecycle', { preHandler: requireRole('admin') }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return err(reply, request, 422, 'VALIDATION_ERROR', idempotency.message);
       const body = (request.body ?? {}) as Partial<dto.CanvasLifecycleCommand>;
       if (typeof body.status !== 'string' || !LIFECYCLE_STATUSES.has(body.status)) {
         return err(reply, request, 422, 'VALIDATION_ERROR', 'status must be active, frozen, or archived.');
+      }
+      const replay = await repo.findActionReplay(request.tenant.id, idempotency.key, {
+        actorUserId: principal.userId,
+        actionType: 'canvas_lifecycle',
+        reason: `status set to ${body.status}`,
+      });
+      if (replay.kind === 'conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+      if (replay.kind === 'replayed') {
+        const priorCanvas = await repo.findCanvasById(request.tenant.id, replay.targetRef);
+        if (!priorCanvas) return err(reply, request, 409, 'CONFLICT', 'Original command result is no longer available.');
+        const priorMeta: dto.CanvasMetaResponse = {
+          id: priorCanvas.id as domain.CanvasId,
+          term: priorCanvas.termLabel,
+          status: body.status,
+          width: priorCanvas.width,
+          height: priorCanvas.height,
+          palette: request.tenant.palette,
+        };
+        return reply.send(priorMeta);
       }
       // Freeze/archive act on the ACTIVE canvas (so freezing actually stops placement); activate
       // acts on the latest canvas (e.g. an upcoming one).
@@ -51,10 +73,17 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
         actorUserId: principal.userId,
         canvasId: canvas.id,
         status: body.status,
+        idempotencyKey: idempotency.key,
       });
-      if (!result.updated) return err(reply, request, 409, 'CONFLICT', 'Canvas could not be transitioned.');
+      if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+      if (result.kind === 'not_found') return err(reply, request, 409, 'CONFLICT', 'Canvas could not be transitioned.');
       // Best-effort broadcast — subscribers learn the canvas froze/archived (truth is already committed).
-      const message: ws.CanvasLifecycleChanged = { type: 'CanvasLifecycleChanged', status: body.status };
+      if (result.seq === undefined) return err(reply, request, 500, 'INTERNAL', 'Lifecycle event sequence is unavailable.');
+      const message: ws.CanvasLifecycleChanged = {
+        type: 'CanvasLifecycleChanged',
+        status: body.status,
+        seq: result.seq as domain.PerCanvasSequence,
+      };
       try {
         await bus.publish(request.tenant.id, canvas.id, message);
       } catch {
@@ -74,6 +103,8 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
     app.post('/api/v1/admin/canvas', { preHandler: requireRole('admin') }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return err(reply, request, 422, 'VALIDATION_ERROR', idempotency.message);
       const body = (request.body ?? {}) as Partial<dto.CreateCanvasCommand>;
       const { term, width, height } = body;
       if (typeof term !== 'string' || term.trim() === '') {
@@ -97,13 +128,21 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
         term: term.trim(),
         width,
         height,
+        idempotencyKey: idempotency.key,
       });
+      if (result.kind === 'idempotency_conflict') {
+        return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+      }
       if (result.kind === 'duplicate_term') {
         return err(reply, request, 409, 'CONFLICT', 'A canvas already exists for that term.');
       }
       // Tell viewers of the superseded canvas it was archived (best-effort).
-      if (result.archivedCanvasId) {
-        const message: ws.CanvasLifecycleChanged = { type: 'CanvasLifecycleChanged', status: 'archived' };
+      if (!result.replayed && result.archivedCanvasId && result.archivedCanvasSeq !== null) {
+        const message: ws.CanvasLifecycleChanged = {
+          type: 'CanvasLifecycleChanged',
+          status: 'archived',
+          seq: result.archivedCanvasSeq as domain.PerCanvasSequence,
+        };
         try {
           await bus.publish(request.tenant.id, result.archivedCanvasId, message);
         } catch {
@@ -124,6 +163,8 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
     app.post('/api/v1/admin/roster/roles', { preHandler: requireRole('admin') }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return err(reply, request, 422, 'VALIDATION_ERROR', idempotency.message);
 
       const body = (request.body ?? {}) as Partial<dto.AssignRoleCommand>;
       if (typeof body.targetRef !== 'string' || typeof body.role !== 'string') {
@@ -136,6 +177,18 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
 
       const currentRole = await repo.getMembershipRole(request.tenant.id, body.targetRef);
       if (currentRole === null) return err(reply, request, 422, 'VALIDATION_ERROR', 'Target is not a member of this tenant.');
+
+      const replay = await repo.findActionReplay(request.tenant.id, idempotency.key, {
+        actorUserId: principal.userId,
+        actionType: 'assign_role',
+        targetRef: body.targetRef,
+        reason: `role set to ${role}`,
+      });
+      if (replay.kind === 'conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+      if (replay.kind === 'replayed') {
+        const prior: dto.RoleAssignmentResponse = { targetRef: body.targetRef, role };
+        return reply.status(200).send(prior);
+      }
 
       // No-op: same role → no rotation, no audit, just reflect the current state.
       if (currentRole === role) {
@@ -151,8 +204,10 @@ export function makeAdminRoutes(repo: PlacementRepository, sessions: SessionStor
         actorUserId: principal.userId,
         targetUserId: body.targetRef,
         role,
+        idempotencyKey: idempotency.key,
       });
-      if (!result.updated) return err(reply, request, 422, 'VALIDATION_ERROR', 'Target is not a member of this tenant.');
+      if (result.kind === 'idempotency_conflict') return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different action.');
+      if (result.kind === 'not_found') return err(reply, request, 422, 'VALIDATION_ERROR', 'Target is not a member of this tenant.');
 
       const response: dto.RoleAssignmentResponse = { targetRef: body.targetRef, role };
       return reply.status(200).send(response);

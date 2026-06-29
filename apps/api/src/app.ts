@@ -112,6 +112,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   const metrics = opts.metrics ?? new MetricsRegistry();
 
+  // @fastify/websocket installs a preClose hook. Register it before any child plugins so Fastify
+  // does not propagate that same hook into every existing child context and close one WSS repeatedly.
+  if (opts.placement) {
+    await app.register(websocketPlugin, { options: { maxPayload: 1_048_576 } });
+  }
+
   await app.register(securityHeadersPlugin);
   await app.register(accessLogPlugin);
   await app.register(makeMetricsPlugin(metrics));
@@ -151,7 +157,6 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     app.addHook('onClose', async () => {
       unsubscribeBus();
     });
-    await app.register(websocketPlugin, { options: { maxPayload: 1_048_576 } });
     await app.register(makeWsRoutes(registry, opts.placement.repo));
   }
 

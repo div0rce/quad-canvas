@@ -29,9 +29,17 @@ export function buildAccessLog(request: FastifyRequest, reply: FastifyReply): Ac
   };
 }
 
+/** Fields passed to request.log. Fastify's request child logger already binds reqId, so adding it to
+ * the log object would serialize two JSON keys with the same name. */
+export function buildRequestLogFields(request: FastifyRequest, reply: FastifyReply): Omit<AccessLogFields, 'reqId'> {
+  const { reqId, ...fields } = buildAccessLog(request, reply);
+  void reqId;
+  return fields;
+}
+
 const accessLogPlugin: FastifyPluginAsync = async (app) => {
   app.addHook('onResponse', async (request, reply) => {
-    request.log.info(buildAccessLog(request, reply), 'request completed');
+    request.log.info(buildRequestLogFields(request, reply), 'request completed');
   });
 };
 
