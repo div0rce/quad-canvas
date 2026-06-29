@@ -1,15 +1,30 @@
-import Link from 'next/link';
-
 // apps/web — content policy, available in-app to moderators (LG-2). Mirrors docs/CONTENT_POLICY.md;
 // the repository doc is authoritative. Static page (no data), linked from the moderator console.
+import { SessionBadge } from '@/auth/session-badge';
+import { AppBar } from '@/components/ui/app-bar';
+import { resolveCurrentTenant } from '@/lib/tenant';
 
 export const metadata = { title: 'Content policy' };
 
-export default function PolicyPage(): React.ReactElement {
+export default async function PolicyPage(): Promise<React.ReactElement> {
+  const tenant = await resolveCurrentTenant();
+
   return (
-    <main style={{ padding: '1rem', maxWidth: 720, lineHeight: 1.5 }}>
+    <main className="quad-page">
+      <p className="quad-board-label">Content policy</p>
+      <div className="quad-panel">
+        <AppBar
+          tenantLabel={tenant?.title ?? null}
+          nav={[
+            { label: 'Canvas', href: '/canvas' },
+            { label: 'Board', href: '/leaderboards' },
+            { label: 'Archive', href: '/archives' },
+          ]}
+          right={<SessionBadge />}
+        />
+        <div style={{ padding: 'clamp(20px, 4vw, 32px)', maxWidth: 720, lineHeight: 1.5 }}>
       <p>
-        <Link href="/moderation">← Moderator console</Link>
+        <a href="/moderation">← Moderator console</a>
       </p>
       <h1>Content policy</h1>
       <p>
@@ -52,6 +67,8 @@ export default function PolicyPage(): React.ReactElement {
       </ul>
 
       <p style={{ color: '#666' }}>The repository document <code>docs/CONTENT_POLICY.md</code> is authoritative.</p>
+        </div>
+      </div>
     </main>
   );
 }

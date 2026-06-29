@@ -269,6 +269,21 @@ export function CanvasView(): React.ReactElement {
 
   const resetView = useCallback(() => setViewport({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 }), []);
 
+  // Zoom to an absolute scale, anchored at the stage center — backs the discrete 1x/2x/4x HUD
+  // buttons while staying inside the same continuous, clamped zoom model (no separate state).
+  const zoomTo = useCallback(
+    (target: number) => {
+      const el = containerRef.current;
+      const next = clampScale(target, SCALE_MIN, SCALE_MAX);
+      if (!el) {
+        setViewport((vp) => settle({ scale: next, offsetX: vp.offsetX, offsetY: vp.offsetY }));
+        return;
+      }
+      setViewport((vp) => settle(zoomAt(vp, el.clientWidth / 2, el.clientHeight / 2, next)));
+    },
+    [settle],
+  );
+
   // Wheel zoom needs a non-passive listener so the page doesn't scroll.
   useEffect(() => {
     const el = containerRef.current;
@@ -444,192 +459,261 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
+  const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
+  const confirmLabel = submitting
+    ? 'Placing…'
+    : cooldownRemainingMs > 0
+      ? `Wait ${formatCountdown(cooldownRemainingMs)}`
+      : pendingColor === null
+        ? 'Pick a color'
+        : 'Confirm';
+  const placeHint =
+    cooldownRemainingMs > 0
+      ? 'Your cooldown is running — the same for everyone.'
+      : 'Placement is a deliberate two step, so a stray tap never wastes your cooldown.';
+  const cdBig = cooldownRemainingMs > 0 ? formatCountdown(cooldownRemainingMs) : loadState === 'error' ? 'Offline' : 'Ready';
+  const statusLine = (
+    <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: 0, fontSize: 18, color: 'var(--ink-soft)' }}>
+      {status}
+    </p>
+  );
 
   return (
-    <div>
-      <div
-        ref={containerRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
-        style={{ position: 'relative', overflow: 'hidden', touchAction: 'none', maxWidth: '100%' }}
-      >
-        <div
-          style={{
-            transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`,
-            transformOrigin: '0 0',
-            position: 'relative',
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            tabIndex={0}
-            onMouseMove={onCanvasMove}
-            onMouseLeave={onCanvasLeave}
-            onFocus={onCanvasFocus}
-            onKeyDown={onCanvasKeyDown}
-            aria-busy={loadState === 'loading'}
-            aria-describedby="canvas-keyboard-status"
-            aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom; use arrow keys and Enter to place"
-            style={{
-              imageRendering: 'pixelated',
-              width: '100%',
-              display: 'block',
-              cursor: dims && loadState === 'ready' ? 'crosshair' : 'default',
-              background: EMPTY_HEX,
-            }}
-          />
-          {selected && dims && (
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                left: `${(selected.x / dims.width) * 100}%`,
-                top: `${(selected.y / dims.height) * 100}%`,
-                width: `${100 / dims.width}%`,
-                height: `${100 / dims.height}%`,
-                outline: '2px solid var(--tenant-primary)',
-                boxSizing: 'border-box',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-          {!selected && keyboardCell && dims && (
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                left: `${(keyboardCell.x / dims.width) * 100}%`,
-                top: `${(keyboardCell.y / dims.height) * 100}%`,
-                width: `${100 / dims.width}%`,
-                height: `${100 / dims.height}%`,
-                outline: '2px dashed var(--tenant-primary)',
-                outlineOffset: '-1px',
-                boxSizing: 'border-box',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-        </div>
-        {loadState !== 'ready' && (
+    <div className="quad-canvas-main">
+      <div className="quad-canvas-body">
+        <div className="quad-canvas-col">
           <div
-            role={loadState === 'error' ? 'alert' : 'status'}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              padding: '1rem',
-              color: '#111',
-              background: 'rgba(244, 244, 244, 0.92)',
-              textAlign: 'center',
-            }}
+            ref={containerRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            className="quad-canvas-stage"
+            style={{ touchAction: 'none', cursor: loadState === 'ready' ? 'grab' : 'default', borderWidth: 0 }}
           >
-            {loadState === 'error' ? 'Could not load the canvas. Please refresh to retry.' : 'Loading canvas…'}
-          </div>
-        )}
-        {hover && (
-          <div
-            role="status"
-            style={{
-              position: 'absolute',
-              left: hover.left,
-              top: hover.top,
-              transform: 'translate(8px, 8px)',
-              pointerEvents: 'none',
-              background: 'rgba(0,0,0,0.8)',
-              color: '#fff',
-              font: '12px sans-serif',
-              padding: '2px 6px',
-              borderRadius: 4,
-              whiteSpace: 'nowrap',
-              zIndex: 2,
-            }}
-          >
-            {hover.label}
-          </div>
-        )}
-      </div>
-      {viewport.scale > SCALE_MIN && (
-        <button type="button" onClick={resetView} style={{ marginTop: '0.25rem' }}>
-          Reset view
-        </button>
-      )}
-
-      {selected && (
-        <div
-          ref={placementDialogRef}
-          role="dialog"
-          aria-label="Place a pixel"
-          tabIndex={-1}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && !submitting) cancel();
-          }}
-          style={{
-            position: 'fixed',
-            insetInline: '1rem',
-            bottom: '1rem',
-            zIndex: 10,
-            maxWidth: '54rem',
-            maxHeight: 'calc(100vh - 2rem)',
-            margin: '0 auto',
-            padding: '0.75rem',
-            overflowY: 'auto',
-            display: 'flex',
-            gap: '0.5rem',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            color: '#e9eaec',
-            background: '#16181c',
-            border: '1px solid #555b66',
-            borderRadius: '0.5rem',
-            boxShadow: '0 0.75rem 2rem rgba(0, 0, 0, 0.45)',
-          }}
-        >
-          <span>
-            Cell ({selected.x}, {selected.y}):
-          </span>
-          <div role="group" aria-label="Choose a color" style={{ display: 'flex', gap: '0.25rem' }}>
-            {palette?.colors.map((c) => (
-              <button
-                key={c.index}
-                type="button"
-                aria-label={c.name}
-                aria-pressed={pendingColor === c.index}
-                disabled={submitting}
-                onClick={() => setPendingColor(c.index)}
-                style={{
-                  width: 28,
-                  height: 28,
-                  background: c.hex,
-                  border: pendingColor === c.index ? '3px solid #000' : '1px solid #999',
-                  cursor: 'pointer',
-                }}
+            <div
+              style={{
+                transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`,
+                transformOrigin: '0 0',
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+              }}
+            >
+              <canvas
+                ref={canvasRef}
+                tabIndex={0}
+                onMouseMove={onCanvasMove}
+                onMouseLeave={onCanvasLeave}
+                onFocus={onCanvasFocus}
+                onKeyDown={onCanvasKeyDown}
+                aria-busy={loadState === 'loading'}
+                aria-describedby="canvas-keyboard-status"
+                aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom; use arrow keys and Enter to place"
+                className="quad-canvas"
+                style={{ width: '100%', height: '100%', display: 'block', cursor: dims && loadState === 'ready' ? 'crosshair' : 'default' }}
               />
-            ))}
+              {selected && dims && (
+                <div
+                  aria-hidden
+                  className="quad-marquee"
+                  style={{
+                    left: `${(selected.x / dims.width) * 100}%`,
+                    top: `${(selected.y / dims.height) * 100}%`,
+                    width: `${100 / dims.width}%`,
+                    height: `${100 / dims.height}%`,
+                  }}
+                />
+              )}
+              {!selected && keyboardCell && dims && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: `${(keyboardCell.x / dims.width) * 100}%`,
+                    top: `${(keyboardCell.y / dims.height) * 100}%`,
+                    width: `${100 / dims.width}%`,
+                    height: `${100 / dims.height}%`,
+                    outline: '2px dashed var(--qa)',
+                    outlineOffset: '-1px',
+                    boxSizing: 'border-box',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="quad-hud" style={{ top: 12, left: 12, pointerEvents: 'none' }}>
+              <span className="quad-dot quad-blink" style={{ background: loadState === 'ready' ? 'var(--live-red)' : 'var(--status-orange)' }} />
+              <span>{loadState === 'ready' ? 'LIVE' : loadState === 'error' ? 'OFFLINE' : 'LOADING'}</span>
+            </div>
+            <div
+              className="quad-hud quad-hud--ink quad-pixel"
+              style={{ bottom: 12, left: 12, pointerEvents: 'none', fontSize: 15 }}
+            >
+              {selected ? `(${selected.x}, ${selected.y})` : keyboardCell ? `(${keyboardCell.x}, ${keyboardCell.y})` : '(--, --)'}
+            </div>
+            <div
+              style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+            >
+              {[1, 2, 4].map((z) => (
+                <button
+                  key={z}
+                  type="button"
+                  className="quad-hud-btn"
+                  aria-label={`Zoom ${z}x`}
+                  aria-pressed={z === 1 ? viewport.scale <= SCALE_MIN + 0.001 : Math.abs(viewport.scale - z) < 0.05}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onClick={() => (z === 1 ? resetView() : zoomTo(z))}
+                >
+                  {z}x
+                </button>
+              ))}
+            </div>
+
+            {loadState !== 'ready' && (
+              <div
+                role={loadState === 'error' ? 'alert' : 'status'}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '1rem',
+                  color: 'var(--ink)',
+                  background: 'rgba(244, 244, 244, 0.92)',
+                  textAlign: 'center',
+                  fontSize: 20,
+                  zIndex: 2,
+                }}
+              >
+                {loadState === 'error' ? 'Could not load the canvas. Please refresh to retry.' : 'Loading canvas…'}
+              </div>
+            )}
+
+            {hover && (
+              <div
+                role="status"
+                className="quad-tooltip"
+                style={{ left: hover.left, top: hover.top, transform: 'translate(12px, 12px)' }}
+              >
+                <div style={{ fontSize: 18, color: 'var(--ink-soft)' }}>{hover.label}</div>
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => void confirm()}
-            disabled={pendingColor === null || submitting || cooldownRemainingMs > 0}
-          >
-            {submitting ? 'Placing…' : cooldownRemainingMs > 0 ? `Wait ${formatCountdown(cooldownRemainingMs)}` : 'Confirm'}
-          </button>
-          <button type="button" onClick={cancel} disabled={submitting}>
-            Cancel
-          </button>
-          <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
         </div>
-      )}
 
-      {selected && selectedQuickLook?.key === selectedKey && (
-        <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
-          ({selected.x}, {selected.y}): {selectedQuickLook.label}
-        </p>
-      )}
+        <div className="quad-canvas-rail">
+          {selected ? (
+            <div
+              ref={placementDialogRef}
+              role="dialog"
+              aria-label="Place a pixel"
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && !submitting) cancel();
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className="quad-eyebrow" style={{ fontSize: 18 }}>
+                    Place a pixel
+                  </span>
+                  <span className="quad-pixel" style={{ fontSize: 14, color: 'var(--ink)' }}>
+                    ({selected.x}, {selected.y})
+                  </span>
+                </div>
+                <div
+                  role="group"
+                  aria-label="Choose a color"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginTop: 14 }}
+                >
+                  {palette?.colors.map((c) => (
+                    <button
+                      key={c.index}
+                      type="button"
+                      aria-label={c.name}
+                      aria-pressed={pendingColor === c.index}
+                      disabled={submitting}
+                      onClick={() => setPendingColor(c.index)}
+                      className={pendingColor === c.index ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
+                      style={{ background: c.hex }}
+                    />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <button
+                    type="button"
+                    onClick={() => void confirm()}
+                    disabled={pendingColor === null || submitting || cooldownRemainingMs > 0}
+                    className={confirmReady ? 'quad-btn quad-btn--primary' : 'quad-btn'}
+                    style={{ flex: 1 }}
+                  >
+                    {confirmLabel}
+                  </button>
+                  <button type="button" onClick={cancel} disabled={submitting} className="quad-btn">
+                    Cancel
+                  </button>
+                </div>
+                <p style={{ fontSize: 18, color: 'var(--muted-tag)', margin: '12px 0 0', lineHeight: 1.45 }}>{placeHint}</p>
+                <div style={{ marginTop: 12 }}>
+                  <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
+                </div>
+              </div>
 
-      <p id="canvas-keyboard-status" role="status" aria-live="polite" style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
+              <div style={{ borderTop: '2px solid var(--hairline-2)', paddingTop: 18 }}>
+                <span className="quad-eyebrow" style={{ fontSize: 18 }}>
+                  Pixel story
+                </span>
+                {selectedQuickLook?.key === selectedKey && (
+                  <p style={{ fontSize: 18, color: 'var(--ink-soft)', margin: '10px 0 0' }}>{selectedQuickLook.label}</p>
+                )}
+                {dims && (
+                  <div style={{ marginTop: 12 }}>
+                    <PixelInspector
+                      key={`${selected.x},${selected.y}:${inspectorNonce}`}
+                      x={selected.x}
+                      y={selected.y}
+                      palette={dims.palette}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {statusLine}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div className="quad-card quad-card--sm" style={{ background: 'var(--qa-tint2)', padding: 16 }}>
+                <div className="quad-eyebrow" style={{ fontSize: 16 }}>
+                  Your next pixel
+                </div>
+                <div className="quad-pixel" style={{ fontSize: 26, color: 'var(--ink)', marginTop: 10 }}>
+                  {cdBig}
+                </div>
+                <p style={{ fontSize: 18, color: 'var(--ink-strong)', margin: '12px 0 0', lineHeight: 1.45 }}>
+                  One pixel at a time. The cooldown is the same for everyone on campus.
+                </p>
+              </div>
+              <div style={{ textAlign: 'center', padding: '10px 8px' }}>
+                <div style={{ fontSize: 20, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Tap any cell to place
+                </div>
+                <p style={{ fontSize: 18, color: 'var(--muted-tag)', margin: '4px 0 0', lineHeight: 1.45 }}>
+                  Pick a color, confirm, and your pixel appears for everyone at once.
+                </p>
+              </div>
+              {statusLine}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p id="canvas-keyboard-status" role="status" aria-live="polite" style={{ margin: '0.75rem 0 0', fontSize: 16, color: 'var(--muted-tag)' }}>
         {keyboardCell && !selected
           ? `Keyboard cell (${keyboardCell.x}, ${keyboardCell.y}): ${
               keyboardQuickLook?.key === `${keyboardCell.x},${keyboardCell.y}` ? keyboardQuickLook.label : 'Loading…'
@@ -637,13 +721,10 @@ export function CanvasView(): React.ReactElement {
           : 'Focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color.'}
       </p>
 
-      {selected && dims && (
-        <PixelInspector key={`${selected.x},${selected.y}:${inspectorNonce}`} x={selected.x} y={selected.y} palette={dims.palette} />
-      )}
-
-      <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: '0.5rem 0 0' }}>
-        {status}
-      </p>
+      <div className="quad-canvas-footer">
+        <span>{dims ? `Canvas ${dims.width} x ${dims.height}` : loadState === 'error' ? 'Canvas unavailable' : 'Canvas loading…'}</span>
+        <span>Zoom {viewport.scale.toFixed(1)}× / pan to explore</span>
+      </div>
     </div>
   );
 }

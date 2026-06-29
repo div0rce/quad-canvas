@@ -3,7 +3,6 @@
 // apps/web — session badge. Reflects the current identity from GET /session (DC2 handle/role) and
 // offers sign-in / sign-out. The server stays authoritative — this is display + a convenience link.
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { fetchSession, signOut, type SessionInfo } from './auth-client';
 
 export function SessionBadge(): React.ReactElement | null {
@@ -21,12 +20,22 @@ export function SessionBadge(): React.ReactElement | null {
 
   if (!session) return null; // still loading
   if (!session.authenticated) {
-    return <Link href="/signin">Sign in</Link>;
+    return (
+      <a className="quad-btn quad-btn--primary" href="/signin">
+        Sign in
+      </a>
+    );
   }
+  const atHandle = session.handle ? (session.handle.startsWith('@') ? session.handle : `@${session.handle}`) : '';
+  const initial = (atHandle.replace(/^@/, '')[0] ?? '?').toUpperCase();
   return (
-    <span>
-      Signed in{session.handle ? ` as ${session.handle}` : ''}
-      {session.role ? ` (${session.role})` : ''}{' '}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+      <span className="quad-chip" title={session.role ? `Signed in (${session.role})` : 'Signed in'}>
+        <span>{atHandle || 'Signed in'}</span>
+        <span className="quad-avatar" style={{ width: 26, height: 26, fontSize: 11 }}>
+          {initial}
+        </span>
+      </span>
       <button
         type="button"
         onClick={() => {
@@ -35,6 +44,17 @@ export function SessionBadge(): React.ReactElement | null {
           void signOut()
             .catch(() => undefined)
             .finally(() => window.location.reload());
+        }}
+        style={{
+          background: 'none',
+          border: 0,
+          padding: 0,
+          font: 'inherit',
+          fontSize: 16,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: 'var(--muted-tag)',
+          cursor: 'pointer',
         }}
       >
         Sign out

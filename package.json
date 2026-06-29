@@ -13,6 +13,7 @@
     "test:integration": "turbo run test:integration",
     "test:e2e": "node scripts/e2e-canvas.mjs",
     "test:e2e:install": "playwright install chromium",
+    "test:visual": "node scripts/visual-frontend-gate.mjs",
     "build": "turbo run build",
     "format": "turbo run format",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
