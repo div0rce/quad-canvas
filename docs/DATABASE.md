@@ -401,6 +401,12 @@ Persistence test layers (against **real Postgres**, Dockerized; tooling → `TEC
 
 ## 25. Document Control
 
+Implementation note: PostgreSQL triggers now enforce `DB-INV-1` and the append-only portion of
+`DB-INV-6` by rejecting update, delete, and truncate operations on `pixel_events` and
+`moderation_actions`; lifecycle facts share the same per-canvas sequence using a nullable typed
+payload for non-coordinate events. See `specs/database/0001-append-only-guards.md` and
+`specs/database/0002-lifecycle-event-payload.md`.
+
 - **Path:** `docs/DATABASE.md`
 - **Purpose:** Define Quad's physical data model and persistence architecture, event store, projections, tables, ERD, consistency, tenant isolation, indexing, partitioning, and the Redis↔Postgres boundary, that `@quad/db` implements.
 - **Dependencies:** `ARCHITECTURE.md`, `BACKEND.md`, `SYSTEM_CONTEXT.md`, `PRODUCT.md`, `PRINCIPLES.md`, `TECH_BASELINE.md`. **Forward dependency (deferred):** `EVENT_SOURCING.md` (event semantics, see dependency-order note). **Consumed by:** `EVENT_SOURCING.md`, `API.md`, `MODERATION.md`, `PROFILES.md`, `LEADERBOARDS.md`, `ANALYTICS.md`, `ARCHIVES.md`, `DISASTER_RECOVERY.md`.
