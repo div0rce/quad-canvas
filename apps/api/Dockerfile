@@ -26,11 +26,14 @@ RUN pnpm exec turbo run build --filter=api \
 
 # Migration runner includes the Prisma CLI + schema/migrations, but not unrelated workspace apps.
 FROM api-base AS migrate
-RUN corepack enable
 WORKDIR /app
-COPY --from=build /prod/db ./
+# Prisma 7 prepares its bundled schema engine in this tree on first invocation. Give the non-root
+# runtime user ownership at image construction; no application directory should need chmod at boot.
+COPY --chown=node:node --from=build /prod/db ./
 USER node
-CMD ["pnpm", "run", "db:migrate:deploy"]
+# Invoke the CLI already bundled by `pnpm deploy` directly. Runtime migration must not resolve a
+# package manager, contact the registry, or attempt to mutate the root-owned image filesystem.
+CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
 FROM api-base AS runtime
 ENV NODE_ENV=production
@@ -42,9 +45,12 @@ WORKDIR /app
 # Ship only the API's production dependencies plus its built workspace packages and generated
 # Prisma client. The deployed tree is portable and contains no test/build toolchain.
 COPY --from=build /prod/api ./
+# `pnpm deploy` rewrites the application manifest and currently omits `type: module`; restore the
+# source manifest so Node loads the ESM entrypoint directly instead of warning and reparsing it.
+COPY --from=build /app/apps/api/package.json ./package.json
 EXPOSE 3000
 USER node
 # Liveness probe for the container runtime (no curl in slim — use node's fetch). Honors $PORT.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "dist/index.js"]

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cellFromPoint, moveCell, placementStatusMessage } from './placement';
+import { cellFromPoint, moveCell, placementIntentIsSettled, placementStatusMessage } from './placement';
 
 const rect = { left: 0, top: 0, width: 100, height: 100 };
 
@@ -53,5 +53,14 @@ describe('placementStatusMessage', () => {
   it('falls back to the server message then a generic message', () => {
     expect(placementStatusMessage(422, undefined, 'Color is not in the tenant palette.')).toMatch(/palette/);
     expect(placementStatusMessage(500)).toMatch(/could not place/i);
+  });
+});
+
+describe('placementIntentIsSettled', () => {
+  it('retains the idempotency key for ambiguous failures and malformed success bodies', () => {
+    expect(placementIntentIsSettled(500, false)).toBe(false);
+    expect(placementIntentIsSettled(201, false)).toBe(false);
+    expect(placementIntentIsSettled(201, true)).toBe(true);
+    expect(placementIntentIsSettled(422, false)).toBe(true);
   });
 });

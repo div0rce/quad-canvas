@@ -44,6 +44,7 @@ export class CanvasClient {
   #snapshotLoaded = false;
   #pending: Array<ws.PixelPlaced | ws.PixelRolledBack> = [];
   #stopped = false;
+  #switchingCanvas = false;
   // Bumped on every (re)connect AND close, so a snapshot load that was in flight across a reconnect or
   // close is recognized as stale and discarded (it must not set #snapshotLoaded for a dead connection).
   #generation = 0;
@@ -58,12 +59,20 @@ export class CanvasClient {
     return this.#buffer;
   }
 
-  /** Subscribe, then load the snapshot and flush queued deltas (no gap). */
-  async start(): Promise<void> {
-    const meta = await this.#opts.fetchMeta();
+  get canvasId(): string | null {
+    return this.#canvasId;
+  }
+
+  #configureCanvas(meta: dto.CanvasMetaResponse): void {
     this.#canvasId = meta.id;
     this.#palette = meta.palette;
     this.#buffer = new CanvasBuffer(meta.width, meta.height);
+  }
+
+  /** Subscribe, then load the snapshot and flush queued deltas (no gap). */
+  async start(): Promise<void> {
+    const meta = await this.#opts.fetchMeta();
+    this.#configureCanvas(meta);
     if (this.#stopped) return;
     await this.#connectAndSubscribe();
     await this.#loadSnapshotAndFlush();
@@ -165,6 +174,41 @@ export class CanvasClient {
     }
   }
 
+  async #reloadCurrentCanvas(): Promise<void> {
+    if (this.#stopped || this.#switchingCanvas) return;
+    this.#switchingCanvas = true;
+    this.#snapshotLoaded = false;
+    this.#pending = []; // queued facts belong to the archived canvas, not its successor
+    this.#generation += 1;
+    const oldSocket = this.#socket;
+    this.#socket = null;
+    oldSocket?.close();
+
+    let retryFullReload = false;
+    let retrySnapshot = false;
+    try {
+      const meta = await this.#opts.fetchMeta();
+      if (this.#stopped) return;
+      this.#configureCanvas(meta);
+      const generationBeforeConnect = this.#generation;
+      try {
+        await this.#connectAndSubscribe();
+        await this.#loadSnapshotAndFlush();
+      } catch {
+        if (this.#socket) retrySnapshot = true;
+        // A close advances generation and schedules its own reconnect. If opening the socket threw
+        // before a close event existed, this full reload is the only recovery owner.
+        else if (this.#generation === generationBeforeConnect + 1) retryFullReload = true;
+      }
+    } catch {
+      retryFullReload = true;
+    } finally {
+      this.#switchingCanvas = false;
+    }
+    if (retrySnapshot) this.#scheduleResync();
+    if (retryFullReload) this.#scheduleRecovery(() => this.#reloadCurrentCanvas());
+  }
+
   async #loadSnapshotAndFlush(): Promise<void> {
     const gen = this.#generation;
     const snapshot = await this.#opts.fetchSnapshot();
@@ -174,9 +218,24 @@ export class CanvasClient {
     this.#buffer.loadSnapshot(snapshot);
     this.#snapshotLoaded = true;
     this.#retryAttempt = 0; // recovered → reset the backoff
-    for (const delta of this.#pending) this.#applyLive(delta);
+    // REST confirmations and WS messages use the same authoritative sequence but can reach this
+    // queue in different transport order. Flush by seq, not arrival time, or [2,1] would reject 2
+    // as a gap, apply 1, then discard 2 permanently.
+    const queued = this.#pending.sort((a, b) => a.seq - b.seq);
     this.#pending = [];
+    for (const delta of queued) {
+      if (delta.seq <= this.#buffer.seq) continue;
+      if (delta.seq === this.#buffer.seq + 1) {
+        this.#applyLive(delta);
+      } else {
+        this.#pending.push(delta); // true gap — retain it across the next authoritative resnapshot
+      }
+    }
     this.#opts.onUpdate(this.#buffer, { palette: this.#palette });
+    if (this.#pending.length > 0) {
+      this.#snapshotLoaded = false;
+      this.#scheduleResync();
+    }
   }
 
   #parseMessage(data: unknown): ws.ServerToClientMessage | null {
@@ -228,6 +287,12 @@ export class CanvasClient {
       return;
     }
     if (message.type === 'CanvasLifecycleChanged') {
+      if (message.status === 'archived') {
+        // A term rollover changes canvas id and may change dimensions. Fetch fresh metadata, replace
+        // the fixed-size buffer, and install the new subscription before loading its snapshot.
+        void this.#reloadCurrentCanvas();
+        return;
+      }
       // Lifecycle facts consume the same per-canvas sequence as pixel events. Refresh the snapshot
       // so the buffer advances through that non-pixel sequence and later pixel deltas stay contiguous.
       if (this.#snapshotLoaded && !this.#stopped) {
@@ -260,7 +325,8 @@ export class CanvasClient {
   }
 
   /** Feed a successful REST placement through the same sequence/gap guard as its WS echo. */
-  applyConfirmedPlacement(result: dto.PlacePixelResultResponse): void {
+  applyConfirmedPlacement(result: dto.PlacePixelResultResponse, canvasId: string | null): void {
+    if (canvasId === null || canvasId !== this.#canvasId) return;
     this.#onMessage({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq });
   }
 

@@ -45,7 +45,6 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: migrate
-    command: ["pnpm", "--filter", "@quad/db", "run", "db:migrate:deploy"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
     depends_on:

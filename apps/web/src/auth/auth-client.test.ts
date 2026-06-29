@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { isLikelyEmail, requestMessage, confirmMessage } from './auth-client';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { isLikelyEmail, requestMessage, confirmMessage, fetchSession, retainSignInToken } from './auth-client';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('isLikelyEmail', () => {
   it('accepts well-formed addresses and rejects malformed ones', () => {
@@ -9,6 +11,14 @@ describe('isLikelyEmail', () => {
     expect(isLikelyEmail('a@b')).toBe(false);
     expect(isLikelyEmail('a b@c.de')).toBe(false);
     expect(isLikelyEmail('')).toBe(false);
+  });
+});
+
+describe('retainSignInToken', () => {
+  it('keeps the first token after the URL has been scrubbed during Strict Mode effect replay', () => {
+    const first = retainSignInToken(undefined, '?token=secret-token');
+    expect(first).toBe('secret-token');
+    expect(retainSignInToken(first, '')).toBe('secret-token');
   });
 });
 
@@ -29,5 +39,12 @@ describe('confirmMessage', () => {
     expect(confirmMessage(422)).toMatch(/missing or invalid/i);
     expect(confirmMessage(429)).toMatch(/too many/i);
     expect(confirmMessage(500)).toMatch(/could not complete/i);
+  });
+});
+
+describe('fetchSession', () => {
+  it('fails closed on a malformed successful session response', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ authenticated: 'yes', user: null }));
+    await expect(fetchSession()).resolves.toEqual({ authenticated: false });
   });
 });

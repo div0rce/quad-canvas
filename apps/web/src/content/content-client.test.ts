@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { ordinal, heatLevel } from './content-client';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { ordinal, heatLevel, fetchLeaderboard, fetchProfile } from './content-client';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('heatLevel', () => {
   it('buckets a day count 0–4 relative to the busiest day', () => {
@@ -30,5 +32,17 @@ describe('ordinal', () => {
     expect(ordinal(21)).toBe('21st');
     expect(ordinal(22)).toBe('22nd');
     expect(ordinal(113)).toBe('113th');
+  });
+});
+
+describe('content response validation', () => {
+  it('rejects malformed profile and leaderboard entries instead of crashing renderers', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.includes('/profiles/')
+        ? Response.json({ handle: 'alice', contributions: [{}] })
+        : Response.json({ category: 'placements', window: 'all', entries: [{}] }),
+    );
+    await expect(fetchProfile('alice')).resolves.toBeNull();
+    await expect(fetchLeaderboard()).resolves.toBeNull();
   });
 });
