@@ -1,11 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["HOST", "TRUST_PROXY", "QUAD_TENANT_HOSTS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build", "db:generate"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["API_PROXY_ORIGIN"]
+      "env": ["API_PROXY_ORIGIN", "HOST", "TRUST_PROXY", "QUAD_TENANT_HOSTS"]
     },
     "lint": {
       "dependsOn": ["^build"]
@@ -15,7 +14,8 @@
     },
     "db:generate": {
       "inputs": ["prisma/schema.prisma"],
-      "outputs": ["src/generated/**"]
+      "outputs": ["src/generated/**"],
+      "env": ["HOST", "TRUST_PROXY", "QUAD_TENANT_HOSTS"]
     },
     "test": {
       "dependsOn": ["^build", "db:generate"],
