@@ -18,11 +18,24 @@ const SECURITY_HEADERS = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
 ];
 
+const apiProxyOrigin = process.env['API_PROXY_ORIGIN']?.replace(/\/+$/, '');
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   outputFileTracingRoot: path.join(path.dirname(fileURLToPath(import.meta.url)), '../..'),
   headers: () => Promise.resolve([{ source: '/:path*', headers: SECURITY_HEADERS }]),
+  rewrites: () =>
+    Promise.resolve(
+      apiProxyOrigin
+        ? [
+            {
+              source: '/api/:path*',
+              destination: `${apiProxyOrigin}/api/:path*`,
+            },
+          ]
+        : [],
+    ),
 };
 
 export default nextConfig;

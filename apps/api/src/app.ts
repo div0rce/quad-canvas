@@ -1,5 +1,8 @@
 // apps/api — application factory. buildApp wires plugins + routes but does NOT listen, so it is
 // reusable for tests (app.inject) and the composition root (index.ts).
+import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Socket } from 'node:net';
 import Fastify from 'fastify';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
@@ -162,3 +165,59 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   return app;
 }
+
+let runtimeAppPromise: Promise<FastifyInstance> | undefined;
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.stack ?? err.message;
+  return String(err);
+}
+
+function logRuntimeAdapterError(err: unknown): void {
+  process.stderr.write(`[api] Vercel runtime adapter failed: ${describeError(err)}\n`);
+}
+
+async function getRuntimeApp(): Promise<FastifyInstance> {
+  runtimeAppPromise ??= import('./runtime.js').then(async ({ createRuntimeApp }) => {
+    const { app } = await createRuntimeApp({ logger: true });
+    await app.ready();
+    return app;
+  });
+  return runtimeAppPromise;
+}
+
+function failHttpRequest(response: ServerResponse): void {
+  if (response.writableEnded) return;
+  if (!response.headersSent) {
+    response.statusCode = 500;
+    response.setHeader('content-type', 'text/plain; charset=utf-8');
+  }
+  response.end('Internal Server Error');
+}
+
+const vercelServer = createServer((request: IncomingMessage, response: ServerResponse) => {
+  void getRuntimeApp()
+    .then((app) => {
+      app.server.emit('request', request, response);
+    })
+    .catch((err: unknown) => {
+      logRuntimeAdapterError(err);
+      failHttpRequest(response);
+    });
+});
+
+vercelServer.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+  void getRuntimeApp()
+    .then((app) => {
+      app.server.emit('upgrade', request, socket, head);
+    })
+    .catch((err: unknown) => {
+      logRuntimeAdapterError(err);
+      socket.destroy();
+    });
+});
+
+// Vercel's Fastify detector selects src/app.ts and requires a default export that is a request
+// handler or Node server. Keep this server lazy so importing buildApp in tests has no DB/Redis side
+// effects; the normal container/CLI entrypoint remains src/index.ts.
+export default vercelServer;
