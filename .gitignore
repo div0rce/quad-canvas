@@ -40,3 +40,5 @@ Thumbs.db
 
 # Local Claude Code state (worktrees, session data)
 .claude/
+.vercel
+.env*
