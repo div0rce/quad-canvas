@@ -98,7 +98,17 @@ export async function placePixel(
   // Idempotency replay first: a retried key returns the original persisted result, regardless of
   // new params or cooldown (placement commands are safe to repeat).
   const replay = await deps.repo.findByIdempotencyKey(principal.tenantId, input.idempotencyKey);
-  if (replay) return success(replay, deps.cooldownMs);
+  if (replay) {
+    if (
+      replay.actorUserId !== principal.userId ||
+      replay.x !== input.x ||
+      replay.y !== input.y ||
+      replay.color !== input.color
+    ) {
+      return fail('CONFLICT', 'Idempotency-Key was already used for a different placement.');
+    }
+    return success(replay, deps.cooldownMs);
+  }
 
   const canvas = await deps.repo.findCurrentCanvas(principal.tenantId);
   if (!canvas) {
@@ -141,7 +151,6 @@ export async function placePixel(
     color: input.color,
     idempotencyKey: input.idempotencyKey,
     cooldownMs: effectiveCooldownMs,
-    nowMs: deps.now().getTime(),
   });
 
   if (outcome.kind === 'cooldown') {
@@ -150,6 +159,9 @@ export async function placePixel(
   if (outcome.kind === 'inactive') {
     // The canvas was frozen/archived between resolution and the append (raced a lifecycle change).
     return fail('NOT_FOUND', 'The current canvas is not open for placement.');
+  }
+  if (outcome.kind === 'idempotency_conflict') {
+    return fail('CONFLICT', 'Idempotency-Key was already used for a different placement.');
   }
   // Broadcast only genuinely-new placements (a duplicate replay was already broadcast originally).
   if (outcome.kind === 'placed') {

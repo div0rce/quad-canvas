@@ -1,25 +1,28 @@
 {
   "name": "quad",
   "private": true,
-  "description": "Quad — multi-tenant collaborative pixel-canvas platform (scaffolding only; no app implementation yet).",
+  "description": "Quad — multi-tenant collaborative pixel-canvas platform.",
   "packageManager": "pnpm@10.0.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "lint": "turbo run lint",
+    "lint": "eslint scripts eslint.config.mjs && turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
-    "test:e2e": "turbo run test:e2e",
+    "test:e2e": "node scripts/e2e-canvas.mjs",
+    "test:e2e:install": "playwright install chromium",
     "build": "turbo run build",
     "format": "turbo run format",
-    "check": "turbo run lint typecheck test build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "load:gate": "node scripts/load-gate.mjs",
     "dr:drill": "bash scripts/dr-drill.sh",
     "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
+    "eslint": "^9.39.3",
+    "playwright": "^1.61.0",
     "turbo": "^2",
     "typescript": "^5.9"
   }

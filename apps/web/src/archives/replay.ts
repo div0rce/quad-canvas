@@ -17,3 +17,8 @@ export function frameInterval(baseMs: number, speed: number): number {
   const s = speed > 0 ? speed : 1;
   return Math.max(16, Math.round(baseMs / s));
 }
+
+/** A canvas frame may be presented only when it represents the currently requested sequence. */
+export function isReplayFrameCurrent(requestedSeq: number, renderedSeq: number | null): boolean {
+  return renderedSeq === requestedSeq;
+}

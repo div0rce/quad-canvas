@@ -42,27 +42,32 @@ WebSockets are how Quad stays **alive** (`PRIN-ALIVE`, `P-CANVAS-7`): after a cl
 
 ## 4. Connection Lifecycle
 
-1. **Initial snapshot (REST)**, the client first fetches the canvas snapshot via `GET /canvas/current/snapshot` (`API.md`), which includes a **sequence watermark** (the last applied per-canvas sequence).
-2. **WS connect**, the client opens the WebSocket carrying its session credential.
-3. **Auth/session validation at connect**, the server authenticates and resolves the tenant **before** any subscription (`§5`).
-4. **Subscription**, the client sends `SubscribeCanvas {canvasId}`; the server validates scope and acks.
-5. **Heartbeat**, the server periodically pings; the client replies (`§15`).
-6. **Live updates**, the server streams canvas/cooldown/moderation/lifecycle/presence messages, each carrying a per-canvas `seq` where applicable (`§11`).
-7. **Disconnect**, on network loss/close, the client enters reconnect.
-8. **Reconnect**, the client reconnects, **re-fetches the snapshot** (fresh watermark), and **resubscribes**.
-9. **Snapshot refresh after reconnect**, the snapshot is authoritative; the client resumes applying deltas with `seq` beyond the new watermark (`§12`).
+1. **Canvas metadata (REST)**, the client resolves the current canvas id via `GET /canvas/current` (`API.md`).
+2. **WS connect**, the client opens the WebSocket carrying its session credential and same-tenant `Origin`.
+3. **Auth/session/origin validation at connect**, the server authenticates and resolves the tenant **before** any subscription (`§5`).
+4. **Subscription**, the client sends `SubscribeCanvas {canvasId}`; the server validates scope and
+   replies `CanvasSubscribed {canvasId}` only after the subscription is installed. The client begins
+   its snapshot request after this acknowledgement, so concurrent deltas are queued without a gap.
+5. **Initial snapshot (REST)**, after the acknowledgement the client fetches `GET /canvas/current/snapshot`, which includes the authoritative **sequence watermark**; subscribed deltas are queued during the request.
+6. **Heartbeat**, the server periodically pings; the client replies (`§15`).
+7. **Live updates**, the server streams canvas/cooldown/moderation/lifecycle/presence messages, each carrying a per-canvas `seq` where applicable (`§11`).
+8. **Disconnect**, on network loss/close, the client enters reconnect.
+9. **Reconnect**, the client reconnects, resubscribes, waits for the acknowledgement, then **re-fetches the snapshot** (fresh watermark).
+10. **Snapshot refresh after reconnect**, the snapshot is authoritative; the client resumes applying contiguous deltas beyond the new watermark (`§12`).
 
 ```mermaid
 sequenceDiagram
   participant C as Client (apps/web)
   participant R as apps/api (REST)
   participant W as apps/api (WS via @quad/realtime)
+  C->>R: GET /canvas/current metadata
+  R-->>C: canvas id + dimensions
+  C->>W: WS connect (session credential)
+  W->>W: authenticate + resolve tenant + validate Origin
+  C->>W: SubscribeCanvas {canvasId}
+  W-->>C: CanvasSubscribed {canvasId}
   C->>R: GET /canvas/current/snapshot
   R-->>C: snapshot + seq watermark
-  C->>W: WS connect (session credential)
-  W->>W: authenticate + resolve tenant
-  C->>W: SubscribeCanvas {canvasId}
-  W-->>C: subscribed (ack)
   loop live
     W-->>C: PixelPlaced / CooldownUpdated / ... (seq)
     W-->>C: Heartbeat
@@ -112,12 +117,13 @@ Every message (both directions) shares a common envelope (conceptual; declared i
 | --- | --- | --- | --- |
 | **`CanvasSnapshotAvailable`** | Signals a fresh snapshot should be (re)fetched via REST (e.g., after gap/lifecycle change) | no | canvas |
 | **`CanvasSnapshot`** | *Optional* inline snapshot for small canvases; default is REST-fetch (`§13/§23`) | watermark | canvas |
+| **`CanvasSubscribed`** | Confirms an authorized canvas subscription is installed; snapshot ordering barrier | no | connection |
 | **`PixelPlaced`** | A pixel changed (`DC2` owner, coord, new color) | yes | canvas |
 | **`PixelRolledBack`** | Compensating: a cell reverted (moderation) | yes | canvas |
 | **`RegionRolledBack`** | Compensating: a region reverted | yes | canvas |
 | **`ArtworkRemoved`** | Compensating: offending artwork cleared (sanitized) | yes | canvas |
 | **`CooldownUpdated`** | New **global** cooldown value (+ caller's remaining, display-only) | no | canvas / per-connection |
-| **`CanvasLifecycleChanged`** | Canvas state change (active/frozen/archived) | yes | canvas |
+| **`CanvasLifecycleChanged`** | Canvas state change (active/frozen/archived); clients refresh the snapshot/watermark | yes | canvas |
 | **`ReportStatusUpdated`** | A report's status changed | no | reporter / mod channel |
 | **`ModerationActionApplied`** | A moderation action took effect (audited) | yes | mod channel |
 | **`PresenceUpdated`** | Approximate active-participant count | no | canvas |

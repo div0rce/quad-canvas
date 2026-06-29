@@ -16,12 +16,12 @@ function snapshot(
   };
 }
 
-function placed(x: number, y: number, color: number, seq?: number): ws.PixelPlaced {
+function placed(x: number, y: number, color: number, seq: number): ws.PixelPlaced {
   return {
     type: 'PixelPlaced',
     at: { x, y },
     color: color as domain.ColorIndex,
-    ...(seq !== undefined ? { seq: seq as domain.PerCanvasSequence } : {}),
+    seq: seq as domain.PerCanvasSequence,
   };
 }
 
@@ -93,31 +93,34 @@ describe('CanvasBuffer', () => {
     expect(b.drainDirty()).toEqual([{ x: 0, y: 0, color: 1 }]);
   });
 
-  it('applies deltas with no seq (best-effort)', () => {
+  it('rejects a sequence gap without advancing the watermark', () => {
     const b = new CanvasBuffer(4, 4);
-    expect(b.applyDelta(placed(1, 1, 9))).toBe(true);
-    expect(b.colorAt(1, 1)).toBe(9);
+    expect(b.applyDelta(placed(1, 1, 9, 2))).toBe(false);
+    expect(b.colorAt(1, 1)).toBe(EMPTY_CELL);
+    expect(b.seq).toBe(0);
+    expect(b.applyDelta(placed(0, 0, 3, 1))).toBe(true);
+    expect(b.applyDelta(placed(1, 1, 9, 2))).toBe(true);
   });
 
   it('applies a rollback: reverts to a prior color', () => {
     const b = new CanvasBuffer(4, 4);
-    b.applyDelta(placed(1, 1, 7, 5));
-    expect(b.applyRollback(rolledBack(1, 1, 6, 3))).toBe(true);
+    b.applyDelta(placed(1, 1, 7, 1));
+    expect(b.applyRollback(rolledBack(1, 1, 2, 3))).toBe(true);
     expect(b.colorAt(1, 1)).toBe(3);
-    expect(b.seq).toBe(6);
+    expect(b.seq).toBe(2);
   });
 
   it('applies a rollback with no color: clears the cell', () => {
     const b = new CanvasBuffer(4, 4);
-    b.applyDelta(placed(2, 2, 4, 5));
-    expect(b.applyRollback(rolledBack(2, 2, 6))).toBe(true);
+    b.applyDelta(placed(2, 2, 4, 1));
+    expect(b.applyRollback(rolledBack(2, 2, 2))).toBe(true);
     expect(b.colorAt(2, 2)).toBe(EMPTY_CELL);
   });
 
   it('ignores a stale rollback (seq ≤ watermark)', () => {
     const b = new CanvasBuffer(4, 4);
-    b.applyDelta(placed(0, 0, 1, 5));
-    expect(b.applyRollback(rolledBack(0, 0, 5))).toBe(false);
+    b.applyDelta(placed(0, 0, 1, 1));
+    expect(b.applyRollback(rolledBack(0, 0, 1))).toBe(false);
     expect(b.colorAt(0, 0)).toBe(1);
   });
 });

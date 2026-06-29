@@ -10,17 +10,22 @@
 //   docker exec quad-postgres-1 psql -U quad -d quad \
 //     -c "INSERT INTO \"Tenant\"(id,slug,\"publicTitle\",status,\"updatedAt\") VALUES ('ten_rutgers','rutgers','Rutgers Quad','active',now()) ON CONFLICT (id) DO NOTHING;" \
 //     -c "INSERT INTO \"Canvas\"(id,\"tenantId\",\"termLabel\",status,width,height,\"updatedAt\") VALUES ('cv_e2e','ten_rutgers','F26','active',40,30,now()) ON CONFLICT (id) DO NOTHING;"
-//   npm i playwright && npx playwright install chromium   # (in any scratch dir, or repo-local)
-//   E2E_URL=http://rutgers.localhost:8088/canvas node scripts/e2e-canvas.mjs
+//   pnpm test:e2e:install
+//   E2E_URL=http://rutgers.localhost:8088/canvas pnpm test:e2e
 import { chromium } from 'playwright';
 
-const URL = process.env.E2E_URL ?? 'http://rutgers.localhost:8088/canvas';
+const E2E_URL = process.env.E2E_URL ?? 'http://rutgers.localhost:8088/canvas';
 const DIALOG = '[role="dialog"][aria-label="Place a pixel"]';
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1000, height: 800 }, hasTouch: true });
 try {
-  await page.goto(URL, { waitUntil: 'networkidle' });
+  let currentPixelReads = 0;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (/^\/api\/v1\/canvas\/current\/pixels\/\d+\/\d+$/.test(path)) currentPixelReads += 1;
+  });
+  await page.goto(E2E_URL, { waitUntil: 'networkidle' });
   await page.waitForSelector('canvas', { timeout: 15000 });
   const box = await (await page.$('canvas')).boundingBox();
   const transformOf = () =>
@@ -69,8 +74,9 @@ try {
   await touch('touchEnd', []);
   await page.waitForTimeout(100);
   const pinchWorks = (await scaleOf()) > scaleBeforePinch + 0.05;
+  const oneQuickLookPerSelection = currentPixelReads === 2;
 
-  const results = { selectWorks, zoomWorks, panWorks, selectAfterGestures, pinchWorks };
+  const results = { selectWorks, zoomWorks, panWorks, selectAfterGestures, pinchWorks, oneQuickLookPerSelection };
   const failed = Object.entries(results).filter(([, ok]) => !ok).map(([k]) => k);
   console.log(JSON.stringify(results, null, 2));
   if (failed.length) {

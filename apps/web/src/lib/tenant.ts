@@ -10,16 +10,18 @@ export interface PublicTenant {
   readonly slug: string;
   readonly title: string;
   readonly themePrimary: string;
+  readonly palette: string;
 }
 
 /** Neutral theme color used when no tenant resolves. */
 export const FALLBACK_PRIMARY = '#3b3f46';
 
-function toPublicTenant(config: tenant.TenantConfig): PublicTenant {
+export function toPublicTenant(config: tenant.TenantConfig): PublicTenant {
   return {
     slug: config.slug,
     title: config.publicTitle,
     themePrimary: config.theme.primary ?? FALLBACK_PRIMARY,
+    palette: config.palette,
   };
 }
 

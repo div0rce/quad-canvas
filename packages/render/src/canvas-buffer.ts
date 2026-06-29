@@ -61,29 +61,30 @@ export class CanvasBuffer {
   }
 
   /**
-   * Apply a live delta. Out-of-bounds and stale (`seq` ≤ watermark) deltas are ignored. Deltas with
-   * no `seq` are always applied (best-effort). Returns whether the buffer changed.
+   * Apply the next contiguous live delta. Out-of-bounds, stale, duplicate, and gapped deltas are
+   * ignored. A gap must be recovered by loading a fresh snapshot; advancing across it would make a
+   * later arrival at the missing sequence look stale and permanently lose that update.
    */
   applyDelta(delta: ws.PixelPlaced): boolean {
-    if (delta.seq !== undefined && delta.seq <= this.#seq) return false;
+    if (delta.seq !== this.#seq + 1) return false;
     const { x, y } = delta.at;
     if (!this.#inBounds(x, y)) return false;
     const i = this.#index(x, y);
     this.#cells[i] = delta.color;
     this.#dirty.add(i);
-    if (delta.seq !== undefined) this.#seq = delta.seq;
+    this.#seq = delta.seq;
     return true;
   }
 
   /** Apply a moderation rollback: revert the cell to its prior color, or empty. Seq-deduped. */
   applyRollback(rollback: ws.PixelRolledBack): boolean {
-    if (rollback.seq !== undefined && rollback.seq <= this.#seq) return false;
+    if (rollback.seq !== this.#seq + 1) return false;
     const { x, y } = rollback.at;
     if (!this.#inBounds(x, y)) return false;
     const i = this.#index(x, y);
     this.#cells[i] = rollback.color ?? EMPTY_CELL;
     this.#dirty.add(i);
-    if (rollback.seq !== undefined) this.#seq = rollback.seq;
+    this.#seq = rollback.seq;
     return true;
   }
 

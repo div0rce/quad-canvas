@@ -5,6 +5,7 @@
 // URL only — it's never stored in app state — and used once. Reads the token in an effect (client-
 // only) to avoid the useSearchParams Suspense requirement.
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { confirmMessage, confirmToken } from '@/auth/auth-client';
 
 export default function ConfirmPage(): React.ReactElement {
@@ -18,13 +19,18 @@ export default function ConfirmPage(): React.ReactElement {
     if (window.location.search) {
       window.history.replaceState({}, '', window.location.pathname);
     }
-    if (!token) {
-      setStatus('No sign-in token in this link.');
-      setDone(true);
-      return;
-    }
     let cancelled = false;
     void (async () => {
+      // Defer URL-derived state updates out of the effect body. This avoids a redundant synchronous
+      // render while preserving the client-only token read and immediate address-bar scrub.
+      await Promise.resolve();
+      if (!token) {
+        if (!cancelled) {
+          setStatus('No sign-in token in this link.');
+          setDone(true);
+        }
+        return;
+      }
       try {
         const code = await confirmToken(token);
         if (!cancelled) setStatus(confirmMessage(code));
@@ -47,7 +53,7 @@ export default function ConfirmPage(): React.ReactElement {
       </p>
       {done && (
         <p>
-          <a href="/canvas">Go to the canvas →</a>
+          <Link href="/canvas">Go to the canvas →</Link>
         </p>
       )}
     </main>

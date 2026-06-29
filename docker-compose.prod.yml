@@ -4,7 +4,7 @@
 # (DEPLOYMENT.md §7): the API image is built once, a one-shot `migrate` applies the additive
 # migration history, then `api` starts only after the datastores are healthy AND migrate succeeded.
 # Secrets are injected from the environment / a `.env` file (DEPLOY-INV-2) — copy `.env.prod.example`
-# to `.env.prod` and set real values; never commit it. Web (Next standalone) deployment is a follow-up.
+# to `.env.prod` and set real values; never commit it.
 #
 #   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 # ----------------------------------------------------------------------------
@@ -44,7 +44,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-      target: build
+      target: migrate
     command: ["pnpm", "--filter", "@quad/db", "run", "db:migrate:deploy"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
@@ -83,10 +83,9 @@ services:
       dockerfile: apps/web/Dockerfile
     environment:
       PORT: "3000"
-    # NOTE: the Next bundle ships with NEXT_PUBLIC_API_BASE='' (same-origin). In production an edge proxy
-    # fronts both on ONE origin and routes /api + /ws to `api` by tenant Host (DEPLOYMENT.md §9). That
-    # proxy is a follow-up — so on this WEB_PORT the UI renders, but browser→API calls won't resolve
-    # until the proxy is added (also what unblocks the browser e2e). Reach the API directly on API_PORT.
+    # The Next bundle ships with NEXT_PUBLIC_API_BASE='' (same-origin). The edge service below fronts
+    # both apps on one origin and routes /api + /ws to `api` by tenant Host (DEPLOYMENT.md §9). WEB_PORT
+    # remains a direct/debug surface; browser API calls on that port alone do not resolve.
     # Loopback-only (same rationale as the API): publish only the edge proxy off-host.
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:3000"

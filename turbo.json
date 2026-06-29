@@ -17,7 +17,7 @@
     },
     "test": {
       "dependsOn": ["^build", "db:generate"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "test:integration": {
       "dependsOn": ["^build", "db:generate"],

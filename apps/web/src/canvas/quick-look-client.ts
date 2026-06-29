@@ -4,20 +4,29 @@ import type { dto } from '@quad/core';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
-/** Current cell state, or null when the cell is empty (404) or unreachable. */
-export async function fetchCurrentPixel(x: number, y: number): Promise<dto.PixelResponse | null> {
+export type CurrentPixelResult =
+  | { readonly kind: 'pixel'; readonly pixel: dto.PixelResponse }
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'unavailable' };
+
+/** Current cell state. A real 404 is empty; transport/server failures remain distinguishable. */
+export async function fetchCurrentPixel(x: number, y: number): Promise<CurrentPixelResult> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}`);
-    return res.ok ? ((await res.json()) as dto.PixelResponse) : null;
+    if (res.status === 404) return { kind: 'empty' };
+    if (!res.ok) return { kind: 'unavailable' };
+    return { kind: 'pixel', pixel: (await res.json()) as dto.PixelResponse };
   } catch {
-    return null;
+    return { kind: 'unavailable' };
   }
 }
 
-/** One-line quick-look label: "handle · time" for a placed cell ("unknown" if the placer has no public
- *  handle), or "Empty" for an unplaced/unreachable cell. */
-export function quickLookLabel(pixel: dto.PixelResponse | null): string {
-  if (!pixel) return 'Empty'; // 404 / empty / unreachable
+/** One-line quick-look label with the current color, public owner, and placement time. */
+export function quickLookLabel(result: CurrentPixelResult, colorName?: string): string {
+  if (result.kind === 'empty') return 'Empty';
+  if (result.kind === 'unavailable') return 'Unavailable';
+  const { pixel } = result;
   const who = pixel.owner?.handle ?? 'unknown'; // a placed cell whose placer has no public handle
-  return pixel.placedAt ? `${who} · ${new Date(pixel.placedAt).toLocaleString()}` : who;
+  const color = colorName ?? `Color ${pixel.color}`;
+  return pixel.placedAt ? `${color} · ${who} · ${new Date(pixel.placedAt).toLocaleString()}` : `${color} · ${who}`;
 }

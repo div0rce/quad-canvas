@@ -7,6 +7,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { domain, dto } from '@quad/core';
 import { placePixel } from '../services/placement.js';
 import type { PlacementDeps, PlacementInput } from '../services/placement.js';
+import { readIdempotencyKey } from './idempotency.js';
 
 /** A preHandler hook (e.g. the rate limiter). */
 type PreHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -56,8 +57,8 @@ export function makePixelRoutes(placement: PlacementDeps, rateLimit?: PreHandler
       if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
       if (!request.principal) return sendError(reply, request, 'UNAUTHENTICATED', 'Authentication required.');
 
-      const key = request.headers['idempotency-key'];
-      const idempotencyKey = typeof key === 'string' ? key : '';
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return sendError(reply, request, 'VALIDATION_ERROR', idempotency.message);
       const body = (request.body ?? {}) as Partial<dto.PlacePixelCommand>;
       const at = body.at;
       const color = body.color;
@@ -65,7 +66,7 @@ export function makePixelRoutes(placement: PlacementDeps, rateLimit?: PreHandler
         return sendError(reply, request, 'VALIDATION_ERROR', 'Body must be { at: { x, y }, color }.');
       }
 
-      const input: PlacementInput = { x: at.x, y: at.y, color, idempotencyKey };
+      const input: PlacementInput = { x: at.x, y: at.y, color, idempotencyKey: idempotency.key };
       const outcome = await placePixel(
         placement,
         request.principal,

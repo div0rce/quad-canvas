@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { domain } from '@quad/core';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
@@ -16,7 +16,14 @@ function makeDeps(bus: RealtimeBus = new InMemoryRealtimeBus()): PlacementDeps {
 }
 
 async function reset(): Promise<void> {
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE "pixels","pixel_events","Canvas","Membership","User","Tenant" CASCADE');
+  await prisma.$executeRawUnsafe('ALTER TABLE "pixel_events" DISABLE TRIGGER USER');
+  await prisma.$executeRawUnsafe('ALTER TABLE "moderation_actions" DISABLE TRIGGER USER');
+  try {
+    await prisma.$executeRawUnsafe('TRUNCATE TABLE "pixels","pixel_events","Canvas","Membership","User","Tenant" CASCADE');
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "pixel_events" ENABLE TRIGGER USER');
+    await prisma.$executeRawUnsafe('ALTER TABLE "moderation_actions" ENABLE TRIGGER USER');
+  }
 }
 
 async function seedCanvas(tenantId = 'ten_rutgers'): Promise<string> {
@@ -43,6 +50,7 @@ interface WsMessage {
   readonly type: string;
   readonly code?: string;
   readonly approximateActive?: number;
+  readonly canvasId?: string;
 }
 
 interface Conn {
@@ -58,8 +66,10 @@ async function listen(app: Awaited<ReturnType<typeof buildApp>>): Promise<number
 
 // Queue messages from the moment the socket is created — so an early server message (e.g. an
 // immediate error before close) is never missed by a late listener.
-function connect(port: number, host = 'rutgers.localhost'): Promise<Conn> {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/canvas/current/ws`, { headers: { host } });
+function connect(port: number, host = 'rutgers.localhost', origin: string | null = `http://${host}`): Promise<Conn> {
+  const headers: Record<string, string> = { host };
+  if (origin) headers['origin'] = origin;
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/canvas/current/ws`, { headers });
   const queue: WsMessage[] = [];
   const waiters: Array<(m: WsMessage) => void> = [];
   socket.on('message', (data) => {
@@ -86,6 +96,31 @@ afterAll(async () => {
 });
 
 describe('websocket server', () => {
+  it('registers the WebSocket server close lifecycle exactly once without listener warnings', async () => {
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error): void => {
+      if (warning.name === 'MaxListenersExceededWarning') warnings.push(warning);
+    };
+    process.on('warning', onWarning);
+
+    const app = await buildApp({ placement: makeDeps() });
+    await app.ready();
+    const closeSpy = vi.spyOn(app.websocketServer, 'close');
+    let closeCalls = 0;
+    try {
+      await app.close();
+      // Node emits process warnings on a later turn than the listener addition that created them.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      closeCalls = closeSpy.mock.calls.length;
+      process.off('warning', onWarning);
+      closeSpy.mockRestore();
+    }
+
+    expect(closeCalls).toBe(1);
+    expect(warnings).toEqual([]);
+  });
+
   it('accepts a tenant-scoped connection and acknowledges a subscription', async () => {
     const canvasId = await seedCanvas();
     const app = await buildApp({ placement: makeDeps() });
@@ -94,7 +129,7 @@ describe('websocket server', () => {
     try {
       socket.send(JSON.stringify({ type: 'SubscribeCanvas', canvasId }));
       const msg = await next();
-      expect(msg.type).toBe('Heartbeat');
+      expect(msg).toMatchObject({ type: 'CanvasSubscribed', canvasId });
     } finally {
       socket.close();
       await app.close();
@@ -109,6 +144,44 @@ describe('websocket server', () => {
       const msg = await next();
       expect(msg.type).toBe('Error');
       expect(msg.code).toBe('WS_TENANT_MISMATCH');
+    } finally {
+      socket.close();
+      await app.close();
+    }
+  });
+
+  it('rejects a connection whose Origin does not resolve to the request tenant', async () => {
+    const app = await buildApp({ placement: makeDeps() });
+    const port = await listen(app);
+    const { socket, next } = await connect(port, 'rutgers.localhost', 'https://evil.example');
+    try {
+      expect(await next()).toMatchObject({ type: 'Error', code: 'WS_FORBIDDEN' });
+    } finally {
+      socket.close();
+      await app.close();
+    }
+  });
+
+  it('rejects malformed protocol messages instead of trusting a TypeScript cast', async () => {
+    const app = await buildApp({ placement: makeDeps() });
+    const port = await listen(app);
+    const { socket, next } = await connect(port);
+    try {
+      socket.send(JSON.stringify({ type: 'SubscribeCanvas' }));
+      expect(await next()).toMatchObject({ type: 'Error', code: 'WS_PROTOCOL_ERROR' });
+    } finally {
+      socket.close();
+      await app.close();
+    }
+  });
+
+  it('closes a connection that exceeds its inbound message budget', async () => {
+    const app = await buildApp({ placement: makeDeps() });
+    const port = await listen(app);
+    const { socket, next } = await connect(port);
+    try {
+      for (let index = 0; index <= 120; index += 1) socket.send(JSON.stringify({ type: 'Pong' }));
+      expect(await next()).toMatchObject({ type: 'Error', code: 'WS_RATE_LIMITED' });
     } finally {
       socket.close();
       await app.close();
@@ -140,7 +213,7 @@ describe('websocket server', () => {
     const { socket, next } = await connect(port);
     try {
       socket.send(JSON.stringify({ type: 'SubscribeCanvas', canvasId: seed.canvasId }));
-      expect((await next()).type).toBe('Heartbeat'); // subscription ack
+      expect(await next()).toMatchObject({ type: 'CanvasSubscribed', canvasId: seed.canvasId });
 
       const principal: domain.Principal = {
         userId: seed.userId as domain.UserId,
@@ -171,7 +244,7 @@ describe('websocket server', () => {
     const { socket, next } = await connect(port);
     try {
       socket.send(JSON.stringify({ type: 'SubscribeCanvas', canvasId }));
-      expect((await next()).type).toBe('Heartbeat'); // subscription ack
+      expect(await next()).toMatchObject({ type: 'CanvasSubscribed', canvasId });
       const presence = await next();
       expect(presence.type).toBe('PresenceUpdated');
       expect(presence.approximateActive).toBe(1);

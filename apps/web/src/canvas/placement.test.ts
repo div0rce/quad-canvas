@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cellFromPoint, placementStatusMessage } from './placement';
+import { cellFromPoint, moveCell, placementStatusMessage } from './placement';
 
 const rect = { left: 0, top: 0, width: 100, height: 100 };
 
@@ -18,6 +18,22 @@ describe('cellFromPoint', () => {
     expect(cellFromPoint(rect, -1, 5, 10, 10)).toBeNull();
     expect(cellFromPoint(rect, 5, 101, 10, 10)).toBeNull();
     expect(cellFromPoint({ left: 0, top: 0, width: 0, height: 100 }, 5, 5, 10, 10)).toBeNull();
+  });
+});
+
+describe('moveCell', () => {
+  it('moves one cell in each arrow direction', () => {
+    expect(moveCell({ x: 2, y: 2 }, 'ArrowLeft', 5, 5)).toEqual({ x: 1, y: 2 });
+    expect(moveCell({ x: 2, y: 2 }, 'ArrowRight', 5, 5)).toEqual({ x: 3, y: 2 });
+    expect(moveCell({ x: 2, y: 2 }, 'ArrowUp', 5, 5)).toEqual({ x: 2, y: 1 });
+    expect(moveCell({ x: 2, y: 2 }, 'ArrowDown', 5, 5)).toEqual({ x: 2, y: 3 });
+  });
+
+  it('clamps movement at every grid edge', () => {
+    expect(moveCell({ x: 0, y: 0 }, 'ArrowLeft', 5, 5)).toEqual({ x: 0, y: 0 });
+    expect(moveCell({ x: 0, y: 0 }, 'ArrowUp', 5, 5)).toEqual({ x: 0, y: 0 });
+    expect(moveCell({ x: 4, y: 4 }, 'ArrowRight', 5, 5)).toEqual({ x: 4, y: 4 });
+    expect(moveCell({ x: 4, y: 4 }, 'ArrowDown', 5, 5)).toEqual({ x: 4, y: 4 });
   });
 });
 

@@ -24,7 +24,9 @@ function statementViolations(stmt) {
   if (/\bDROP\s+"/i.test(stmt)) out.push('DROP column (shorthand)');
   if (/\bRENAME\s+TO\b/i.test(stmt)) out.push('RENAME TABLE');
   if (/\bRENAME\s+COLUMN\b/i.test(stmt)) out.push('RENAME COLUMN');
-  if (/\bTRUNCATE\b/i.test(stmt)) out.push('TRUNCATE');
+  // `TRUNCATE` is also a valid CREATE TRIGGER event. Only a statement whose command is TRUNCATE is
+  // destructive; `CREATE TRIGGER ... BEFORE TRUNCATE` is an additive integrity guard.
+  if (/^\s*TRUNCATE\b/i.test(stmt)) out.push('TRUNCATE');
   if (/\bDELETE\s+FROM\b/i.test(stmt)) out.push('DELETE FROM');
   if (/\bADD\s+COLUMN\b/i.test(stmt) && /\bNOT\s+NULL\b/i.test(stmt) && !/\bDEFAULT\b/i.test(stmt)) {
     out.push('ADD COLUMN NOT NULL without DEFAULT');

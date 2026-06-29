@@ -1,6 +1,5 @@
 // apps/web — paint a canvas snapshot onto a <canvas> (shared by the archive view + the replay player).
-// Static render: loads the snapshot into a @quad/render buffer and fills each cell. Tenant palette is
-// assumed 'default' (single tenant); carrying the palette in archive metadata is a follow-up.
+// Static render: loads the snapshot into a @quad/render buffer and fills each cell with the tenant palette.
 import { CanvasBuffer, EMPTY_CELL } from '@quad/render';
 import type { dto } from '@quad/core';
 import { colorHex } from '@/canvas/inspector-client';

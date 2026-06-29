@@ -59,6 +59,7 @@ export interface PixelRow {
 
 /** The authoritative placed-cell facts (from the event), returned for placed + replayed results. */
 export interface PlacedRow {
+  readonly actorUserId: string;
   readonly x: number;
   readonly y: number;
   readonly color: number;
@@ -76,13 +77,12 @@ export interface AppendPlacementInput {
   readonly idempotencyKey: string;
   /** Server-authoritative cooldown window (ms); enforced inside the transaction. */
   readonly cooldownMs: number;
-  /** Caller's clock at request time (ms since epoch). */
-  readonly nowMs: number;
 }
 
 export type AppendResult =
   | { readonly kind: 'placed'; readonly row: PlacedRow }
   | { readonly kind: 'duplicate'; readonly row: PlacedRow }
+  | { readonly kind: 'idempotency_conflict' }
   | { readonly kind: 'cooldown'; readonly retryAfterMs: number }
   | { readonly kind: 'inactive' };
 
@@ -93,17 +93,20 @@ export interface ApplyMemberModerationInput {
   readonly actionType: string;
   readonly status: string;
   readonly reason: string;
+  readonly idempotencyKey: string;
 }
 
 export type ApplyMemberModerationResult =
-  | { readonly updated: true; readonly auditId: string; readonly createdAt: Date }
-  | { readonly updated: false };
+  | { readonly kind: 'applied' | 'replayed'; readonly auditId: string; readonly createdAt: Date; readonly seq?: number }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'idempotency_conflict' };
 
 export interface AssignRoleInput {
   readonly tenantId: string;
   readonly actorUserId: string;
   readonly targetUserId: string;
   readonly role: string;
+  readonly idempotencyKey: string;
 }
 
 export interface CreateReportInput {
@@ -112,9 +115,13 @@ export interface CreateReportInput {
   readonly reporterUserId: string;
   readonly targetRef: string;
   readonly reason: string;
-  /** Optional idempotency key (from the request header) — a retry returns the original report. */
-  readonly idempotencyKey?: string | null;
+  /** Required idempotency key (from the request header) — a retry returns the original report. */
+  readonly idempotencyKey: string;
 }
+
+export type CreateReportResult =
+  | { readonly kind: 'created' | 'replayed'; readonly id: string; readonly status: string }
+  | { readonly kind: 'idempotency_conflict' };
 
 export interface ReportRow {
   readonly id: string;
@@ -143,6 +150,7 @@ export interface ResolveReportInput {
   readonly actionType: string;
   /** The moderator's required explanation — preserved verbatim in the audit record. */
   readonly reason: string;
+  readonly idempotencyKey: string;
 }
 
 export interface RosterRow {
@@ -163,6 +171,7 @@ export interface CanvasLifecycleInput {
   readonly actorUserId: string;
   readonly canvasId: string;
   readonly status: string;
+  readonly idempotencyKey: string;
 }
 
 export interface CreateCanvasInput {
@@ -171,6 +180,7 @@ export interface CreateCanvasInput {
   readonly term: string;
   readonly width: number;
   readonly height: number;
+  readonly idempotencyKey: string;
 }
 
 export type CreateCanvasResult =
@@ -181,8 +191,14 @@ export type CreateCanvasResult =
       readonly archivedCanvasId: string | null;
       readonly auditId: string;
       readonly createdAt: Date;
+      readonly replayed?: boolean;
+      /** Sequence of CanvasCreated/CanvasActivated on the new canvas. */
+      readonly canvasSeq: number;
+      /** Sequence of CanvasArchived on the superseded canvas, when present. */
+      readonly archivedCanvasSeq: number | null;
     }
-  | { readonly kind: 'duplicate_term' };
+  | { readonly kind: 'duplicate_term' }
+  | { readonly kind: 'idempotency_conflict' };
 
 export interface RollbackPixelInput {
   readonly tenantId: string;
@@ -191,8 +207,8 @@ export interface RollbackPixelInput {
   readonly x: number;
   readonly y: number;
   readonly reason: string;
-  /** Optional idempotency key — a retry returns the original action without re-applying the rollback. */
-  readonly idempotencyKey?: string | null;
+  /** Required idempotency key — a retry returns the original action without re-applying the rollback. */
+  readonly idempotencyKey: string;
 }
 
 export type RollbackResult =
@@ -209,7 +225,8 @@ export type RollbackResult =
       readonly replayed?: boolean;
     }
   | { readonly kind: 'absent' }
-  | { readonly kind: 'archived' };
+  | { readonly kind: 'archived' }
+  | { readonly kind: 'idempotency_conflict' };
 
 export interface RollbackRegionInput {
   readonly tenantId: string;
@@ -220,8 +237,8 @@ export interface RollbackRegionInput {
   readonly x2: number;
   readonly y2: number;
   readonly reason: string;
-  /** Optional idempotency key — a retry returns the original action without re-applying the rollback. */
-  readonly idempotencyKey?: string | null;
+  /** Required idempotency key — a retry returns the original action without re-applying the rollback. */
+  readonly idempotencyKey: string;
 }
 
 export type RegionRollbackResult =
@@ -236,7 +253,20 @@ export type RegionRollbackResult =
       /** True when this is an idempotent replay of an earlier rollback (no new state change / broadcast). */
       readonly replayed?: boolean;
     }
-  | { readonly kind: 'archived' };
+  | { readonly kind: 'archived' }
+  | { readonly kind: 'idempotency_conflict' };
+
+export interface ActionReplayExpectation {
+  readonly actorUserId: string;
+  readonly actionType: string;
+  readonly targetRef?: string;
+  readonly reason: string;
+}
+
+export type ActionReplayResult =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'conflict' }
+  | { readonly kind: 'replayed'; readonly id: string; readonly targetRef: string; readonly createdAt: Date };
 
 export interface ArchiveRow {
   readonly id: string;
@@ -299,6 +329,8 @@ export interface PlacementRepository {
   getLeaderboard(tenantId: string, limit: number): Promise<readonly LeaderboardRow[]>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
+  /** One canvas by id within a tenant, or null (used to reconstruct idempotent command results). */
+  findCanvasById(tenantId: string, canvasId: string): Promise<CurrentCanvasRow | null>;
   /** Count of placements on a canvas since `since` — the load input for the dynamic cooldown. */
   countRecentPlacements(canvasId: string, since: Date): Promise<number>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
@@ -316,7 +348,7 @@ export interface PlacementRepository {
   /** Atomically set a member's role + write the DC4 audit record. `updated:false` if not a member. */
   assignMembershipRole(input: AssignRoleInput): Promise<ApplyMemberModerationResult>;
   /** File a user report (DC4); returns its id + initial status. */
-  createReport(input: CreateReportInput): Promise<{ id: string; status: string }>;
+  createReport(input: CreateReportInput): Promise<CreateReportResult>;
   /** Cursor-paginated report queue for a tenant (oldest→newest), optionally filtered by status. */
   listReports(tenantId: string, query: ListReportsQuery): Promise<ReportPage>;
   /** Atomically set a report's status + write the DC4 audit record. `updated:false` if not found. */
@@ -327,9 +359,9 @@ export interface PlacementRepository {
   setCanvasLifecycle(input: CanvasLifecycleInput): Promise<ApplyMemberModerationResult>;
   /** Create a new term canvas as the active one (freezing any current active); audited. */
   createCanvas(input: CreateCanvasInput): Promise<CreateCanvasResult>;
-  /** A prior rollback's audit for an idempotency key + canonical target ("x,y" or "x1,y1,x2,y2"), or
-   *  null — lets a route honor a keyed retry even after the canvas changed (archived / new dimensions). */
-  findRollbackReplay(tenantId: string, targetRef: string, idempotencyKey: string): Promise<{ id: string; createdAt: Date } | null>;
+  /** Look up a moderation/admin command by its tenant-scoped idempotency key and verify that the
+   *  actor/action/target/reason fingerprint matches before replaying its result. */
+  findActionReplay(tenantId: string, idempotencyKey: string, expected: ActionReplayExpectation): Promise<ActionReplayResult>;
   /** Roll a cell back to its prior placement (or empty): compensating event + projection + audit. */
   rollbackPixel(input: RollbackPixelInput): Promise<RollbackResult>;
   /** Roll back every placed cell in a rectangle (one DC4 audit for the region). */
@@ -360,6 +392,22 @@ function parseKeysetCursor(cursor: string | undefined): { date: Date; id: string
   if (Number.isNaN(date.getTime())) return null;
   const id = cursor.slice(sep + 1);
   return id ? { date, id } : null;
+}
+
+interface StoredActionFingerprint {
+  readonly actorUserId: string;
+  readonly actionType: string;
+  readonly targetRef: string;
+  readonly reason: string | null;
+}
+
+function actionMatches(action: StoredActionFingerprint, expected: ActionReplayExpectation): boolean {
+  return (
+    action.actorUserId === expected.actorUserId &&
+    action.actionType === expected.actionType &&
+    (expected.targetRef === undefined || action.targetRef === expected.targetRef) &&
+    action.reason === expected.reason
+  );
 }
 
 export function createPlacementRepository(prisma: PrismaClient): PlacementRepository {
@@ -404,6 +452,14 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const c = await prisma.canvas.findFirst({
         where: { tenantId },
         orderBy: { createdAt: 'desc' },
+        select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
+      });
+      return c ?? null;
+    },
+
+    async findCanvasById(tenantId, canvasId) {
+      const c = await prisma.canvas.findFirst({
+        where: { id: canvasId, tenantId },
         select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
       });
       return c ?? null;
@@ -603,11 +659,26 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     async applyMemberModeration(input) {
       // Status change + audit commit together — there is no action without an audit entry (P-MOD-4).
       return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + input.tenantId + ':' + input.idempotencyKey})::bigint)`;
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          return actionMatches(prior, {
+            actorUserId: input.actorUserId,
+            actionType: input.actionType,
+            targetRef: input.targetUserId,
+            reason: input.reason,
+          })
+            ? { kind: 'replayed', auditId: prior.id, createdAt: prior.createdAt }
+            : { kind: 'idempotency_conflict' };
+        }
         const result = await tx.membership.updateMany({
           where: { tenantId: input.tenantId, userId: input.targetUserId },
           data: { status: input.status },
         });
-        if (result.count === 0) return { updated: false };
+        if (result.count === 0) return { kind: 'not_found' };
         const action = await tx.moderationAction.create({
           data: {
             tenantId: input.tenantId,
@@ -615,31 +686,49 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             actionType: input.actionType,
             targetRef: input.targetUserId,
             reason: input.reason,
+            idempotencyKey: input.idempotencyKey,
           },
           select: { id: true, createdAt: true },
         });
-        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+        return { kind: 'applied', auditId: action.id, createdAt: action.createdAt };
       });
     },
 
     async assignMembershipRole(input) {
       return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        const reason = `role set to ${input.role}`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + input.tenantId + ':' + input.idempotencyKey})::bigint)`;
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          return actionMatches(prior, {
+            actorUserId: input.actorUserId,
+            actionType: 'assign_role',
+            targetRef: input.targetUserId,
+            reason,
+          })
+            ? { kind: 'replayed', auditId: prior.id, createdAt: prior.createdAt }
+            : { kind: 'idempotency_conflict' };
+        }
         const result = await tx.membership.updateMany({
           where: { tenantId: input.tenantId, userId: input.targetUserId },
           data: { role: input.role },
         });
-        if (result.count === 0) return { updated: false };
+        if (result.count === 0) return { kind: 'not_found' };
         const action = await tx.moderationAction.create({
           data: {
             tenantId: input.tenantId,
             actorUserId: input.actorUserId,
             actionType: 'assign_role',
             targetRef: input.targetUserId,
-            reason: `role set to ${input.role}`,
+            reason,
+            idempotencyKey: input.idempotencyKey,
           },
           select: { id: true, createdAt: true },
         });
-        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+        return { kind: 'applied', auditId: action.id, createdAt: action.createdAt };
       });
     },
 
@@ -744,24 +833,42 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     async findByIdempotencyKey(tenantId, idempotencyKey) {
       const e = await prisma.pixelEvent.findUnique({
         where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
-        select: { x: true, y: true, newColor: true, seq: true, createdAt: true },
+        select: { actorUserId: true, x: true, y: true, newColor: true, seq: true, createdAt: true },
       });
-      if (!e || e.newColor === null) return null; // only a placement (non-null newColor) is replayable
-      return { x: e.x, y: e.y, color: e.newColor, seq: e.seq, placedAt: e.createdAt };
+      if (!e || e.x === null || e.y === null || e.newColor === null) return null; // only a coordinate placement is replayable
+      return { actorUserId: e.actorUserId, x: e.x, y: e.y, color: e.newColor, seq: e.seq, placedAt: e.createdAt };
     },
 
     async appendPlacement(input) {
-      const { tenantId, canvasId, actorUserId, x, y, color, idempotencyKey, cooldownMs, nowMs } = input;
+      const { tenantId, canvasId, actorUserId, x, y, color, idempotencyKey, cooldownMs } = input;
       return prisma.$transaction(async (tx): Promise<AppendResult> => {
         // Serialize all placements on this canvas → idempotency, cooldown, and seq are atomic.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
 
         const existing = await tx.pixelEvent.findUnique({
           where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
-          select: { x: true, y: true, newColor: true, seq: true, createdAt: true },
+          select: { actorUserId: true, x: true, y: true, newColor: true, seq: true, createdAt: true },
         });
         if (existing) {
-          return { kind: 'duplicate', row: { x: existing.x, y: existing.y, color: existing.newColor ?? color, seq: existing.seq, placedAt: existing.createdAt } };
+          if (
+            existing.actorUserId !== actorUserId ||
+            existing.x !== x ||
+            existing.y !== y ||
+            existing.newColor !== color
+          ) {
+            return { kind: 'idempotency_conflict' };
+          }
+          return {
+            kind: 'duplicate',
+            row: {
+              actorUserId: existing.actorUserId,
+              x: existing.x,
+              y: existing.y,
+              color,
+              seq: existing.seq,
+              placedAt: existing.createdAt,
+            },
+          };
         }
 
         // Re-check the canvas is still active INSIDE the lock — a freeze that committed between the
@@ -776,7 +883,16 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           select: { createdAt: true },
         });
         if (lastByActor) {
-          const elapsed = nowMs - lastByActor.createdAt.getTime();
+          // Compare timestamps from one clock domain. Postgres assigns the event timestamps;
+          // using an API-node clock here allows positive skew to bypass cooldown and negative skew
+          // to over-extend it.
+          const [databaseClock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+          if (!databaseClock) throw new Error('Database clock query returned no row.');
+          const nowMs = databaseClock.now.getTime();
+          // Wall clocks can step backwards slightly during host/VM synchronization. Clamp that
+          // anomaly to zero: a positive cooldown remains fail-closed, while a configured zero
+          // cooldown never invents a delay from a negative wall-clock delta.
+          const elapsed = Math.max(0, nowMs - lastByActor.createdAt.getTime());
           if (elapsed < cooldownMs) {
             return { kind: 'cooldown', retryAfterMs: cooldownMs - elapsed };
           }
@@ -806,7 +922,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           create: { tenantId, canvasId, x, y, color, ownerUserId: actorUserId, lastEventId: event.id, seq, placedAt: event.createdAt },
           update: { tenantId, color, ownerUserId: actorUserId, lastEventId: event.id, seq, placedAt: event.createdAt },
         });
-        return { kind: 'placed', row: { x, y, color, seq, placedAt: event.createdAt } };
+        return { kind: 'placed', row: { actorUserId, x, y, color, seq, placedAt: event.createdAt } };
       });
     },
 
@@ -817,12 +933,22 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       const findByKey = (key: string) =>
         prisma.report.findUnique({
           where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: key } },
-          select: { id: true, status: true },
+          select: { id: true, status: true, reporterUserId: true, targetRef: true, reason: true },
         });
-      if (input.idempotencyKey) {
-        const existing = await findByKey(input.idempotencyKey);
-        if (existing) return { id: existing.id, status: existing.status };
-      }
+      const matchesReport = (existing: {
+        id: string;
+        status: string;
+        reporterUserId: string;
+        targetRef: string;
+        reason: string;
+      }): CreateReportResult =>
+        existing.reporterUserId === input.reporterUserId &&
+        existing.targetRef === input.targetRef &&
+        existing.reason === input.reason
+          ? { kind: 'replayed', id: existing.id, status: existing.status }
+          : { kind: 'idempotency_conflict' };
+      const existing = await findByKey(input.idempotencyKey);
+      if (existing) return matchesReport(existing);
       try {
         const report = await prisma.report.create({
           data: {
@@ -831,15 +957,15 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             reporterUserId: input.reporterUserId,
             targetRef: input.targetRef,
             reason: input.reason,
-            ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+            idempotencyKey: input.idempotencyKey,
           },
           select: { id: true, status: true },
         });
-        return { id: report.id, status: report.status };
+        return { kind: 'created', id: report.id, status: report.status };
       } catch (e) {
-        if (input.idempotencyKey && e && typeof e === 'object' && (e as { code?: string }).code === 'P2002') {
+        if (e && typeof e === 'object' && (e as { code?: string }).code === 'P2002') {
           const existing = await findByKey(input.idempotencyKey);
-          if (existing) return { id: existing.id, status: existing.status };
+          if (existing) return matchesReport(existing);
         }
         throw e;
       }
@@ -871,11 +997,26 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     async resolveReport(input) {
       // Report status change + audit commit together (no action without an audit, P-MOD-4).
       return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + input.tenantId + ':' + input.idempotencyKey})::bigint)`;
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          return actionMatches(prior, {
+            actorUserId: input.actorUserId,
+            actionType: input.actionType,
+            targetRef: input.reportId,
+            reason: input.reason,
+          })
+            ? { kind: 'replayed', auditId: prior.id, createdAt: prior.createdAt }
+            : { kind: 'idempotency_conflict' };
+        }
         const result = await tx.report.updateMany({
           where: { tenantId: input.tenantId, id: input.reportId },
           data: { status: input.status },
         });
-        if (result.count === 0) return { updated: false };
+        if (result.count === 0) return { kind: 'not_found' };
         const action = await tx.moderationAction.create({
           data: {
             tenantId: input.tenantId,
@@ -883,15 +1024,54 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             actionType: input.actionType,
             targetRef: input.reportId,
             reason: input.reason,
+            idempotencyKey: input.idempotencyKey,
           },
           select: { id: true, createdAt: true },
         });
-        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+        return { kind: 'applied', auditId: action.id, createdAt: action.createdAt };
       });
     },
 
     async createCanvas(input) {
       return prisma.$transaction(async (tx): Promise<CreateCanvasResult> => {
+        const reason = `created canvas ${input.term}`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + input.tenantId + ':' + input.idempotencyKey})::bigint)`;
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          if (!actionMatches(prior, { actorUserId: input.actorUserId, actionType: 'canvas_create', reason })) {
+            return { kind: 'idempotency_conflict' };
+          }
+          const canvas = await tx.canvas.findFirst({
+            where: { id: prior.targetRef, tenantId: input.tenantId },
+            select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
+          });
+          if (!canvas || canvas.termLabel !== input.term || canvas.width !== input.width || canvas.height !== input.height) {
+            return { kind: 'idempotency_conflict' };
+          }
+          const lastEvent = await tx.pixelEvent.findFirst({
+            where: { canvasId: canvas.id },
+            orderBy: { seq: 'desc' },
+            select: { seq: true },
+          });
+          return {
+            kind: 'created',
+            canvas,
+            archivedCanvasId: null,
+            auditId: prior.id,
+            createdAt: prior.createdAt,
+            replayed: true,
+            canvasSeq: lastEvent?.seq ?? 0,
+            archivedCanvasSeq: null,
+          };
+        }
+        const eventKeyCollision = await tx.pixelEvent.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true },
+        });
+        if (eventKeyCollision) return { kind: 'idempotency_conflict' };
         // Serialize creates per tenant so two concurrent rollovers can't both archive-then-create and
         // leave two active canvases.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.tenantId})::bigint)`;
@@ -908,10 +1088,56 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         // it, so an in-flight placement can't commit on a canvas this rollover is sealing. Deadlock-safe:
         // only createCanvas takes the tenant lock, so the tenant→canvas ordering forms no cycle.
         if (active) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${active.id})::bigint)`;
-        await tx.canvas.updateMany({ where: { tenantId: input.tenantId, status: 'active' }, data: { status: 'archived' } });
+        let archivedCanvasSeq: number | null = null;
+        if (active) {
+          const last = await tx.pixelEvent.findFirst({ where: { canvasId: active.id }, orderBy: { seq: 'desc' }, select: { seq: true } });
+          archivedCanvasSeq = (last?.seq ?? 0) + 1;
+          await tx.pixelEvent.create({
+            data: {
+              tenantId: input.tenantId,
+              canvasId: active.id,
+              actorUserId: input.actorUserId,
+              type: 'CanvasArchived',
+              seq: archivedCanvasSeq,
+              payload: { status: 'archived', supersededByTerm: input.term },
+              idempotencyKey: `system:archive:${randomBytes(16).toString('hex')}`,
+              schemaVersion: 1,
+            },
+          });
+        }
+        await tx.canvas.updateMany({
+          where: { tenantId: input.tenantId, status: 'active' },
+          data: { status: 'archived', archivedAt: new Date() },
+        });
         const canvas = await tx.canvas.create({
           data: { tenantId: input.tenantId, termLabel: input.term, status: 'active', width: input.width, height: input.height },
           select: { id: true, tenantId: true, termLabel: true, status: true, width: true, height: true },
+        });
+        const createdEvent = await tx.pixelEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            canvasId: canvas.id,
+            actorUserId: input.actorUserId,
+            type: 'CanvasCreated',
+            seq: 1,
+            payload: { term: input.term, width: input.width, height: input.height },
+            idempotencyKey: input.idempotencyKey,
+            schemaVersion: 1,
+          },
+          select: { id: true },
+        });
+        const canvasSeq = 2;
+        await tx.pixelEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            canvasId: canvas.id,
+            actorUserId: input.actorUserId,
+            type: 'CanvasActivated',
+            seq: canvasSeq,
+            payload: { status: 'active' },
+            idempotencyKey: `system:activate:${randomBytes(16).toString('hex')}`,
+            schemaVersion: 1,
+          },
         });
         const audit = await tx.moderationAction.create({
           data: {
@@ -919,39 +1145,66 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             actorUserId: input.actorUserId,
             actionType: 'canvas_create',
             targetRef: canvas.id,
-            reason: `created canvas ${input.term}`,
+            reason,
+            idempotencyKey: input.idempotencyKey,
+            relatedEventId: createdEvent.id,
           },
           select: { id: true, createdAt: true },
         });
-        return { kind: 'created', canvas, archivedCanvasId: active?.id ?? null, auditId: audit.id, createdAt: audit.createdAt };
+        return {
+          kind: 'created',
+          canvas,
+          archivedCanvasId: active?.id ?? null,
+          auditId: audit.id,
+          createdAt: audit.createdAt,
+          canvasSeq,
+          archivedCanvasSeq,
+        };
       });
     },
 
-    async findRollbackReplay(tenantId, targetRef, idempotencyKey) {
-      // Mirrors the `modrb:<targetRef>:<key>` namespace the rollback methods stamp on their audit.
-      const prior = await prisma.moderationAction.findUnique({
-        where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: `modrb:${targetRef}:${idempotencyKey}` } },
-        select: { id: true, createdAt: true },
+    async findActionReplay(tenantId, idempotencyKey, expected) {
+      let prior = await prisma.moderationAction.findUnique({
+        where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+        select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
       });
-      return prior ?? null;
+      // Preserve replay compatibility for rollback actions written before raw command keys were
+      // stored. New actions always use the raw tenant-scoped key so reuse with a different target
+      // conflicts instead of creating a second action.
+      if (!prior && expected.targetRef && (expected.actionType === 'pixel_rollback' || expected.actionType === 'region_rollback')) {
+        prior = await prisma.moderationAction.findUnique({
+          where: {
+            tenantId_idempotencyKey: {
+              tenantId,
+              idempotencyKey: `modrb:${expected.targetRef}:${idempotencyKey}`,
+            },
+          },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+      }
+      if (!prior) return { kind: 'missing' };
+      if (!actionMatches(prior, expected)) return { kind: 'conflict' };
+      return { kind: 'replayed', id: prior.id, targetRef: prior.targetRef, createdAt: prior.createdAt };
     },
 
     async rollbackPixel(input) {
       const { tenantId, canvasId, actorUserId, x, y, reason } = input;
-      // Namespaced by the TARGET so (a) a client placement key can't pre-occupy a rollback key and
-      // (b) reusing one key for a different rollback can't falsely replay (a key dedups only its own target).
-      const modKey = input.idempotencyKey ? `modrb:${x},${y}:${input.idempotencyKey}` : null;
+      const targetRef = `${x},${y}`;
       return prisma.$transaction(async (tx): Promise<RollbackResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + tenantId + ':' + input.idempotencyKey})::bigint)`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
         // Idempotency: a retried rollback must NOT pop another placement. Under the per-canvas lock a
         // prior action with this key is already committed + visible, so a findUnique short-circuit is
         // race-safe (same pattern as appendPlacement). Replay → no state change, no broadcast.
-        if (modKey) {
-          const prior = await tx.moderationAction.findUnique({
-            where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: modKey } },
-            select: { id: true, createdAt: true },
-          });
-          if (prior) return { kind: 'rolledBack', x, y, color: null, seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          if (!actionMatches(prior, { actorUserId, actionType: 'pixel_rollback', targetRef, reason })) {
+            return { kind: 'idempotency_conflict' };
+          }
+          return { kind: 'rolledBack', x, y, color: null, seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
         }
         // Re-check status under the lock — a freeze→archive may have committed since the route read it.
         const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
@@ -1002,7 +1255,15 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           await tx.pixel.delete({ where: { canvasId_x_y: { canvasId, x, y } } });
         }
         const audit = await tx.moderationAction.create({
-          data: { tenantId, actorUserId, actionType: 'pixel_rollback', targetRef: `${x},${y}`, reason, ...(modKey ? { idempotencyKey: modKey } : {}) },
+          data: {
+            tenantId,
+            actorUserId,
+            actionType: 'pixel_rollback',
+            targetRef,
+            reason,
+            idempotencyKey: input.idempotencyKey,
+            relatedEventId: event.id,
+          },
           select: { id: true, createdAt: true },
         });
         return { kind: 'rolledBack', x, y, color: revertedColor, seq, auditId: audit.id, createdAt: audit.createdAt };
@@ -1011,18 +1272,22 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async rollbackRegion(input) {
       const { tenantId, canvasId, actorUserId, x1, y1, x2, y2, reason } = input;
-      const modKey = input.idempotencyKey ? `modrb:${x1},${y1},${x2},${y2}:${input.idempotencyKey}` : null;
+      const targetRef = `${x1},${y1},${x2},${y2}`;
       return prisma.$transaction(async (tx): Promise<RegionRollbackResult> => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + tenantId + ':' + input.idempotencyKey})::bigint)`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${canvasId})::bigint)`;
         // Idempotency: a retried region rollback must NOT pop another placement from every cell. The
         // per-canvas lock makes a findUnique short-circuit race-safe (a prior action with this key is
         // committed + visible). Replay → no state change, no broadcast.
-        if (modKey) {
-          const prior = await tx.moderationAction.findUnique({
-            where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: modKey } },
-            select: { id: true, createdAt: true },
-          });
-          if (prior) return { kind: 'rolledBack', cells: [], seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
+        });
+        if (prior) {
+          if (!actionMatches(prior, { actorUserId, actionType: 'region_rollback', targetRef, reason })) {
+            return { kind: 'idempotency_conflict' };
+          }
+          return { kind: 'rolledBack', cells: [], seq: 0, auditId: prior.id, createdAt: prior.createdAt, replayed: true };
         }
         // Re-check status under the lock — an archive may have committed since the route read it.
         const canvasState = await tx.canvas.findUnique({ where: { id: canvasId }, select: { status: true } });
@@ -1053,6 +1318,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         }
         const last = await tx.pixelEvent.findFirst({ where: { canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
         let seq = last?.seq ?? 0;
+        let lastEventId: string | null = null;
         const cells: Array<{ x: number; y: number; color: number | null }> = [];
         for (const p of placed) {
           // Same replay as the single-cell rollback — honor intervening rollbacks per cell (seq order).
@@ -1080,6 +1346,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
             },
             select: { id: true, createdAt: true },
           });
+          lastEventId = event.id;
           if (revertTo) {
             await tx.pixel.update({
               where: { canvasId_x_y: { canvasId, x: p.x, y: p.y } },
@@ -1091,7 +1358,15 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           cells.push({ x: p.x, y: p.y, color: revertedColor });
         }
         const audit = await tx.moderationAction.create({
-          data: { tenantId, actorUserId, actionType: 'region_rollback', targetRef: `${x1},${y1},${x2},${y2}`, reason, ...(modKey ? { idempotencyKey: modKey } : {}) },
+          data: {
+            tenantId,
+            actorUserId,
+            actionType: 'region_rollback',
+            targetRef,
+            reason,
+            idempotencyKey: input.idempotencyKey,
+            ...(lastEventId ? { relatedEventId: lastEventId } : {}),
+          },
           select: { id: true, createdAt: true },
         });
         return { kind: 'rolledBack', cells, seq, auditId: audit.id, createdAt: audit.createdAt };
@@ -1125,25 +1400,77 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async setCanvasLifecycle(input) {
       return prisma.$transaction(async (tx): Promise<ApplyMemberModerationResult> => {
+        const reason = `status set to ${input.status}`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'command:' + input.tenantId + ':' + input.idempotencyKey})::bigint)`;
         // Same per-canvas lock as placement — a freeze and an in-flight append serialize, so no
         // pixel is accepted after the freeze commits (with appendPlacement's in-tx status re-check).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.canvasId})::bigint)`;
-        const result = await tx.canvas.updateMany({
-          where: { id: input.canvasId, tenantId: input.tenantId },
-          data: { status: input.status },
+        const prior = await tx.moderationAction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true, actorUserId: true, actionType: true, targetRef: true, reason: true, createdAt: true },
         });
-        if (result.count === 0) return { updated: false };
+        if (prior) {
+          if (!actionMatches(prior, {
+            actorUserId: input.actorUserId,
+            actionType: 'canvas_lifecycle',
+            targetRef: input.canvasId,
+            reason,
+          })) return { kind: 'idempotency_conflict' };
+          const priorEvent = await tx.pixelEvent.findUnique({
+            where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+            select: { seq: true },
+          });
+          return { kind: 'replayed', auditId: prior.id, createdAt: prior.createdAt, ...(priorEvent ? { seq: priorEvent.seq } : {}) };
+        }
+        const eventKeyCollision = await tx.pixelEvent.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { id: true },
+        });
+        if (eventKeyCollision) return { kind: 'idempotency_conflict' };
+        const eventType =
+          input.status === 'active' ? 'CanvasActivated' : input.status === 'frozen' ? 'CanvasFrozen' : 'CanvasArchived';
+        const last = await tx.pixelEvent.findFirst({ where: { canvasId: input.canvasId }, orderBy: { seq: 'desc' }, select: { seq: true } });
+        const seq = (last?.seq ?? 0) + 1;
+        const allowedSourceStatuses =
+          input.status === 'frozen' ? ['active'] : input.status === 'archived' ? ['active', 'frozen'] : [];
+        const result = await tx.canvas.updateMany({
+          // Enforce the forward-only state machine under the same canvas lock as placement. Route
+          // preflight can race another lifecycle command; without this predicate, a late freeze can
+          // regress an archived canvas or append duplicate lifecycle/audit facts.
+          where: { id: input.canvasId, tenantId: input.tenantId, status: { in: allowedSourceStatuses } },
+          data: {
+            status: input.status,
+            ...(input.status === 'frozen' ? { frozenAt: new Date() } : {}),
+            ...(input.status === 'archived' ? { archivedAt: new Date() } : {}),
+          },
+        });
+        if (result.count === 0) return { kind: 'not_found' };
+        const lifecycleEvent = await tx.pixelEvent.create({
+          data: {
+            tenantId: input.tenantId,
+            canvasId: input.canvasId,
+            actorUserId: input.actorUserId,
+            type: eventType,
+            seq,
+            payload: { status: input.status },
+            idempotencyKey: input.idempotencyKey,
+            schemaVersion: 1,
+          },
+          select: { id: true },
+        });
         const action = await tx.moderationAction.create({
           data: {
             tenantId: input.tenantId,
             actorUserId: input.actorUserId,
             actionType: 'canvas_lifecycle',
             targetRef: input.canvasId,
-            reason: `status set to ${input.status}`,
+            reason,
+            idempotencyKey: input.idempotencyKey,
+            relatedEventId: lifecycleEvent.id,
           },
           select: { id: true, createdAt: true },
         });
-        return { updated: true, auditId: action.id, createdAt: action.createdAt };
+        return { kind: 'applied', auditId: action.id, createdAt: action.createdAt, seq };
       });
     },
   };

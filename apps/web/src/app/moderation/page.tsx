@@ -3,8 +3,17 @@
 // apps/web — moderator console. Lists the report queue and resolves/dismisses reports. The server
 // enforces the moderator role; non-moderators get a clear access message (no actions rendered).
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { dto } from '@quad/core';
 import { actionMessage, actOnReport, fetchReports, queueMessage, type ReportAction } from '@/moderation/moderation-client';
+
+async function readQueue(): Promise<{ reports: dto.ReportQueueResponse; message: string }> {
+  const { status, data } = await fetchReports();
+  return {
+    reports: data ?? { data: [], page: { nextCursor: null, limit: 0 } },
+    message: queueMessage(status),
+  };
+}
 
 export default function ModerationPage(): React.ReactElement {
   // undefined = loading.
@@ -13,14 +22,22 @@ export default function ModerationPage(): React.ReactElement {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { status, data } = await fetchReports();
-    setReports(data ?? { data: [], page: { nextCursor: null, limit: 0 } });
-    setMessage(queueMessage(status));
+    const next = await readQueue();
+    setReports(next.reports);
+    setMessage(next.message);
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    void readQueue().then((next) => {
+      if (!active) return;
+      setReports(next.reports);
+      setMessage(next.message);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const act = useCallback(
     async (id: string, action: ReportAction) => {
@@ -43,7 +60,7 @@ export default function ModerationPage(): React.ReactElement {
     <main style={{ padding: '1rem', maxWidth: 640 }}>
       <h1>Moderation queue</h1>
       <p>
-        <a href="/policy">Content policy ▸</a>
+        <Link href="/policy">Content policy ▸</Link>
       </p>
       {message && (
         <p role="status" aria-live="polite">

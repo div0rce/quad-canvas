@@ -11,12 +11,17 @@ export interface CanvasSnapshotAvailable {
 export interface CanvasSnapshot {
   readonly type: 'CanvasSnapshot';
 }
+/** Confirms the server has authorized and installed the requested canvas subscription. */
+export interface CanvasSubscribed {
+  readonly type: 'CanvasSubscribed';
+  readonly canvasId: CanvasId;
+}
 export interface PixelPlaced {
   readonly type: 'PixelPlaced';
   readonly at: Coordinate;
   readonly color: ColorIndex;
   /** Per-canvas order of this placement — clients apply deltas with `seq` beyond the snapshot. */
-  readonly seq?: PerCanvasSequence;
+  readonly seq: PerCanvasSequence;
   readonly by?: PublicIdentity;
 }
 export interface PixelRolledBack {
@@ -25,7 +30,7 @@ export interface PixelRolledBack {
   /** The color the cell reverted to; omitted when the cell is now empty. */
   readonly color?: ColorIndex;
   /** Per-canvas order of the compensating event (clients dedupe by seq, like PixelPlaced). */
-  readonly seq?: PerCanvasSequence;
+  readonly seq: PerCanvasSequence;
 }
 export interface RegionRolledBack {
   readonly type: 'RegionRolledBack';
@@ -43,6 +48,7 @@ export interface CooldownUpdated {
 export interface CanvasLifecycleChanged {
   readonly type: 'CanvasLifecycleChanged';
   readonly status: string;
+  readonly seq: PerCanvasSequence;
 }
 export interface ReportStatusUpdated {
   readonly type: 'ReportStatusUpdated';
@@ -70,6 +76,7 @@ export interface ErrorMessage {
 export type ServerToClientMessage =
   | CanvasSnapshotAvailable
   | CanvasSnapshot
+  | CanvasSubscribed
   | PixelPlaced
   | PixelRolledBack
   | RegionRolledBack

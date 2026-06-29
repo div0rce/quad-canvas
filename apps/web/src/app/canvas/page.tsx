@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { CanvasView } from '@/canvas/canvas-view';
 import { SessionBadge } from '@/auth/session-badge';
 
@@ -9,8 +10,8 @@ export default function CanvasPage(): React.ReactElement {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
         <h1>Live Canvas</h1>
         <nav style={{ display: 'flex', gap: '1rem', alignItems: 'baseline' }}>
-          <a href="/leaderboards">Leaderboard</a>
-          <a href="/archives">Archives</a>
+          <Link href="/leaderboards">Leaderboard</Link>
+          <Link href="/archives">Archives</Link>
           <SessionBadge />
         </nav>
       </div>

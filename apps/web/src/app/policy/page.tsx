@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 // apps/web — content policy, available in-app to moderators (LG-2). Mirrors docs/CONTENT_POLICY.md;
 // the repository doc is authoritative. Static page (no data), linked from the moderator console.
 
@@ -7,7 +9,7 @@ export default function PolicyPage(): React.ReactElement {
   return (
     <main style={{ padding: '1rem', maxWidth: 720, lineHeight: 1.5 }}>
       <p>
-        <a href="/moderation">← Moderator console</a>
+        <Link href="/moderation">← Moderator console</Link>
       </p>
       <h1>Content policy</h1>
       <p>
@@ -45,7 +47,7 @@ export default function PolicyPage(): React.ReactElement {
       <ul>
         <li><strong>Attribution, not surveillance</strong> — act on content and conduct using only the public handle; private data (email) is never exposed.</li>
         <li><strong>Reversibility</strong> — content rollbacks are audited compensating actions; member actions can be undone by reinstating.</li>
-        <li><strong>Appeals</strong> — a suspended/banned member may appeal to the tenant's moderation team; a successful appeal leads to reinstatement.</li>
+        <li><strong>Appeals</strong> — a suspended/banned member may appeal to the tenant&apos;s moderation team; a successful appeal leads to reinstatement.</li>
         <li><strong>Consistency</strong> — apply the policy evenly; act on violations, not on content you merely dislike.</li>
       </ul>
 

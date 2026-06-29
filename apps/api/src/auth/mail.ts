@@ -37,7 +37,8 @@ export class NullMailTransport implements MailTransport {
     this.#log = log;
   }
 
-  sendVerificationLink(email: string, _token: string): Promise<void> {
+  sendVerificationLink(email: string, token: string): Promise<void> {
+    void token;
     this.#log(`verification link requested for ${maskEmail(email)} (no mail provider configured; not delivered)`);
     return Promise.resolve();
   }

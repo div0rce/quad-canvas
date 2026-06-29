@@ -1,6 +1,7 @@
 // apps/web — archives read client. Past terms: a list, plus a term's final-state snapshot + replay
 // derivation metadata. Public reads (same tenant-host constraint as the rest of the web app).
 import type { dto } from '@quad/core';
+import { fetchAllPages } from '@/lib/fetch-all-pages';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 
@@ -10,11 +11,22 @@ export type FetchOutcome<T> =
   | { readonly status: 'missing' }
   | { readonly status: 'error' };
 
+function isArchiveSummary(value: unknown): value is dto.ArchiveSummary {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item['id'] === 'string' &&
+    typeof item['term'] === 'string' &&
+    typeof item['status'] === 'string' &&
+    typeof item['width'] === 'number' &&
+    typeof item['height'] === 'number' &&
+    typeof item['createdAt'] === 'string'
+  );
+}
+
 export async function fetchArchives(): Promise<dto.ArchiveListResponse | null> {
   try {
-    // Request the max page (newest first). Terms accumulate slowly; >200 would need cursor paging.
-    const res = await fetch(`${API_BASE}/api/v1/archives?limit=200`);
-    return res.ok ? ((await res.json()) as dto.ArchiveListResponse) : null;
+    return await fetchAllPages(`${API_BASE}/api/v1/archives?limit=200`, undefined, isArchiveSummary);
   } catch {
     return null;
   }

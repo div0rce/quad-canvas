@@ -11,8 +11,8 @@ import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
 import type { dto } from '@quad/core';
 import { CanvasClient, type SocketLike } from './canvas-client';
-import { cellFromPoint, placementStatusMessage } from './placement';
-import { fetchCurrentPixel, quickLookLabel } from './quick-look-client';
+import { cellFromPoint, moveCell, placementStatusMessage, type CellArrowKey } from './placement';
+import { fetchCurrentPixel, quickLookLabel, type CurrentPixelResult } from './quick-look-client';
 import { clampPan, pinchScale } from './gestures';
 
 const SCALE_MIN = 1; // fit-to-width
@@ -47,9 +47,17 @@ function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKe
   }
 }
 
+function currentPixelLabel(result: CurrentPixelResult, paletteKey: string): string {
+  const colorName =
+    result.kind === 'pixel' ? getPaletteByKey(paletteKey)?.colors.find((color) => color.index === result.pixel.color)?.name : undefined;
+  return quickLookLabel(result, colorName);
+}
+
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const placementDialogRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<CanvasClient | null>(null);
+  const placementIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
   // Pan/zoom (P-AC-11) — declared up here so the click/hover handlers below can read them.
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 });
@@ -59,22 +67,34 @@ export function CanvasView(): React.ReactElement {
   const dragStart = useRef<{ x: number; y: number } | null>(null); // pointer-down origin (cumulative-distance tap test)
   const multiTouched = useRef(false); // a second pointer touched during this gesture → not a tap
   const [dims, setDims] = useState<Dims | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  const [keyboardCell, setKeyboardCell] = useState<{ x: number; y: number } | null>(null);
+  const [keyboardQuickLook, setKeyboardQuickLook] = useState<{ key: string; label: string } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
   const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms the cooldown ends (display only)
-  const [nowTick, setNowTick] = useState(0); // re-render driver while a countdown is running
+  const [nowTick, setNowTick] = useState(0); // latest clock sample; updated outside render only
 
   // Tick once a second while a cooldown is pending so the countdown updates (server still enforces).
   useEffect(() => {
-    if (cooldownUntil <= Date.now()) return;
-    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    if (cooldownUntil === 0) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      setNowTick(now);
+      if (now >= cooldownUntil) clearInterval(id);
+    }, 1000);
     return () => clearInterval(id);
-  }, [cooldownUntil, nowTick]);
+  }, [cooldownUntil]);
 
-  const cooldownRemainingMs = remainingMs(cooldownUntil, Date.now());
+  const cooldownRemainingMs = remainingMs(cooldownUntil, nowTick);
+  const startCooldown = useCallback((durationMs: number) => {
+    const now = Date.now();
+    setNowTick(now);
+    setCooldownUntil(now + durationMs);
+  }, []);
 
   useEffect(() => {
     const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
@@ -92,12 +112,15 @@ export function CanvasView(): React.ReactElement {
         return res.json() as Promise<dto.CanvasSnapshotResponse>;
       },
       openSocket: () => new WebSocket(`${wsBase}/api/v1/canvas/current/ws`) as unknown as SocketLike,
-      onUpdate: (buffer, ctx) => paint(canvasRef.current, buffer, ctx.palette),
+      onUpdate: (buffer, ctx) => {
+        paint(canvasRef.current, buffer, ctx.palette);
+        setLoadState('ready');
+      },
     });
     clientRef.current = client;
     // Surface a load failure instead of leaving a blank canvas, and never let the initial load reject
     // unhandled (a down/erroring API would otherwise be a silent blank screen + an unhandled rejection).
-    client.start().catch(() => setStatus('Could not load the canvas. Please refresh to retry.'));
+    client.start().catch(() => setLoadState('error'));
     return () => {
       client.stop();
       clientRef.current = null;
@@ -109,15 +132,16 @@ export function CanvasView(): React.ReactElement {
   const selectAt = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
-      if (!canvas || !dims || submitting) return; // ignore while a placement is in flight
+      if (!canvas || !dims || loadState !== 'ready' || submitting) return; // ignore until loaded / while placing
       const cell = cellFromPoint(canvas.getBoundingClientRect(), clientX, clientY, dims.width, dims.height);
       if (cell) {
+        setKeyboardCell(cell);
         setSelected(cell); // step 1 — select the cell
         setPendingColor(null);
         setStatus('');
       }
     },
-    [dims, submitting],
+    [dims, loadState, submitting],
   );
 
   // Quick-look: the current cell's owner + time, lighter than the click-to-open history. On desktop it
@@ -126,27 +150,53 @@ export function CanvasView(): React.ReactElement {
   const [hover, setHover] = useState<{ label: string; left: number; top: number } | null>(null);
   const hoverCell = useRef<string>('');
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [selectedQuickLook, setSelectedQuickLook] = useState<string | null>(null);
+  const [selectedQuickLook, setSelectedQuickLook] = useState<{ key: string; label: string } | null>(null);
+  const selectedKey = selected ? `${selected.x},${selected.y}` : null;
+
+  // The confirmation controls are a fixed bottom sheet so selecting a cell never puts the deliberate
+  // second step below a tall/zoomed canvas. Move focus without scrolling the canvas out from under the
+  // user; Escape and Cancel restore focus to the keyboard-operable canvas surface.
+  useEffect(() => {
+    if (selected) placementDialogRef.current?.focus({ preventScroll: true });
+  }, [selected]);
 
   // The selected cell's quick-look (device-agnostic; refreshes after a placement via inspectorNonce).
   useEffect(() => {
-    if (!selected) {
-      setSelectedQuickLook(null);
-      return;
-    }
+    if (!selected) return;
+    const key = `${selected.x},${selected.y}`;
     let active = true;
-    void fetchCurrentPixel(selected.x, selected.y).then((pixel) => {
-      if (active) setSelectedQuickLook(quickLookLabel(pixel));
+    void fetchCurrentPixel(selected.x, selected.y).then((result) => {
+      if (active) {
+        const next = { key, label: currentPixelLabel(result, dims?.palette ?? 'default') };
+        setSelectedQuickLook(next);
+        setKeyboardQuickLook(next);
+      }
     });
     return () => {
       active = false;
     };
-  }, [selected, inspectorNonce]);
+  }, [selected, inspectorNonce, dims?.palette]);
+
+  // Keyboard focus has the same coordinate/color/owner/time parallel as pointer quick-look, without
+  // opening the placement sheet until Enter/Space is pressed.
+  useEffect(() => {
+    if (!keyboardCell || selected || loadState !== 'ready') return;
+    const key = `${keyboardCell.x},${keyboardCell.y}`;
+    if (keyboardQuickLook?.key === key) return;
+    let active = true;
+    void fetchCurrentPixel(keyboardCell.x, keyboardCell.y).then((result) => {
+      if (active) setKeyboardQuickLook({ key, label: currentPixelLabel(result, dims?.palette ?? 'default') });
+    });
+    return () => {
+      active = false;
+    };
+  }, [keyboardCell, keyboardQuickLook?.key, selected, loadState, inspectorNonce, dims?.palette]);
 
   const onCanvasMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
-      if (!canvas || !dims) return;
+      if (!canvas || !dims || selected) return; // selected-cell quick-look owns the same information
+      if (pointers.current.size > 0) return; // an active pan/pinch is not a hover-inspection intent
       const rect = canvas.getBoundingClientRect();
       const cell = cellFromPoint(rect, event.clientX, event.clientY, dims.width, dims.height);
       const key = cell ? `${cell.x},${cell.y}` : '';
@@ -160,12 +210,14 @@ export function CanvasView(): React.ReactElement {
       const left = crect ? event.clientX - crect.left : event.clientX - rect.left;
       const top = crect ? event.clientY - crect.top : event.clientY - rect.top;
       hoverTimer.current = setTimeout(() => {
-        void fetchCurrentPixel(cell.x, cell.y).then((pixel) => {
-          if (hoverCell.current === key) setHover({ label: quickLookLabel(pixel), left, top });
+        void fetchCurrentPixel(cell.x, cell.y).then((result) => {
+          if (hoverCell.current === key) {
+            setHover({ label: `(${cell.x}, ${cell.y}): ${currentPixelLabel(result, dims.palette)}`, left, top });
+          }
         });
       }, 120);
     },
-    [dims],
+    [dims, selected],
   );
 
   const onCanvasLeave = useCallback(() => {
@@ -173,6 +225,17 @@ export function CanvasView(): React.ReactElement {
     hoverCell.current = '';
     setHover(null);
   }, []);
+
+  // Pointer-up can queue a mousemove before React commits the selection. Cancel that pending hover
+  // lookup once the selected-cell quick-look becomes the single owner of the same information.
+  useEffect(() => {
+    if (!selected) return;
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    hoverCell.current = '';
+  }, [selected]);
 
   // Cancel a pending quick-look debounce on unmount (no setState-after-unmount / timer leak).
   useEffect(() => () => {
@@ -222,6 +285,9 @@ export function CanvasView(): React.ReactElement {
   }, [settle]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverCell.current = '';
+    setHover(null);
     try {
       containerRef.current?.setPointerCapture?.(e.pointerId);
     } catch {
@@ -285,29 +351,55 @@ export function CanvasView(): React.ReactElement {
     if (pointers.current.size === 0) multiTouched.current = false;
   }, []);
 
+  const onCanvasFocus = useCallback(() => {
+    if (pointers.current.size > 0) return; // pointer selection initializes the actual clicked cell on pointer-up
+    if (dims && loadState === 'ready') setKeyboardCell((cell) => cell ?? selected ?? { x: 0, y: 0 });
+  }, [dims, loadState, selected]);
+
+  const onCanvasKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+      if (!dims || loadState !== 'ready' || submitting) return;
+      const cell = keyboardCell ?? selected ?? { x: 0, y: 0 };
+      const arrows: readonly CellArrowKey[] = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (arrows.includes(event.key as CellArrowKey)) {
+        event.preventDefault();
+        setKeyboardCell(moveCell(cell, event.key as CellArrowKey, dims.width, dims.height));
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setKeyboardCell(cell);
+        setSelected(cell);
+        setPendingColor(null);
+        setStatus('');
+      }
+    },
+    [dims, keyboardCell, loadState, selected, submitting],
+  );
+
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
     setSubmitting(true);
     setStatus('Placing…');
+    const fingerprint = JSON.stringify([selected.x, selected.y, pendingColor]);
+    const priorIntent = placementIntentRef.current;
+    const idempotencyKey = priorIntent?.fingerprint === fingerprint ? priorIntent.key : crypto.randomUUID();
+    placementIntentRef.current = { fingerprint, key: idempotencyKey };
     try {
       const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
         credentials: 'include', // send the session cookie; anonymous → 401
         body: JSON.stringify({ at: selected, color: pendingColor }),
       });
+      if (res.status < 500) placementIntentRef.current = null;
       if (res.status === 201) {
-        // Paint the placed pixel optimistically so it shows even if the WS is mid-reconnect — but do
-        // NOT pass seq: advancing the watermark to this local placement's seq would drop concurrent
-        // lower-seq deltas from other users still in flight. The seq-less path always applies; the WS
-        // echo of this placement re-applies idempotently and advances the watermark in order.
+        // Feed the REST result through the controller's normal sequence/gap guard. It may apply the
+        // next contiguous event immediately; if another user's lower sequence is missing, it will
+        // resnapshot instead of painting stale state or advancing past the gap.
         const result = (await res.json().catch(() => null)) as dto.PlacePixelResultResponse | null;
-        const buffer = clientRef.current?.buffer;
-        if (result && buffer) {
-          buffer.applyDelta({ type: 'PixelPlaced', at: result.at, color: result.color });
-          paint(canvasRef.current, buffer, dims?.palette ?? 'default');
-        }
-        if (result && result.cooldownMs > 0) setCooldownUntil(Date.now() + result.cooldownMs); // display the countdown
+        if (result) clientRef.current?.applyConfirmedPlacement(result);
+        if (result && result.cooldownMs > 0) startCooldown(result.cooldownMs); // display the countdown
         setStatus(placementStatusMessage(201));
         setPendingColor(null);
         setInspectorNonce((n) => n + 1); // keep the cell selected; refresh its history to show the placement
@@ -317,7 +409,7 @@ export function CanvasView(): React.ReactElement {
           | null;
         // The server is on cooldown — reflect its retry-after as the countdown.
         const retryAfterMs = body?.error?.details?.retryAfterMs;
-        if (typeof retryAfterMs === 'number' && retryAfterMs > 0) setCooldownUntil(Date.now() + retryAfterMs);
+        if (typeof retryAfterMs === 'number' && retryAfterMs > 0) startCooldown(retryAfterMs);
         setStatus(placementStatusMessage(res.status, body?.error?.code, body?.error?.message));
       }
     } catch {
@@ -325,12 +417,13 @@ export function CanvasView(): React.ReactElement {
     } finally {
       setSubmitting(false);
     }
-  }, [selected, pendingColor, submitting, dims]);
+  }, [selected, pendingColor, submitting, startCooldown]);
 
   const cancel = useCallback(() => {
     setSelected(null);
     setPendingColor(null);
     setStatus('');
+    canvasRef.current?.focus({ preventScroll: true });
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
@@ -354,10 +447,21 @@ export function CanvasView(): React.ReactElement {
         >
           <canvas
             ref={canvasRef}
+            tabIndex={0}
             onMouseMove={onCanvasMove}
             onMouseLeave={onCanvasLeave}
-            aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom"
-            style={{ imageRendering: 'pixelated', width: '100%', display: 'block', cursor: dims ? 'crosshair' : 'default' }}
+            onFocus={onCanvasFocus}
+            onKeyDown={onCanvasKeyDown}
+            aria-busy={loadState === 'loading'}
+            aria-describedby="canvas-keyboard-status"
+            aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom; use arrow keys and Enter to place"
+            style={{
+              imageRendering: 'pixelated',
+              width: '100%',
+              display: 'block',
+              cursor: dims && loadState === 'ready' ? 'crosshair' : 'default',
+              background: EMPTY_HEX,
+            }}
           />
           {selected && dims && (
             <div
@@ -368,13 +472,46 @@ export function CanvasView(): React.ReactElement {
                 top: `${(selected.y / dims.height) * 100}%`,
                 width: `${100 / dims.width}%`,
                 height: `${100 / dims.height}%`,
-                outline: '2px solid #CC0033',
+                outline: '2px solid var(--tenant-primary)',
+                boxSizing: 'border-box',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+          {!selected && keyboardCell && dims && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: `${(keyboardCell.x / dims.width) * 100}%`,
+                top: `${(keyboardCell.y / dims.height) * 100}%`,
+                width: `${100 / dims.width}%`,
+                height: `${100 / dims.height}%`,
+                outline: '2px dashed var(--tenant-primary)',
+                outlineOffset: '-1px',
                 boxSizing: 'border-box',
                 pointerEvents: 'none',
               }}
             />
           )}
         </div>
+        {loadState !== 'ready' && (
+          <div
+            role={loadState === 'error' ? 'alert' : 'status'}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              padding: '1rem',
+              color: '#111',
+              background: 'rgba(244, 244, 244, 0.92)',
+              textAlign: 'center',
+            }}
+          >
+            {loadState === 'error' ? 'Could not load the canvas. Please refresh to retry.' : 'Loading canvas…'}
+          </div>
+        )}
         {hover && (
           <div
             role="status"
@@ -405,9 +542,33 @@ export function CanvasView(): React.ReactElement {
 
       {selected && (
         <div
+          ref={placementDialogRef}
           role="dialog"
           aria-label="Place a pixel"
-          style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !submitting) cancel();
+          }}
+          style={{
+            position: 'fixed',
+            insetInline: '1rem',
+            bottom: '1rem',
+            zIndex: 10,
+            maxWidth: '54rem',
+            maxHeight: 'calc(100vh - 2rem)',
+            margin: '0 auto',
+            padding: '0.75rem',
+            overflowY: 'auto',
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            color: '#e9eaec',
+            background: '#16181c',
+            border: '1px solid #555b66',
+            borderRadius: '0.5rem',
+            boxShadow: '0 0.75rem 2rem rgba(0, 0, 0, 0.45)',
+          }}
         >
           <span>
             Cell ({selected.x}, {selected.y}):
@@ -445,11 +606,19 @@ export function CanvasView(): React.ReactElement {
         </div>
       )}
 
-      {selected && selectedQuickLook && (
+      {selected && selectedQuickLook?.key === selectedKey && (
         <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
-          ({selected.x}, {selected.y}): {selectedQuickLook}
+          ({selected.x}, {selected.y}): {selectedQuickLook.label}
         </p>
       )}
+
+      <p id="canvas-keyboard-status" role="status" aria-live="polite" style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
+        {keyboardCell && !selected
+          ? `Keyboard cell (${keyboardCell.x}, ${keyboardCell.y}): ${
+              keyboardQuickLook?.key === `${keyboardCell.x},${keyboardCell.y}` ? keyboardQuickLook.label : 'Loading…'
+            } Press Enter to choose a color.`
+          : 'Focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color.'}
+      </p>
 
       {selected && dims && (
         <PixelInspector key={`${selected.x},${selected.y}:${inspectorNonce}`} x={selected.x} y={selected.y} palette={dims.palette} />

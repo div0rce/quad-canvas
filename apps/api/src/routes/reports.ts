@@ -5,6 +5,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { dto } from '@quad/core';
 import type { PlacementRepository, ListReportsQuery } from '@quad/db';
 import { requireRole } from '../auth/roles.js';
+import { readIdempotencyKey } from './idempotency.js';
 
 /** A preHandler hook (e.g. the rate limiter). */
 type PreHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -30,22 +31,24 @@ export function makeReportRoutes(repo: PlacementRepository, rateLimit?: PreHandl
     app.post('/api/v1/reports', { preHandler: filePreHandlers }, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const idempotency = readIdempotencyKey(request);
+      if (!idempotency.ok) return err(reply, request, 422, 'VALIDATION_ERROR', idempotency.message);
       const body = (request.body ?? {}) as Partial<dto.SubmitReportCommand>;
       if (typeof body.targetRef !== 'string' || typeof body.reason !== 'string' || body.reason.trim() === '') {
         return err(reply, request, 422, 'VALIDATION_ERROR', 'targetRef and a non-empty reason are required.');
       }
       const canvas = await repo.findViewableCanvas(request.tenant.id);
-      // Idempotency-Key is optional (older clients omit it → a fresh report each time); when present, a
-      // retry returns the original report instead of a duplicate (API-INV-6).
-      const key = request.headers['idempotency-key'];
       const report = await repo.createReport({
         tenantId: request.tenant.id,
         canvasId: canvas?.id ?? null,
         reporterUserId: principal.userId,
         targetRef: body.targetRef,
         reason: body.reason,
-        ...(typeof key === 'string' && key !== '' ? { idempotencyKey: key } : {}),
+        idempotencyKey: idempotency.key,
       });
+      if (report.kind === 'idempotency_conflict') {
+        return err(reply, request, 409, 'CONFLICT', 'Idempotency-Key was already used for a different report.');
+      }
       const response: dto.ReportResponse = { id: report.id, status: report.status };
       return reply.status(201).send(response);
     });

@@ -4,16 +4,18 @@
 // point-in-time endpoint (/at/{seq}) and painting each reconstructed frame. Responses are cacheable
 // (immutable archive), so scrubbing is cheap; a stale-render guard drops out-of-order frames.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { fetchArchiveAt, fetchReplayMeta } from '@/archives/archives-client';
 import { paintSnapshot } from '@/archives/paint-snapshot';
-import { replayStep, nextReplaySeq, frameInterval } from '@/archives/replay';
+import { replayStep, nextReplaySeq, frameInterval, isReplayFrameCurrent } from '@/archives/replay';
+import { useTenant } from '@/components/tenant-provider';
 
 const CELL_PX = 8;
-const PALETTE = 'default';
 const FRAME_MS = 200;
 
 export default function ReplayPage(): React.ReactElement {
+  const tenant = useTenant();
   const params = useParams();
   const raw = params['term'];
   const term = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw[0] ?? '') : '';
@@ -24,6 +26,8 @@ export default function ReplayPage(): React.ReactElement {
   const [speed, setSpeed] = useState(1);
   const [missing, setMissing] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [renderedSeq, setRenderedSeq] = useState<number | null>(null);
+  const [failedSeq, setFailedSeq] = useState<number | null>(null);
 
   // Load the term's seq range; start at the final state.
   useEffect(() => {
@@ -52,14 +56,22 @@ export default function ReplayPage(): React.ReactElement {
     if (!term || maxSeq === null) return;
     let active = true;
     void fetchArchiveAt(term, seq).then((snap) => {
-      if (!active || !snap) return;
+      if (!active) return;
+      if (!snap || !tenant) {
+        setFailedSeq(seq);
+        setPlaying(false);
+        return;
+      }
       const canvas = canvasRef.current;
-      if (canvas) paintSnapshot(canvas, snap, PALETTE, CELL_PX);
+      if (canvas) {
+        paintSnapshot(canvas, snap, tenant.palette, CELL_PX);
+        setRenderedSeq(seq);
+      }
     });
     return () => {
       active = false;
     };
-  }, [term, seq, maxSeq]);
+  }, [term, seq, maxSeq, tenant]);
 
   // Play: advance on a timer; stop at the end.
   useEffect(() => {
@@ -85,10 +97,13 @@ export default function ReplayPage(): React.ReactElement {
     });
   }, [maxSeq, seq]);
 
+  const frameIsCurrent = isReplayFrameCurrent(seq, renderedSeq);
+  const frameError = failedSeq === seq;
+
   return (
     <main style={{ padding: '1rem' }}>
       <p>
-        <a href={`/archives/${encodeURIComponent(term)}`}>← {term}</a>
+        <Link href={`/archives/${encodeURIComponent(term)}`}>← {term}</Link>
       </p>
       <h1>Replay — {term}</h1>
       {missing ? (
@@ -101,9 +116,17 @@ export default function ReplayPage(): React.ReactElement {
         <>
           <canvas
             ref={canvasRef}
-            aria-label={`Replay of ${term} at sequence ${seq} of ${maxSeq}`}
-            style={{ imageRendering: 'pixelated', maxWidth: '100%', display: 'block', border: '1px solid #ddd' }}
+            aria-label={frameIsCurrent ? `Replay of ${term} at sequence ${seq} of ${maxSeq}` : `Loading replay sequence ${seq} of ${maxSeq}`}
+            aria-busy={!frameIsCurrent}
+            style={{
+              imageRendering: 'pixelated',
+              maxWidth: '100%',
+              display: 'block',
+              border: '1px solid #ddd',
+              visibility: frameIsCurrent ? 'visible' : 'hidden',
+            }}
           />
+          {!frameIsCurrent && <p role={frameError ? 'alert' : 'status'}>{frameError ? 'Couldn’t load this replay frame.' : 'Loading frame…'}</p>}
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button type="button" onClick={togglePlay}>
               {playing ? 'Pause' : 'Play'}
