@@ -6,6 +6,10 @@ const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'src');
 
 // Unit tests for framework-agnostic logic (e.g. the canvas controller). Runs in `pnpm check`.
 export default defineConfig({
+  esbuild: {
+    jsx: 'automatic',
+    jsxImportSource: 'react',
+  },
   // Resolve the `@/` path alias like next/tsconfig so modules importing via it are testable.
   resolve: {
     alias: { '@': srcDir },

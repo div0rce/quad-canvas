@@ -17,6 +17,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",

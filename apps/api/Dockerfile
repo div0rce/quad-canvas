@@ -3,27 +3,45 @@
 # on the @quad/* packages), generate the Prisma client, then ship a node:22-slim runtime with the
 # built workspace. Run DB migrations separately (pnpm --filter @quad/db db:migrate:deploy), not at boot.
 
-FROM node:22-slim AS build
+FROM node:22-slim AS api-base
+# Prisma's Debian engine requires OpenSSL in both the generation/build stage and the runtime image.
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM api-base AS build
 RUN corepack enable
 WORKDIR /app
-# Copy the workspace and install with the committed lockfile (reproducible).
-COPY . .
+# Install from lockfile + manifests first so source-only edits reuse the dependency layer. pnpm needs
+# every workspace manifest here to resolve workspace links; copy the implementation afterward.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --parents apps/*/package.json packages/*/package.json ./
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
-# Generate the Prisma client (the @quad/db build imports it), then build api + its workspace deps.
-RUN pnpm --filter @quad/db run db:generate
-RUN pnpm run build
+COPY . .
+# Turbo builds only the API dependency graph and runs @quad/db's Prisma generation task once. Then
+# pnpm deploy creates portable app-specific trees instead of exporting the ~1 GiB development store.
+RUN pnpm exec turbo run build --filter=api \
+  && pnpm --filter api deploy --prod /prod/api \
+  && pnpm --filter @quad/db deploy /prod/db
 
-FROM node:22-slim AS runtime
+# Migration runner includes the Prisma CLI + schema/migrations, but not unrelated workspace apps.
+FROM api-base AS migrate
+RUN corepack enable
+WORKDIR /app
+COPY --from=build /prod/db ./
+USER node
+CMD ["pnpm", "run", "db:migrate:deploy"]
+
+FROM api-base AS runtime
 ENV NODE_ENV=production
 # Default listen address inside the container (PORT/HOST overridable). DATABASE_URL/REDIS_URL/
 # TRUST_PROXY are injected at deploy time.
 ENV HOST=0.0.0.0
 ENV PORT=3000
 WORKDIR /app
-# Ship the built workspace (api + @quad/* dist, the generated Prisma client, and resolved
-# node_modules). It includes dev dependencies — trimming to prod-only is a size optimization
-# follow-up (pnpm's prune/deploy paths need a TTY or `inject-workspace-packages`, so they're avoided).
-COPY --from=build /app ./
+# Ship only the API's production dependencies plus its built workspace packages and generated
+# Prisma client. The deployed tree is portable and contains no test/build toolchain.
+COPY --from=build /prod/api ./
 EXPOSE 3000
 USER node
 # Liveness probe for the container runtime (no curl in slim — use node's fetch). Honors $PORT.

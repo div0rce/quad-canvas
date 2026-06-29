@@ -16,7 +16,7 @@ jobs:
     # tenant isolation) gates every PR — not just unit tests. GitHub waits for service health first.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: quad
           POSTGRES_PASSWORD: quad
@@ -26,7 +26,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U quad -d quad" --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:8-alpine
         ports:
           - 6379:6379
         options: >-

@@ -6,8 +6,12 @@
 FROM node:22-slim AS build
 RUN corepack enable
 WORKDIR /app
-COPY . .
+# Keep dependency installation cacheable across source-only edits. pnpm needs every workspace
+# manifest to resolve workspace links, while application/config sources are copied afterward.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --parents apps/*/package.json packages/*/package.json ./
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY . .
 # Build only web + its workspace deps (it doesn't depend on @quad/db, so no Prisma generate needed).
 RUN pnpm exec turbo run build --filter=web
 
