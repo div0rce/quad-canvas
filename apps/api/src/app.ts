@@ -14,6 +14,7 @@ import accessLogPlugin from './plugins/access-log.js';
 import { makeMetricsPlugin } from './plugins/metrics.js';
 import { MetricsRegistry } from './metrics/registry.js';
 import tenantPlugin from './plugins/tenant.js';
+import tenantCorsPlugin from './plugins/tenant-cors.js';
 import { makeIdentityPlugin, type IdentityResolver } from './plugins/identity.js';
 import { makeHealthRoutes, type ReadinessCheck } from './routes/health.js';
 import { makePixelRoutes } from './routes/pixels.js';
@@ -127,6 +128,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(errorsPlugin);
   await app.register(cookiePlugin);
   await app.register(tenantPlugin);
+  await app.register(tenantCorsPlugin);
   await app.register(makeIdentityPlugin(resolver));
   await app.register(makeHealthRoutes(opts.readinessChecks ?? []));
 
