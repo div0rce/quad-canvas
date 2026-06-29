@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["HOST", "TRUST_PROXY", "QUAD_TENANT_HOSTS"],
+  "globalEnv": ["HOST", "TRUST_PROXY", "QUAD_TENANT_HOSTS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build", "db:generate"],
