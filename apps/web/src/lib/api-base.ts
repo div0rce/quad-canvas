@@ -1,18 +1,18 @@
-// apps/web — resolve browser API origins. REST defaults to same-origin so cookies remain first-party
-// through the web/edge proxy. The local direct web dev port (3002) can dial the local edge for
-// WebSocket traffic because Next rewrites are HTTP-oriented and not a reliable WS proxy.
+// apps/web — resolve browser API origins. Authenticated REST is always same-origin so the httpOnly
+// session cookie stays first-party through the web/edge proxy. WebSocket may use a public API origin
+// because Vercel/Next rewrites are HTTP-oriented and not a reliable WS proxy.
 const LOCAL_EDGE_API_ORIGIN = 'http://rutgers.localhost:8088';
 
-function configuredApiBase(): string {
+function configuredRealtimeBase(): string {
   return (process.env['NEXT_PUBLIC_API_BASE'] ?? '').replace(/\/+$/, '');
 }
 
 export function apiBase(): string {
-  return configuredApiBase();
+  return '';
 }
 
 export function websocketApiBase(): string {
-  const configured = configuredApiBase();
+  const configured = configuredRealtimeBase();
   if (configured) return configured;
   if (
     typeof window !== 'undefined' &&

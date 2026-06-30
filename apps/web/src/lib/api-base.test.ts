@@ -7,11 +7,12 @@ afterEach(() => {
 });
 
 describe('apiBase', () => {
-  it('uses an explicit public API base when configured', () => {
+  it('keeps authenticated REST same-origin even when a public realtime API base is configured', () => {
     vi.stubEnv('NEXT_PUBLIC_API_BASE', 'https://api.example.test/');
 
-    expect(apiBase()).toBe('https://api.example.test');
-    expect(apiPath('/api/v1/session')).toBe('https://api.example.test/api/v1/session');
+    expect(apiBase()).toBe('');
+    expect(apiPath('/api/v1/session')).toBe('/api/v1/session');
+    expect(websocketApiBase()).toBe('https://api.example.test');
   });
 
   it('keeps REST same-origin on the local direct web dev port', () => {
