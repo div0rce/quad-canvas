@@ -3,8 +3,7 @@
 import type { dto } from '@quad/core';
 import { getPaletteByKey } from '@quad/config';
 import { fetchAllPages } from '@/lib/fetch-all-pages';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 function isHistoryEntry(value: unknown): value is dto.PixelHistoryEntry {
   if (!value || typeof value !== 'object') return false;
@@ -15,7 +14,7 @@ function isHistoryEntry(value: unknown): value is dto.PixelHistoryEntry {
 export async function fetchPixelHistory(x: number, y: number): Promise<dto.PixelHistoryListResponse | null> {
   try {
     return await fetchAllPages(
-      `${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`,
+      apiPath(`/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`),
       undefined,
       isHistoryEntry,
     );

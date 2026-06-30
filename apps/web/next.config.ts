@@ -19,6 +19,8 @@ const SECURITY_HEADERS = [
 ];
 
 const apiProxyOrigin = process.env['API_PROXY_ORIGIN']?.replace(/\/+$/, '');
+const localDevApiProxyOrigin = process.env['NODE_ENV'] === 'development' ? 'http://rutgers.localhost:8088' : '';
+const resolvedApiProxyOrigin = apiProxyOrigin || localDevApiProxyOrigin;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -27,11 +29,11 @@ const nextConfig: NextConfig = {
   headers: () => Promise.resolve([{ source: '/:path*', headers: SECURITY_HEADERS }]),
   rewrites: () =>
     Promise.resolve(
-      apiProxyOrigin
+      resolvedApiProxyOrigin
         ? [
             {
               source: '/api/:path*',
-              destination: `${apiProxyOrigin}/api/:path*`,
+              destination: `${resolvedApiProxyOrigin}/api/:path*`,
             },
           ]
         : [],

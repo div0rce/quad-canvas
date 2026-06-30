@@ -19,6 +19,7 @@ import {
   isPlacePixelResultResponse,
   isRecord,
 } from '@/lib/api-response';
+import { apiBase, apiPath, websocketApiBase } from '@/lib/api-base';
 
 const SCALE_MIN = 1; // fit-to-width
 const SCALE_MAX = 8;
@@ -26,9 +27,6 @@ import { formatCountdown, remainingMs } from './cooldown';
 import { ReportControl } from './report-control';
 import { PixelInspector } from './pixel-inspector';
 
-// The API must be reached at the TENANT host so it resolves the tenant from the Host header.
-// Default '' = same-origin (relative URLs) preserves the browser's tenant host.
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
 
@@ -102,10 +100,11 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    const wsBase = (API_BASE || window.location.origin).replace(/^http/, 'ws');
+    const base = apiBase();
+    const wsBase = (websocketApiBase() || window.location.origin).replace(/^http/, 'ws');
     const client = new CanvasClient({
       fetchMeta: async () => {
-        const res = await fetch(`${API_BASE}/api/v1/canvas/current`);
+        const res = await fetch(`${base}/api/v1/canvas/current`);
         if (!res.ok) throw new Error(`canvas metadata request failed (${res.status})`);
         const meta = (await res.json()) as unknown;
         if (!isCanvasMetaResponse(meta)) throw new Error('canvas metadata response was malformed');
@@ -113,7 +112,7 @@ export function CanvasView(): React.ReactElement {
         return meta;
       },
       fetchSnapshot: async () => {
-        const res = await fetch(`${API_BASE}/api/v1/canvas/current/snapshot`);
+        const res = await fetch(`${base}/api/v1/canvas/current/snapshot`);
         if (!res.ok) throw new Error(`canvas snapshot request failed (${res.status})`);
         const snapshot = (await res.json()) as unknown;
         if (!isCanvasSnapshotResponse(snapshot)) throw new Error('canvas snapshot response was malformed');
@@ -410,7 +409,7 @@ export function CanvasView(): React.ReactElement {
     const idempotencyKey = priorIntent?.fingerprint === fingerprint ? priorIntent.key : crypto.randomUUID();
     placementIntentRef.current = { fingerprint, key: idempotencyKey };
     try {
-      const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels`, {
+      const res = await fetch(apiPath('/api/v1/canvas/current/pixels'), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
         credentials: 'include', // send the session cookie; anonymous → 401
@@ -477,6 +476,12 @@ export function CanvasView(): React.ReactElement {
       {status}
     </p>
   );
+  const keyboardStatus =
+    keyboardCell && !selected
+      ? `Keyboard cell (${keyboardCell.x}, ${keyboardCell.y}): ${
+          keyboardQuickLook?.key === `${keyboardCell.x},${keyboardCell.y}` ? keyboardQuickLook.label : 'Loading…'
+        } Press Enter to choose a color.`
+      : 'Focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color.';
 
   return (
     <div className="quad-canvas-main">
@@ -604,6 +609,10 @@ export function CanvasView(): React.ReactElement {
               </div>
             )}
           </div>
+
+          <p id="canvas-keyboard-status" className="quad-canvas-keyboard-status" role="status" aria-live="polite">
+            {keyboardStatus}
+          </p>
         </div>
 
         <div className="quad-canvas-rail">
@@ -712,14 +721,6 @@ export function CanvasView(): React.ReactElement {
           )}
         </div>
       </div>
-
-      <p id="canvas-keyboard-status" role="status" aria-live="polite" style={{ margin: '0.75rem 0 0', fontSize: 16, color: 'var(--muted-tag)' }}>
-        {keyboardCell && !selected
-          ? `Keyboard cell (${keyboardCell.x}, ${keyboardCell.y}): ${
-              keyboardQuickLook?.key === `${keyboardCell.x},${keyboardCell.y}` ? keyboardQuickLook.label : 'Loading…'
-            } Press Enter to choose a color.`
-          : 'Focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color.'}
-      </p>
 
       <div className="quad-canvas-footer">
         <span>{dims ? `Canvas ${dims.width} x ${dims.height}` : loadState === 'error' ? 'Canvas unavailable' : 'Canvas loading…'}</span>

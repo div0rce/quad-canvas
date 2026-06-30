@@ -3,12 +3,11 @@
 // preserve the browser's tenant Host; a cross-origin NEXT_PUBLIC_API_BASE must forward it).
 import type { dto } from '@quad/core';
 import { isLeaderboardResponse, isProfileResponse } from '@/lib/api-response';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 export async function fetchProfile(handle: string): Promise<dto.ProfileResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/profiles/${encodeURIComponent(handle)}`, { credentials: 'include' });
+    const res = await fetch(apiPath(`/api/v1/profiles/${encodeURIComponent(handle)}`), { credentials: 'include' });
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isProfileResponse(body) ? body : null;
@@ -19,7 +18,7 @@ export async function fetchProfile(handle: string): Promise<dto.ProfileResponse 
 
 export async function fetchLeaderboard(): Promise<dto.LeaderboardResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/leaderboards`);
+    const res = await fetch(apiPath('/api/v1/leaderboards'));
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isLeaderboardResponse(body) ? body : null;

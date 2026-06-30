@@ -2,8 +2,7 @@
 // (unit-tested in the node env). The token never appears in the UI's own state beyond the confirm
 // call; the session is an httpOnly cookie the browser carries automatically (credentials: include).
 import { isSessionResponse } from '@/lib/api-response';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 /** Loose shape check — the server is the authority on eligibility (domain allowlist). */
 export function isLikelyEmail(value: string): boolean {
@@ -48,7 +47,7 @@ export function confirmMessage(status: number): string {
 }
 
 export async function requestVerification(email: string): Promise<number> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/verify/request`, {
+  const res = await fetch(apiPath('/api/v1/auth/verify/request'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',
@@ -58,7 +57,7 @@ export async function requestVerification(email: string): Promise<number> {
 }
 
 export async function confirmToken(token: string): Promise<number> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/verify/confirm`, {
+  const res = await fetch(apiPath('/api/v1/auth/verify/confirm'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',
@@ -75,7 +74,7 @@ export interface SessionInfo {
 
 export async function fetchSession(): Promise<SessionInfo> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/session`, { credentials: 'include' });
+    const res = await fetch(apiPath('/api/v1/session'), { credentials: 'include' });
     if (!res.ok) return { authenticated: false };
     const body = (await res.json()) as unknown;
     if (!isSessionResponse(body)) return { authenticated: false };
@@ -90,5 +89,5 @@ export async function fetchSession(): Promise<SessionInfo> {
 }
 
 export async function signOut(): Promise<void> {
-  await fetch(`${API_BASE}/api/v1/auth/signout`, { method: 'POST', credentials: 'include' });
+  await fetch(apiPath('/api/v1/auth/signout'), { method: 'POST', credentials: 'include' });
 }
