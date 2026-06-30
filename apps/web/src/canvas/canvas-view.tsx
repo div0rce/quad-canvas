@@ -281,23 +281,6 @@ export function CanvasView(): React.ReactElement {
     };
   }, []);
 
-  // Select the cell at a screen point. Driven by pointer-UP (a tap), not click — with pointer capture a
-  // click can target the capturing container rather than the canvas, which would break selection.
-  const selectAt = useCallback(
-    (clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas || !dims || loadState !== 'ready' || submitting) return; // ignore until loaded / while placing
-      const cell = cellFromPoint(canvas.getBoundingClientRect(), clientX, clientY, dims.width, dims.height);
-      if (cell) {
-        setKeyboardCell(cell);
-        setSelected(cell); // step 1 — select the cell
-        setPendingColor(null);
-        setStatus('');
-      }
-    },
-    [dims, loadState, submitting],
-  );
-
   // Quick-look: the current cell's owner + time, lighter than the click-to-open history. On desktop it
   // follows the pointer (hover); on every device a selected cell shows the same quick-look line (so touch
   // users — who can't hover — get it by tapping). Pinch-zoom/drag-pan is P-AC-11.
@@ -307,11 +290,32 @@ export function CanvasView(): React.ReactElement {
   const [selectedQuickLook, setSelectedQuickLook] = useState<{ key: string; label: string } | null>(null);
   const selectedKey = selected ? `${selected.x},${selected.y}` : null;
 
+  // Select the cell at a screen point. Driven by pointer-UP (a tap), not click — with pointer capture a
+  // click can target the capturing container rather than the canvas, which would break selection.
+  const selectAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !dims || loadState !== 'ready' || submitting) return; // ignore until loaded / while placing
+      const cell = cellFromPoint(canvas.getBoundingClientRect(), clientX, clientY, dims.width, dims.height);
+      if (cell) {
+        if (hoverTimer.current) clearTimeout(hoverTimer.current);
+        hoverCell.current = '';
+        setHover(null);
+        setKeyboardCell(cell);
+        setSelected(cell); // step 1 — select the cell
+        setPendingColor(null);
+        setStatus('');
+      }
+    },
+    [dims, loadState, submitting],
+  );
+
   // The confirmation controls are a fixed bottom sheet so selecting a cell never puts the deliberate
   // second step below a tall/zoomed canvas. Move focus without scrolling the canvas out from under the
   // user; Escape and Cancel restore focus to the keyboard-operable canvas surface.
   useEffect(() => {
-    if (selected) placementDialogRef.current?.focus({ preventScroll: true });
+    if (!selected) return;
+    placementDialogRef.current?.focus({ preventScroll: true });
   }, [selected]);
 
   // The selected cell's quick-look (device-agnostic; refreshes after a placement via inspectorNonce).
