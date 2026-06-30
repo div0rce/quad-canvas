@@ -6,7 +6,7 @@
 // session cookie and an idempotency key, and the result returns as a WS delta. Anonymous users get a
 // clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { colorHexForValue, colorNameForValue, encodeCustomColor, getPaletteByKey, normalizeColorInput } from '@quad/config';
+import { colorHexForValue, colorNameForValue, encodeCustomColor, getPaletteByKey } from '@quad/config';
 import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
 import { CanvasClient, type SocketLike } from './canvas-client';
@@ -29,6 +29,21 @@ import { PixelInspector } from './pixel-inspector';
 
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
+const DEFAULT_CUSTOM_HEX = '#1D70B8';
+const CUSTOM_PRESETS = ['#CC0033', '#FF6B6B', '#FF9F45', '#FFD43B', '#6FCF45', '#5BE0C8', '#2E9BE6', '#1A3FA0', '#8A5CF5', '#E0459E', '#9C5A2A', '#F4C7A1'] as const;
+const RGB_CHANNELS = [
+  { key: 'r', label: 'Red' },
+  { key: 'g', label: 'Green' },
+  { key: 'b', label: 'Blue' },
+] as const;
+
+type RgbChannel = (typeof RGB_CHANNELS)[number]['key'];
+
+interface RgbColor {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+}
 
 interface EyeDropperResult {
   readonly sRGBHex: string;
@@ -48,6 +63,27 @@ interface Dims {
   readonly width: number;
   readonly height: number;
   readonly palette: string;
+}
+
+function colorByteToHex(value: number): string {
+  return value.toString(16).padStart(2, '0').toUpperCase();
+}
+
+function colorByte(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function rgbToHex(color: RgbColor): string {
+  return `#${colorByteToHex(color.r)}${colorByteToHex(color.g)}${colorByteToHex(color.b)}`;
+}
+
+function hexToRgb(hex: string): RgbColor {
+  const value = Number.parseInt(hex.replace('#', ''), 16);
+  return {
+    r: (value >> 16) & 0xff,
+    g: (value >> 8) & 0xff,
+    b: value & 0xff,
+  };
 }
 
 function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKey: string): void {
@@ -88,8 +124,9 @@ export function CanvasView(): React.ReactElement {
   const [keyboardCell, setKeyboardCell] = useState<{ x: number; y: number } | null>(null);
   const [keyboardQuickLook, setKeyboardQuickLook] = useState<{ key: string; label: string } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
-  const [customColorText, setCustomColorText] = useState('');
-  const [customColorError, setCustomColorError] = useState('');
+  const [customEditorOpen, setCustomEditorOpen] = useState(false);
+  const [customDraftHex, setCustomDraftHex] = useState(DEFAULT_CUSTOM_HEX);
+  const [savedCustomHex, setSavedCustomHex] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
@@ -416,41 +453,33 @@ export function CanvasView(): React.ReactElement {
 
   const selectPaletteColor = useCallback((color: number) => {
     setPendingColor(color);
-    setCustomColorError('');
   }, []);
 
-  const applyCustomColor = useCallback((value: string) => {
-    const normalized = normalizeColorInput(value);
-    setCustomColorText(value);
-    if (!normalized) {
-      setCustomColorError(value.trim() ? 'Use #RRGGBB, #RGB, or rgb(255, 0, 0).' : '');
-      setPendingColor(null);
-      return;
-    }
-    const encoded = encodeCustomColor(normalized);
-    if (encoded === null) {
-      setCustomColorError('Use #RRGGBB, #RGB, or rgb(255, 0, 0).');
-      setPendingColor(null);
-      return;
-    }
-    setCustomColorText(normalized);
-    setCustomColorError('');
-    setPendingColor(encoded);
+  const setCustomChannel = useCallback((channel: RgbChannel, value: number) => {
+    setCustomDraftHex((hex) => rgbToHex({ ...hexToRgb(hex), [channel]: colorByte(value) }));
   }, []);
 
-  const openCustomColorPicker = useCallback(async () => {
+  const pickScreenColor = useCallback(async () => {
     const EyeDropper = window.EyeDropper;
     if (EyeDropper) {
       try {
         const result = await new EyeDropper().open();
-        applyCustomColor(result.sRGBHex);
+        setCustomDraftHex(result.sRGBHex.toUpperCase());
       } catch {
         // The user can cancel the eyedropper; leave the existing selection unchanged.
       }
       return;
     }
     customColorNativeRef.current?.click();
-  }, [applyCustomColor]);
+  }, []);
+
+  const saveCustomColor = useCallback(() => {
+    const encoded = encodeCustomColor(customDraftHex);
+    if (encoded === null) return;
+    setSavedCustomHex(customDraftHex);
+    setPendingColor(encoded);
+    setCustomEditorOpen(false);
+  }, [customDraftHex]);
 
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
@@ -511,8 +540,8 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
-  const normalizedCustomColor = normalizeColorInput(customColorText);
-  const customColorValue = normalizedCustomColor ? encodeCustomColor(normalizedCustomColor) : null;
+  const customDraftRgb = hexToRgb(customDraftHex);
+  const savedCustomColorValue = savedCustomHex ? encodeCustomColor(savedCustomHex) : null;
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
     ? 'Placing…'
@@ -689,6 +718,7 @@ export function CanvasView(): React.ReactElement {
                     <button
                       key={c.index}
                       type="button"
+                      data-palette-color
                       aria-label={c.name}
                       aria-pressed={pendingColor === c.index}
                       disabled={submitting}
@@ -699,58 +729,87 @@ export function CanvasView(): React.ReactElement {
                   ))}
                   <button
                     type="button"
-                    aria-label="Create a custom color"
-                    title="Create a custom color"
+                    aria-label="Custom color editor"
+                    aria-expanded={customEditorOpen}
+                    aria-controls="quad-custom-color-editor"
+                    title="Custom color editor"
                     disabled={submitting}
-                    onClick={() => void openCustomColorPicker()}
-                    className="quad-swatch quad-swatch--eyedropper"
+                    onClick={() => setCustomEditorOpen((open) => !open)}
+                    className={customEditorOpen ? 'quad-swatch quad-swatch--custom-toggle quad-swatch--selected' : 'quad-swatch quad-swatch--custom-toggle'}
                   >
-                    <span aria-hidden="true" className="quad-eyedropper-icon" />
+                    <span aria-hidden="true" className="quad-custom-plus" />
                   </button>
-                  {customColorValue !== null && normalizedCustomColor && (
+                  {savedCustomColorValue !== null && savedCustomHex && (
                     <button
                       type="button"
-                      aria-label={`Use custom color ${normalizedCustomColor}`}
-                      aria-pressed={pendingColor === customColorValue}
+                      data-custom-color-swatch
+                      aria-label={`Use saved custom color ${savedCustomHex}`}
+                      aria-pressed={pendingColor === savedCustomColorValue}
                       disabled={submitting}
-                      onClick={() => selectPaletteColor(customColorValue)}
-                      className={pendingColor === customColorValue ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
-                      style={{ background: normalizedCustomColor }}
+                      onClick={() => selectPaletteColor(savedCustomColorValue)}
+                      className={pendingColor === savedCustomColorValue ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
+                      style={{ background: savedCustomHex }}
                     />
                   )}
                 </div>
-                <div className="quad-custom-color">
-                  <label htmlFor="quad-custom-color-input" className="quad-eyebrow" style={{ fontSize: 14 }}>
-                    Custom color
-                  </label>
-                  <input
-                    id="quad-custom-color-input"
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={customColorText}
-                    onChange={(event) => applyCustomColor(event.currentTarget.value)}
-                    placeholder="#CC0033 or rgb(204, 0, 51)"
-                    className="quad-color-input"
-                    disabled={submitting}
-                    aria-invalid={customColorError ? 'true' : 'false'}
-                  />
-                  <input
-                    ref={customColorNativeRef}
-                    type="color"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    value={normalizedCustomColor ?? '#1D70B8'}
-                    onChange={(event) => applyCustomColor(event.currentTarget.value)}
-                    className="quad-color-native"
-                  />
-                  {customColorError && (
-                    <p role="alert" className="quad-color-error">
-                      {customColorError}
-                    </p>
-                  )}
-                </div>
+                {customEditorOpen && (
+                  <div id="quad-custom-color-editor" className="quad-custom-editor">
+                    <input
+                      ref={customColorNativeRef}
+                      type="color"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      value={customDraftHex}
+                      onChange={(event) => setCustomDraftHex(event.currentTarget.value.toUpperCase())}
+                      className="quad-color-native"
+                    />
+                    <div className="quad-custom-editor__top">
+                      <button
+                        type="button"
+                        className="quad-custom-preview"
+                        style={{ '--custom-color': customDraftHex } as React.CSSProperties}
+                        onClick={() => customColorNativeRef.current?.click()}
+                        aria-label="Open browser color picker"
+                      />
+                      <button type="button" className="quad-eyedropper-btn" onClick={() => void pickScreenColor()} disabled={submitting}>
+                        <span aria-hidden="true" className="quad-eyedropper-icon" />
+                        <span>Eyedrop</span>
+                      </button>
+                    </div>
+                    <div className="quad-custom-presets" aria-label="Custom color presets">
+                      {CUSTOM_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={customDraftHex === preset ? 'quad-custom-preset quad-custom-preset--selected' : 'quad-custom-preset'}
+                          style={{ background: preset }}
+                          aria-label={`Custom preset ${preset}`}
+                          aria-pressed={customDraftHex === preset}
+                          onClick={() => setCustomDraftHex(preset)}
+                        />
+                      ))}
+                    </div>
+                    <div className="quad-custom-sliders">
+                      {RGB_CHANNELS.map((channel) => (
+                        <label key={channel.key} className="quad-color-slider">
+                          <span>{channel.label}</span>
+                          <input
+                            id={`quad-custom-color-${channel.key}`}
+                            type="range"
+                            min="0"
+                            max="255"
+                            value={customDraftRgb[channel.key]}
+                            onChange={(event) => setCustomChannel(channel.key, Number(event.currentTarget.value))}
+                            aria-label={`${channel.label} channel`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" className="quad-btn quad-btn--primary" onClick={saveCustomColor} disabled={submitting}>
+                      Save custom color
+                    </button>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button
                     type="button"

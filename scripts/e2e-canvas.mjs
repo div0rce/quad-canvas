@@ -91,25 +91,50 @@ try {
   const selectAfterGestures = !!(await page.waitForSelector(DIALOG, { timeout: 3000 }).catch(() => null));
   const pickerChrome = await page.evaluate((dialogSelector) => {
     const dialog = document.querySelector(dialogSelector);
-    const paletteButtons = dialog?.querySelectorAll('button.quad-swatch:not(.quad-swatch--eyedropper)');
-    const eyedropper = dialog?.querySelector('button.quad-swatch--eyedropper');
-    const customInput = dialog?.querySelector('#quad-custom-color-input');
-    const nativeInput = dialog?.querySelector('input[type="color"]');
+    const paletteButtons = dialog?.querySelectorAll('button[data-palette-color]');
+    const customToggle = dialog?.querySelector('button[aria-label="Custom color editor"]');
+    const customTextInput = dialog?.querySelector('#quad-custom-color-input');
     return {
       paletteHasThirtyTwoColors: paletteButtons?.length === 32,
-      hasEyedropperTile: !!eyedropper,
-      hasManualCustomColorInput: customInput instanceof HTMLInputElement,
-      hasNativeCustomColorInput: nativeInput instanceof HTMLInputElement,
+      hasCustomToggle: customToggle instanceof HTMLButtonElement,
+      hasNoManualCustomColorInput: !(customTextInput instanceof HTMLInputElement),
     };
   }, DIALOG);
-  await page.fill('#quad-custom-color-input', 'rgb(18, 171, 52)');
-  const customColorEntryWorks = await page.evaluate(() => {
-    const input = document.querySelector('#quad-custom-color-input');
-    const customSwatch = document.querySelector('button[aria-label="Use custom color #12AB34"]');
+  await page.click('button[aria-label="Custom color editor"]');
+  await page.waitForSelector('#quad-custom-color-editor', { timeout: 3000 });
+  const editorChrome = await page.evaluate(() => {
+    const editor = document.querySelector('#quad-custom-color-editor');
+    const eyedropper = editor?.querySelector('.quad-eyedropper-btn');
+    const nativeInput = editor?.querySelector('input[type="color"]');
+    const preview = editor?.querySelector('.quad-custom-preview');
+    const textInput = editor?.querySelector('input[type="text"]');
+    return {
+      customEditorAppearsBelow: !!editor,
+      hasHighResEyedropperButton: !!eyedropper && !!eyedropper.querySelector('.quad-eyedropper-icon'),
+      hasNativeCustomColorInput: nativeInput instanceof HTMLInputElement,
+      hasPixelPreview: preview instanceof HTMLButtonElement,
+      editorHasNoTextInput: !(textInput instanceof HTMLInputElement),
+    };
+  });
+  await page.locator('#quad-custom-color-r').evaluate((input) => {
+    input.value = '18';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#quad-custom-color-g').evaluate((input) => {
+    input.value = '171';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#quad-custom-color-b').evaluate((input) => {
+    input.value = '52';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.click('button:has-text("Save custom color")');
+  const customColorEditorWorks = await page.evaluate(() => {
+    const editor = document.querySelector('#quad-custom-color-editor');
+    const customSwatch = document.querySelector('button[data-custom-color-swatch]');
     const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Confirm');
     return (
-      input instanceof HTMLInputElement &&
-      input.value === '#12AB34' &&
+      !editor &&
       customSwatch?.getAttribute('aria-pressed') === 'true' &&
       confirm instanceof HTMLButtonElement &&
       !confirm.disabled
@@ -133,7 +158,8 @@ try {
     ...layoutContract,
     selectWorks,
     ...pickerChrome,
-    customColorEntryWorks,
+    ...editorChrome,
+    customColorEditorWorks,
     zoomWorks,
     panWorks,
     selectAfterGestures,
