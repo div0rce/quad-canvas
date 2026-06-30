@@ -30,7 +30,22 @@ import { PixelInspector } from './pixel-inspector';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
 const DEFAULT_CUSTOM_HEX = '#1D70B8';
-const CUSTOM_PRESETS = ['#CC0033', '#FF6B6B', '#FF9F45', '#FFD43B', '#6FCF45', '#5BE0C8', '#2E9BE6', '#1A3FA0', '#8A5CF5', '#E0459E', '#9C5A2A', '#F4C7A1'] as const;
+const MIXER_BASE_HEX = '#CC0033';
+const HUE_STOPS = [
+  { h: 0, name: 'Red' },
+  { h: 30, name: 'Orange' },
+  { h: 60, name: 'Yellow' },
+  { h: 90, name: 'Lime' },
+  { h: 120, name: 'Green' },
+  { h: 150, name: 'Mint' },
+  { h: 180, name: 'Cyan' },
+  { h: 210, name: 'Sky' },
+  { h: 240, name: 'Blue' },
+  { h: 270, name: 'Violet' },
+  { h: 300, name: 'Magenta' },
+  { h: 330, name: 'Rose' },
+] as const;
+const MIXER_STEPS = [0.2, 0.35, 0.5, 0.65, 0.8] as const;
 const RGB_CHANNELS = [
   { key: 'r', label: 'Red' },
   { key: 'g', label: 'Green' },
@@ -43,6 +58,12 @@ interface RgbColor {
   readonly r: number;
   readonly g: number;
   readonly b: number;
+}
+
+interface HsvColor {
+  readonly h: number;
+  readonly s: number;
+  readonly v: number;
 }
 
 interface EyeDropperResult {
@@ -73,6 +94,14 @@ function colorByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
+function colorPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function colorHue(value: number): number {
+  return ((Math.round(value) % 360) + 360) % 360;
+}
+
 function rgbToHex(color: RgbColor): string {
   return `#${colorByteToHex(color.r)}${colorByteToHex(color.g)}${colorByteToHex(color.b)}`;
 }
@@ -84,6 +113,72 @@ function hexToRgb(hex: string): RgbColor {
     g: (value >> 8) & 0xff,
     b: value & 0xff,
   };
+}
+
+function rgbToHsv(color: RgbColor): HsvColor {
+  const r = color.r / 255;
+  const g = color.g / 255;
+  const b = color.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const h =
+    delta === 0
+      ? 0
+      : max === r
+        ? 60 * (((g - b) / delta) % 6)
+        : max === g
+          ? 60 * ((b - r) / delta + 2)
+          : 60 * ((r - g) / delta + 4);
+  return {
+    h: colorHue(h),
+    s: max === 0 ? 0 : colorPercent((delta / max) * 100),
+    v: colorPercent(max * 100),
+  };
+}
+
+function hsvToRgb(color: HsvColor): RgbColor {
+  const h = colorHue(color.h);
+  const s = color.s / 100;
+  const v = color.v / 100;
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  const [r, g, b] =
+    h < 60
+      ? [c, x, 0]
+      : h < 120
+        ? [x, c, 0]
+        : h < 180
+          ? [0, c, x]
+          : h < 240
+            ? [0, x, c]
+            : h < 300
+              ? [x, 0, c]
+              : [c, 0, x];
+  return {
+    r: colorByte((r + m) * 255),
+    g: colorByte((g + m) * 255),
+    b: colorByte((b + m) * 255),
+  };
+}
+
+function hsvToHex(color: HsvColor): string {
+  return rgbToHex(hsvToRgb(color));
+}
+
+function hexToHsv(hex: string): HsvColor {
+  return rgbToHsv(hexToRgb(hex));
+}
+
+function mixHex(a: string, b: string, weight: number): string {
+  const left = hexToRgb(a);
+  const right = hexToRgb(b);
+  return rgbToHex({
+    r: left.r * (1 - weight) + right.r * weight,
+    g: left.g * (1 - weight) + right.g * weight,
+    b: left.b * (1 - weight) + right.b * weight,
+  });
 }
 
 function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKey: string): void {
@@ -125,7 +220,7 @@ export function CanvasView(): React.ReactElement {
   const [keyboardQuickLook, setKeyboardQuickLook] = useState<{ key: string; label: string } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
   const [customEditorOpen, setCustomEditorOpen] = useState(false);
-  const [customDraftHex, setCustomDraftHex] = useState(DEFAULT_CUSTOM_HEX);
+  const [customDraftHsv, setCustomDraftHsv] = useState<HsvColor>(() => hexToHsv(DEFAULT_CUSTOM_HEX));
   const [savedCustomHex, setSavedCustomHex] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -456,7 +551,44 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const setCustomChannel = useCallback((channel: RgbChannel, value: number) => {
-    setCustomDraftHex((hex) => rgbToHex({ ...hexToRgb(hex), [channel]: colorByte(value) }));
+    setCustomDraftHsv((hsv) => rgbToHsv({ ...hsvToRgb(hsv), [channel]: colorByte(value) }));
+  }, []);
+
+  const setCustomHue = useCallback((hue: number) => {
+    setCustomDraftHsv((hsv) => ({ ...hsv, h: colorHue(hue), s: Math.max(hsv.s, 12), v: Math.max(hsv.v, 18) }));
+  }, []);
+
+  const setCustomSaturationValue = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    setCustomDraftHsv((hsv) => ({
+      ...hsv,
+      s: colorPercent((x / rect.width) * 100),
+      v: colorPercent(100 - (y / rect.height) * 100),
+    }));
+  }, []);
+
+  const onCustomSvPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setCustomSaturationValue(event);
+    },
+    [setCustomSaturationValue],
+  );
+
+  const onCustomSvPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.buttons !== 1) return;
+      event.preventDefault();
+      setCustomSaturationValue(event);
+    },
+    [setCustomSaturationValue],
+  );
+
+  const chooseCustomDraft = useCallback((hex: string) => {
+    setCustomDraftHsv(hexToHsv(hex));
   }, []);
 
   const pickScreenColor = useCallback(async () => {
@@ -464,22 +596,23 @@ export function CanvasView(): React.ReactElement {
     if (EyeDropper) {
       try {
         const result = await new EyeDropper().open();
-        setCustomDraftHex(result.sRGBHex.toUpperCase());
+        chooseCustomDraft(result.sRGBHex.toUpperCase());
       } catch {
         // The user can cancel the eyedropper; leave the existing selection unchanged.
       }
       return;
     }
     customColorNativeRef.current?.click();
-  }, []);
+  }, [chooseCustomDraft]);
 
   const saveCustomColor = useCallback(() => {
+    const customDraftHex = hsvToHex(customDraftHsv);
     const encoded = encodeCustomColor(customDraftHex);
     if (encoded === null) return;
     setSavedCustomHex(customDraftHex);
     setPendingColor(encoded);
     setCustomEditorOpen(false);
-  }, [customDraftHex]);
+  }, [customDraftHsv]);
 
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
@@ -540,8 +673,12 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
-  const customDraftRgb = hexToRgb(customDraftHex);
+  const customDraftHex = hsvToHex(customDraftHsv);
+  const customDraftRgb = hsvToRgb(customDraftHsv);
   const savedCustomColorValue = savedCustomHex ? encodeCustomColor(savedCustomHex) : null;
+  const mixerBaseHex =
+    pendingColor !== null && dims ? colorHexForValue(dims.palette, pendingColor, MIXER_BASE_HEX) : savedCustomHex ?? MIXER_BASE_HEX;
+  const mixerColors = MIXER_STEPS.map((step) => mixHex(mixerBaseHex, customDraftHex, step));
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
     ? 'Placing…'
@@ -760,13 +897,14 @@ export function CanvasView(): React.ReactElement {
                       tabIndex={-1}
                       aria-hidden="true"
                       value={customDraftHex}
-                      onChange={(event) => setCustomDraftHex(event.currentTarget.value.toUpperCase())}
+                      onChange={(event) => chooseCustomDraft(event.currentTarget.value.toUpperCase())}
                       className="quad-color-native"
                     />
                     <div className="quad-custom-editor__top">
                       <button
                         type="button"
                         className="quad-custom-preview"
+                        data-custom-preview-color={customDraftHex}
                         style={{ '--custom-color': customDraftHex } as React.CSSProperties}
                         onClick={() => customColorNativeRef.current?.click()}
                         aria-label="Open browser color picker"
@@ -776,23 +914,61 @@ export function CanvasView(): React.ReactElement {
                         <span>Eyedrop</span>
                       </button>
                     </div>
-                    <div className="quad-custom-presets" aria-label="Custom color presets">
-                      {CUSTOM_PRESETS.map((preset) => (
+                    <div className="quad-custom-tools">
+                      <div className="quad-hue-wheel" aria-label="Hue wheel">
+                        <span aria-hidden="true" className="quad-hue-wheel__ring" />
+                        {HUE_STOPS.map((stop) => {
+                          const radians = ((stop.h - 90) * Math.PI) / 180;
+                          const hueHex = hsvToHex({ h: stop.h, s: 100, v: 100 });
+                          return (
+                            <button
+                              key={stop.h}
+                              type="button"
+                              data-hue-stop
+                              className={Math.abs(customDraftHsv.h - stop.h) < 8 ? 'quad-hue-stop quad-hue-stop--selected' : 'quad-hue-stop'}
+                              style={
+                                {
+                                  '--hue-color': hueHex,
+                                  left: `${50 + Math.cos(radians) * 39}%`,
+                                  top: `${50 + Math.sin(radians) * 39}%`,
+                                } as React.CSSProperties
+                              }
+                              aria-label={`Hue ${stop.name}`}
+                              aria-pressed={Math.abs(customDraftHsv.h - stop.h) < 8}
+                              onClick={() => setCustomHue(stop.h)}
+                            />
+                          );
+                        })}
                         <button
-                          key={preset}
                           type="button"
-                          className={customDraftHex === preset ? 'quad-custom-preset quad-custom-preset--selected' : 'quad-custom-preset'}
-                          style={{ background: preset }}
-                          aria-label={`Custom preset ${preset}`}
-                          aria-pressed={customDraftHex === preset}
-                          onClick={() => setCustomDraftHex(preset)}
+                          className="quad-hue-current"
+                          style={{ '--custom-color': customDraftHex } as React.CSSProperties}
+                          onClick={() => customColorNativeRef.current?.click()}
+                          aria-label="Open browser color picker"
                         />
-                      ))}
+                      </div>
+                      <div
+                        className="quad-sv-square"
+                        aria-label="Saturation and brightness"
+                        onPointerDown={onCustomSvPointerDown}
+                        onPointerMove={onCustomSvPointerMove}
+                        style={
+                          {
+                            '--sv-hue': hsvToHex({ h: customDraftHsv.h, s: 100, v: 100 }),
+                            '--sv-x': `${customDraftHsv.s}%`,
+                            '--sv-y': `${100 - customDraftHsv.v}%`,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <span aria-hidden="true" className="quad-sv-thumb" />
+                      </div>
                     </div>
                     <div className="quad-custom-sliders">
                       {RGB_CHANNELS.map((channel) => (
                         <label key={channel.key} className="quad-color-slider">
-                          <span>{channel.label}</span>
+                          <span>
+                            {channel.label} <i>{customDraftRgb[channel.key]}</i>
+                          </span>
                           <input
                             id={`quad-custom-color-${channel.key}`}
                             type="range"
@@ -804,6 +980,30 @@ export function CanvasView(): React.ReactElement {
                           />
                         </label>
                       ))}
+                    </div>
+                    <div className="quad-mixer" aria-label="Palette mixer">
+                      <div className="quad-mixer__label">
+                        <span>Palette mixer</span>
+                        <span>blend with selected color</span>
+                      </div>
+                      <div className="quad-mixer__row">
+                        {mixerColors.map((hex) => {
+                          const normalizedMixerHex = hsvToHex(hexToHsv(hex));
+                          const selectedMixerColor = customDraftHex === normalizedMixerHex;
+                          return (
+                            <button
+                              key={hex}
+                              type="button"
+                              data-mixer-color
+                              className={selectedMixerColor ? 'quad-mixer-color quad-mixer-color--selected' : 'quad-mixer-color'}
+                              style={{ background: hex }}
+                              aria-label={`Mixer color ${hex}`}
+                              aria-pressed={selectedMixerColor}
+                              onClick={() => chooseCustomDraft(hex)}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
                     <button type="button" className="quad-btn quad-btn--primary" onClick={saveCustomColor} disabled={submitting}>
                       Save custom color

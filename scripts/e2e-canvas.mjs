@@ -107,15 +107,33 @@ try {
     const eyedropper = editor?.querySelector('.quad-eyedropper-btn');
     const nativeInput = editor?.querySelector('input[type="color"]');
     const preview = editor?.querySelector('.quad-custom-preview');
+    const hueWheel = editor?.querySelector('.quad-hue-wheel');
+    const hueStops = editor?.querySelectorAll('button[data-hue-stop]');
+    const saturationValueSquare = editor?.querySelector('.quad-sv-square');
+    const rgbSliders = editor?.querySelectorAll('input[type="range"]');
+    const mixerColors = editor?.querySelectorAll('button[data-mixer-color]');
     const textInput = editor?.querySelector('input[type="text"]');
     return {
       customEditorAppearsBelow: !!editor,
       hasHighResEyedropperButton: !!eyedropper && !!eyedropper.querySelector('.quad-eyedropper-icon'),
       hasNativeCustomColorInput: nativeInput instanceof HTMLInputElement,
       hasPixelPreview: preview instanceof HTMLButtonElement,
+      hasHueWheel: !!hueWheel && hueStops?.length === 12,
+      hasSaturationValueSquare: !!saturationValueSquare,
+      hasExactRgbSliders: rgbSliders?.length === 3,
+      hasPaletteMixer: mixerColors?.length === 5,
       editorHasNoTextInput: !(textInput instanceof HTMLInputElement),
     };
   });
+  await page.click('button[aria-label="Hue Cyan"]');
+  const svBox = await page.locator('.quad-sv-square').boundingBox();
+  await page.mouse.click(svBox.x + svBox.width * 0.82, svBox.y + svBox.height * 0.18);
+  const colorBeforeMixer = await page.locator('.quad-custom-preview').getAttribute('data-custom-preview-color');
+  await page.locator('button[data-mixer-color]').first().click();
+  const mixerUpdatesDraft = await page
+    .waitForFunction((before) => document.querySelector('.quad-custom-preview')?.getAttribute('data-custom-preview-color') !== before, colorBeforeMixer, { timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
   await page.locator('#quad-custom-color-r').evaluate((input) => {
     input.value = '18';
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -159,6 +177,7 @@ try {
     selectWorks,
     ...pickerChrome,
     ...editorChrome,
+    mixerUpdatesDraft,
     customColorEditorWorks,
     zoomWorks,
     panWorks,
