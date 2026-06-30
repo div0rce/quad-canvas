@@ -8,7 +8,7 @@
 // AUTHENTICATION.md / ADR-0006 and lands with the auth milestone; until then no production identity
 // source exists and the route rejects writes (401).
 import type { domain, dto, ws } from '@quad/core';
-import { getPaletteByKey } from '@quad/config';
+import { getPaletteByKey, isAllowedColorValue } from '@quad/config';
 import type { PlacementRepository, PlacedRow } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import { dynamicCooldownMs, type CooldownConfig } from './cooldown.js';
@@ -92,7 +92,7 @@ export async function placePixel(
     return fail('VALIDATION_ERROR', 'Coordinates must be integers.');
   }
   if (!Number.isInteger(input.color)) {
-    return fail('VALIDATION_ERROR', 'Color must be an integer palette index.');
+    return fail('VALIDATION_ERROR', 'Color must be an integer color value.');
   }
 
   // Idempotency replay first: a retried key returns the original persisted result, regardless of
@@ -122,8 +122,8 @@ export async function placePixel(
   if (!palette) {
     return fail('INTERNAL', 'Tenant palette is not configured.');
   }
-  if (!palette.colors.some((c) => c.index === input.color)) {
-    return fail('VALIDATION_ERROR', 'Color is not in the tenant palette.');
+  if (!isAllowedColorValue(tenant.palette, input.color)) {
+    return fail('VALIDATION_ERROR', 'Color is not in the tenant palette or a valid custom color.');
   }
 
   // Cooldown: fixed floor, or load-based when configured — the recent canvas-wide placement rate

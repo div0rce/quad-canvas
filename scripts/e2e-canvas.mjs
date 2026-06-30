@@ -89,6 +89,32 @@ try {
   await page.waitForSelector(DIALOG, { state: 'detached', timeout: 3000 });
   await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.45);
   const selectAfterGestures = !!(await page.waitForSelector(DIALOG, { timeout: 3000 }).catch(() => null));
+  const pickerChrome = await page.evaluate((dialogSelector) => {
+    const dialog = document.querySelector(dialogSelector);
+    const paletteButtons = dialog?.querySelectorAll('button.quad-swatch:not(.quad-swatch--eyedropper)');
+    const eyedropper = dialog?.querySelector('button.quad-swatch--eyedropper');
+    const customInput = dialog?.querySelector('#quad-custom-color-input');
+    const nativeInput = dialog?.querySelector('input[type="color"]');
+    return {
+      paletteHasThirtyTwoColors: paletteButtons?.length === 32,
+      hasEyedropperTile: !!eyedropper,
+      hasManualCustomColorInput: customInput instanceof HTMLInputElement,
+      hasNativeCustomColorInput: nativeInput instanceof HTMLInputElement,
+    };
+  }, DIALOG);
+  await page.fill('#quad-custom-color-input', 'rgb(18, 171, 52)');
+  const customColorEntryWorks = await page.evaluate(() => {
+    const input = document.querySelector('#quad-custom-color-input');
+    const customSwatch = document.querySelector('button[aria-label="Use custom color #12AB34"]');
+    const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Confirm');
+    return (
+      input instanceof HTMLInputElement &&
+      input.value === '#12AB34' &&
+      customSwatch?.getAttribute('aria-pressed') === 'true' &&
+      confirm instanceof HTMLButtonElement &&
+      !confirm.disabled
+    );
+  });
 
   // Two-finger PINCH via real touch (CDP) → the two-pointer branch zooms in (scale increases).
   const cx = Math.round(box.x + box.width / 2);
@@ -106,6 +132,8 @@ try {
   const results = {
     ...layoutContract,
     selectWorks,
+    ...pickerChrome,
+    customColorEntryWorks,
     zoomWorks,
     panWorks,
     selectAfterGestures,

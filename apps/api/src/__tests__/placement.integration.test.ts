@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { domain } from '@quad/core';
+import { encodeCustomColor } from '@quad/config';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
 import { InMemoryRealtimeBus } from '@quad/realtime';
 import { buildApp } from '../app.js';
@@ -109,6 +110,19 @@ describe('placement service', () => {
     const r = await placePixel(deps(), principal(s), { id: s.tenantId, palette: 'default' }, { x: 0, y: 0, color: 999, idempotencyKey: 'k' });
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('accepts an encoded custom RGB color', async () => {
+    const s = await seed();
+    const color = encodeCustomColor('#12AB34');
+    expect(color).not.toBeNull();
+
+    const r = await placePixel(deps(), principal(s), { id: s.tenantId, palette: 'default' }, { x: 2, y: 4, color: color ?? -1, idempotencyKey: 'custom' });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.result.color).toBe(color);
+
+    const pixel = await repo.getPixel(s.canvasId, 2, 4);
+    expect(pixel?.color).toBe(color);
   });
 
   it('rejects placement when there is no active canvas', async () => {

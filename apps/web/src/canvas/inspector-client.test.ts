@@ -1,4 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
+import { encodeCustomColor } from '@quad/config';
 import { colorHex, colorName, fetchPixelHistory } from './inspector-client';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -28,6 +29,13 @@ describe('colorHex', () => {
     expect(colorHex('default', 999)).toBe('#cccccc');
     expect(colorHex('no-such-palette', 0)).toBe('#cccccc');
   });
+
+  it('resolves encoded custom colors', () => {
+    const custom = encodeCustomColor('rgb(18, 171, 52)');
+
+    expect(custom).not.toBeNull();
+    expect(colorHex('default', custom ?? -1)).toBe('#12AB34');
+  });
 });
 
 describe('colorName', () => {
@@ -39,5 +47,12 @@ describe('colorName', () => {
   it('falls back to a generic label for an unknown index/palette', () => {
     expect(colorName('default', 999)).toBe('color 999');
     expect(colorName('no-such-palette', 1)).toBe('color 1');
+  });
+
+  it('labels encoded custom colors', () => {
+    const custom = encodeCustomColor('#12ab34');
+
+    expect(custom).not.toBeNull();
+    expect(colorName('default', custom ?? -1)).toBe('Custom #12AB34');
   });
 });

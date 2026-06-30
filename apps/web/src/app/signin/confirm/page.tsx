@@ -9,9 +9,25 @@ import { confirmMessage, confirmToken, retainSignInToken } from '@/auth/auth-cli
 import { AppBar } from '@/components/ui/app-bar';
 import { useTenant } from '@/components/tenant-provider';
 
+function confirmBadgeLabel(statusCode: number | null): string {
+  switch (statusCode) {
+    case 200:
+      return 'Verified';
+    case 409:
+      return 'Link expired';
+    case 422:
+      return 'Bad link';
+    case 429:
+      return 'Try later';
+    default:
+      return 'Action needed';
+  }
+}
+
 export default function ConfirmPage(): React.ReactElement {
   const tenant = useTenant();
   const [status, setStatus] = useState('Confirming your sign-in…');
+  const [statusCode, setStatusCode] = useState<number | null>(null);
   const [done, setDone] = useState(false);
   const tokenRef = useRef<string | null | undefined>(undefined);
 
@@ -31,15 +47,22 @@ export default function ConfirmPage(): React.ReactElement {
       await Promise.resolve();
       if (cancelled) return;
       if (!token) {
+        setStatusCode(422);
         setStatus('No sign-in token in this link.');
         setDone(true);
         return;
       }
       try {
         const code = await confirmToken(token);
-        if (!cancelled) setStatus(confirmMessage(code));
+        if (!cancelled) {
+          setStatusCode(code);
+          setStatus(confirmMessage(code));
+        }
       } catch {
-        if (!cancelled) setStatus('Network error — try again.');
+        if (!cancelled) {
+          setStatusCode(0);
+          setStatus('Network error — try again.');
+        }
       } finally {
         if (!cancelled) setDone(true);
       }
@@ -49,8 +72,9 @@ export default function ConfirmPage(): React.ReactElement {
     };
   }, []);
 
-  // Verified iff the response mapped to the 200 message (single source of truth = confirmMessage).
-  const ok = status === confirmMessage(200);
+  const ok = statusCode === 200;
+  const actionHref = ok ? '/canvas' : '/signin';
+  const actionLabel = ok ? 'Go to the canvas →' : 'Request a new link →';
 
   const badgeStyle = (bg: string): React.CSSProperties => ({
     display: 'flex',
@@ -146,7 +170,7 @@ export default function ConfirmPage(): React.ReactElement {
                     style={{ background: done ? 'var(--status-orange)' : 'var(--status-blue)' }}
                   />
                   <span style={{ textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                    {done ? 'Action needed' : 'Verifying'}
+                    {done ? confirmBadgeLabel(statusCode) : 'Verifying'}
                   </span>
                 </span>
               </div>
@@ -162,11 +186,11 @@ export default function ConfirmPage(): React.ReactElement {
 
             {done && (
               <a
-                href="/canvas"
+                href={actionHref}
                 className={ok ? 'quad-btn quad-btn--primary quad-btn--lg' : 'quad-btn quad-btn--lg'}
                 style={{ width: '100%', marginTop: 16 }}
               >
-                Go to the canvas →
+                {actionLabel}
               </a>
             )}
           </div>

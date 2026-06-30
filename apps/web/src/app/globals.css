@@ -280,6 +280,72 @@ a {
 .quad-swatch--selected {
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--qa);
 }
+.quad-swatch--eyedropper {
+  display: grid;
+  place-items: center;
+  background: #fff;
+}
+.quad-eyedropper-icon {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+.quad-eyedropper-icon::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  background: var(--qa);
+  box-shadow:
+    -4px 4px 0 var(--qa),
+    -8px 8px 0 var(--ink),
+    -4px 8px 0 var(--ink),
+    0 8px 0 var(--ink),
+    -12px 12px 0 var(--ink),
+    -8px 12px 0 var(--paper),
+    -4px 12px 0 var(--ink),
+    -16px 16px 0 var(--ink),
+    -12px 16px 0 var(--paper),
+    -8px 16px 0 var(--ink);
+}
+.quad-custom-color {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+.quad-color-input {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  border: var(--border-component) solid var(--ink);
+  background: var(--paper);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 18px;
+  color: var(--ink);
+  outline: none;
+}
+.quad-color-input:focus-visible {
+  box-shadow: 0 0 0 3px var(--qa-tint);
+}
+.quad-color-input[aria-invalid='true'] {
+  border-color: var(--status-orange);
+}
+.quad-color-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.quad-color-error {
+  margin: 0;
+  font-size: 16px;
+  color: var(--status-orange);
+}
 
 /* ----- Stat block: a label + a pixel-face value ----- */
 .quad-stat-label {

@@ -6,7 +6,7 @@
 // session cookie and an idempotency key, and the result returns as a WS delta. Anonymous users get a
 // clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getPaletteByKey } from '@quad/config';
+import { colorHexForValue, colorNameForValue, encodeCustomColor, getPaletteByKey, normalizeColorInput } from '@quad/config';
 import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
 import { CanvasClient, type SocketLike } from './canvas-client';
@@ -30,6 +30,20 @@ import { PixelInspector } from './pixel-inspector';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
 
+interface EyeDropperResult {
+  readonly sRGBHex: string;
+}
+
+interface EyeDropperInstance {
+  open: () => Promise<EyeDropperResult>;
+}
+
+declare global {
+  interface Window {
+    EyeDropper?: new () => EyeDropperInstance;
+  }
+}
+
 interface Dims {
   readonly width: number;
   readonly height: number;
@@ -38,27 +52,26 @@ interface Dims {
 
 function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKey: string): void {
   if (!canvas) return;
-  const palette = getPaletteByKey(paletteKey);
   if (canvas.width !== buffer.width * CELL_PX) canvas.width = buffer.width * CELL_PX;
   if (canvas.height !== buffer.height * CELL_PX) canvas.height = buffer.height * CELL_PX;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   for (const cell of buffer.drainDirty()) {
-    const hex = cell.color === EMPTY_CELL ? EMPTY_HEX : (palette?.colors.find((c) => c.index === cell.color)?.hex ?? EMPTY_HEX);
+    const hex = cell.color === EMPTY_CELL ? EMPTY_HEX : colorHexForValue(paletteKey, cell.color, EMPTY_HEX);
     ctx.fillStyle = hex;
     ctx.fillRect(cell.x * CELL_PX, cell.y * CELL_PX, CELL_PX, CELL_PX);
   }
 }
 
 function currentPixelLabel(result: CurrentPixelResult, paletteKey: string): string {
-  const colorName =
-    result.kind === 'pixel' ? getPaletteByKey(paletteKey)?.colors.find((color) => color.index === result.pixel.color)?.name : undefined;
+  const colorName = result.kind === 'pixel' ? colorNameForValue(paletteKey, result.pixel.color) : undefined;
   return quickLookLabel(result, colorName);
 }
 
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const placementDialogRef = useRef<HTMLDivElement>(null);
+  const customColorNativeRef = useRef<HTMLInputElement>(null);
   const clientRef = useRef<CanvasClient | null>(null);
   const placementIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
   // Pan/zoom (P-AC-11) — declared up here so the click/hover handlers below can read them.
@@ -75,6 +88,8 @@ export function CanvasView(): React.ReactElement {
   const [keyboardCell, setKeyboardCell] = useState<{ x: number; y: number } | null>(null);
   const [keyboardQuickLook, setKeyboardQuickLook] = useState<{ key: string; label: string } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
+  const [customColorText, setCustomColorText] = useState('');
+  const [customColorError, setCustomColorError] = useState('');
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
@@ -399,6 +414,44 @@ export function CanvasView(): React.ReactElement {
     [dims, keyboardCell, loadState, selected, submitting],
   );
 
+  const selectPaletteColor = useCallback((color: number) => {
+    setPendingColor(color);
+    setCustomColorError('');
+  }, []);
+
+  const applyCustomColor = useCallback((value: string) => {
+    const normalized = normalizeColorInput(value);
+    setCustomColorText(value);
+    if (!normalized) {
+      setCustomColorError(value.trim() ? 'Use #RRGGBB, #RGB, or rgb(255, 0, 0).' : '');
+      setPendingColor(null);
+      return;
+    }
+    const encoded = encodeCustomColor(normalized);
+    if (encoded === null) {
+      setCustomColorError('Use #RRGGBB, #RGB, or rgb(255, 0, 0).');
+      setPendingColor(null);
+      return;
+    }
+    setCustomColorText(normalized);
+    setCustomColorError('');
+    setPendingColor(encoded);
+  }, []);
+
+  const openCustomColorPicker = useCallback(async () => {
+    const EyeDropper = window.EyeDropper;
+    if (EyeDropper) {
+      try {
+        const result = await new EyeDropper().open();
+        applyCustomColor(result.sRGBHex);
+      } catch {
+        // The user can cancel the eyedropper; leave the existing selection unchanged.
+      }
+      return;
+    }
+    customColorNativeRef.current?.click();
+  }, [applyCustomColor]);
+
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
     setSubmitting(true);
@@ -458,6 +511,8 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
+  const normalizedCustomColor = normalizeColorInput(customColorText);
+  const customColorValue = normalizedCustomColor ? encodeCustomColor(normalizedCustomColor) : null;
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
     ? 'Placing…'
@@ -637,11 +692,64 @@ export function CanvasView(): React.ReactElement {
                       aria-label={c.name}
                       aria-pressed={pendingColor === c.index}
                       disabled={submitting}
-                      onClick={() => setPendingColor(c.index)}
+                      onClick={() => selectPaletteColor(c.index)}
                       className={pendingColor === c.index ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
                       style={{ background: c.hex }}
                     />
                   ))}
+                  <button
+                    type="button"
+                    aria-label="Create a custom color"
+                    title="Create a custom color"
+                    disabled={submitting}
+                    onClick={() => void openCustomColorPicker()}
+                    className="quad-swatch quad-swatch--eyedropper"
+                  >
+                    <span aria-hidden="true" className="quad-eyedropper-icon" />
+                  </button>
+                  {customColorValue !== null && normalizedCustomColor && (
+                    <button
+                      type="button"
+                      aria-label={`Use custom color ${normalizedCustomColor}`}
+                      aria-pressed={pendingColor === customColorValue}
+                      disabled={submitting}
+                      onClick={() => selectPaletteColor(customColorValue)}
+                      className={pendingColor === customColorValue ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
+                      style={{ background: normalizedCustomColor }}
+                    />
+                  )}
+                </div>
+                <div className="quad-custom-color">
+                  <label htmlFor="quad-custom-color-input" className="quad-eyebrow" style={{ fontSize: 14 }}>
+                    Custom color
+                  </label>
+                  <input
+                    id="quad-custom-color-input"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={customColorText}
+                    onChange={(event) => applyCustomColor(event.currentTarget.value)}
+                    placeholder="#CC0033 or rgb(204, 0, 51)"
+                    className="quad-color-input"
+                    disabled={submitting}
+                    aria-invalid={customColorError ? 'true' : 'false'}
+                  />
+                  <input
+                    ref={customColorNativeRef}
+                    type="color"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    value={normalizedCustomColor ?? '#1D70B8'}
+                    onChange={(event) => applyCustomColor(event.currentTarget.value)}
+                    className="quad-color-native"
+                  />
+                  {customColorError && (
+                    <p role="alert" className="quad-color-error">
+                      {customColorError}
+                    </p>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button
