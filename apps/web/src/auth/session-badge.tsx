@@ -56,11 +56,18 @@ export function SessionBadge(): React.ReactElement | null {
 
   useEffect(() => {
     let active = true;
-    void fetchSession().then((s) => {
-      if (active) setSession(s);
-    });
+    const load = (): void => {
+      void fetchSession().then((s) => {
+        if (active) setSession(s);
+      });
+    };
+    load();
+    window.addEventListener('focus', load);
+    window.addEventListener('pageshow', load);
     return () => {
       active = false;
+      window.removeEventListener('focus', load);
+      window.removeEventListener('pageshow', load);
     };
   }, []);
 

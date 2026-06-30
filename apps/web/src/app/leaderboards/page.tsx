@@ -1,52 +1,59 @@
 'use client';
 
-// apps/web — leaderboard (DC2). Ranked top placers; each links to the member's public profile.
-import { useEffect, useState } from 'react';
+// apps/web — leaderboard (DC2). Ranked top placers/survivors; each links to the member's public profile.
+import { useEffect, useMemo, useState } from 'react';
 import type { dto } from '@quad/core';
-import { fetchLeaderboard, ordinal } from '@/content/content-client';
+import { fetchLeaderboard, ordinal, type LeaderboardCategory, type LeaderboardWindow } from '@/content/content-client';
 import { AppBar } from '@/components/ui/app-bar';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
-// Strip a leading "@" and return the first glyph, upper-cased — the avatar letter.
 function avatarInitial(label: string): string {
   return (label.replace(/^@/, '')[0] ?? '?').toUpperCase();
 }
 
+function entryName(entry: dto.LeaderboardEntry): string {
+  return entry.displayName ?? `@${entry.handle.replace(/^@/, '')}`;
+}
+
+function scoreLabel(category: LeaderboardCategory): string {
+  return category === 'surviving' ? 'Surviving' : 'Placed';
+}
+
+function windowLabel(window: LeaderboardWindow): string {
+  return window === 'today' ? 'Today' : 'All time';
+}
+
 export default function LeaderboardsPage(): React.ReactElement {
   const tenant = useTenant();
+  const [category, setCategory] = useState<LeaderboardCategory>('surviving');
+  const [window, setWindow] = useState<LeaderboardWindow>('all');
   // undefined = loading, null = error.
   const [data, setData] = useState<dto.LeaderboardResponse | null | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
-    void fetchLeaderboard().then((d) => {
-      if (active) setData(d);
+    setData(undefined);
+    void fetchLeaderboard({ category, window, limit: 50 }).then((next) => {
+      if (active) setData(next);
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [category, window]);
 
-  const entries = data && data.entries.length > 0 ? data.entries : [];
-
-  // Podium spotlight, visually ordered 2nd · 1st · 3rd, layered over the full ranking below.
-  // Each cell is guarded so short lists (1–2 placers) still render. The only ranking metric is
-  // pixelsPlaced; the design's "Surviving %" column/bar and the Surviving/Placed/Today/All-time
-  // tabs have no backing field or API parameter (fetchLeaderboard takes none), so they are
-  // omitted rather than fabricated.
-  const podium: ReadonlyArray<{
-    entry: dto.LeaderboardEntry | undefined;
-    accent: string;
-    avatarColor: string;
-    elevated: boolean;
-  }> = [
-    { entry: entries[1], accent: 'var(--silver)', avatarColor: 'var(--ink)', elevated: false },
-    { entry: entries[0], accent: 'var(--qa)', avatarColor: '#fff', elevated: true },
-    { entry: entries[2], accent: 'var(--bronze)', avatarColor: '#fff', elevated: false },
-  ];
-
-  const rowCols = '60px minmax(0, 1fr) 110px';
+  const entries = data?.entries ?? [];
+  const maxScore = Math.max(1, ...entries.map((entry) => entry.score));
+  const podium = useMemo(
+    () =>
+      [
+        { entry: entries[1], accent: 'var(--silver)', avatarColor: 'var(--ink)', elevated: false },
+        { entry: entries[0], accent: 'var(--qa)', avatarColor: '#fff', elevated: true },
+        { entry: entries[2], accent: 'var(--bronze)', avatarColor: '#fff', elevated: false },
+      ] as const,
+    [entries],
+  );
+  const label = scoreLabel(category);
 
   return (
     <main className="quad-page">
@@ -62,56 +69,46 @@ export default function LeaderboardsPage(): React.ReactElement {
           right={<SessionBadge />}
         />
 
-        <div style={{ padding: 28 }}>
-          <header style={{ marginBottom: 22 }}>
-            <h1 className="quad-pixel" style={{ fontSize: 22, color: 'var(--ink)', margin: 0 }}>
-              Leaderboards
-            </h1>
-            <p style={{ fontSize: 21, color: 'var(--ink-soft)', margin: '9px 0 0' }}>
-              Real attributable activity only. Bots and multi-accounts cannot climb.
-            </p>
+        <div className="quad-leaderboard">
+          <header className="quad-leaderboard__header">
+            <div>
+              <h1 className="quad-pixel">Leaderboards</h1>
+              <p>Real attributable activity only. Bots and multi-accounts cannot climb.</p>
+            </div>
+            <div className="quad-leaderboard__filters" aria-label="Leaderboard filters">
+              <div className="quad-segmented">
+                <button type="button" aria-pressed={category === 'surviving'} onClick={() => setCategory('surviving')}>
+                  Surviving
+                </button>
+                <button type="button" aria-pressed={category === 'placements'} onClick={() => setCategory('placements')}>
+                  Placed
+                </button>
+              </div>
+              <div className="quad-segmented">
+                <button type="button" aria-pressed={window === 'today'} onClick={() => setWindow('today')}>
+                  Today
+                </button>
+                <button type="button" aria-pressed={window === 'all'} onClick={() => setWindow('all')}>
+                  All time
+                </button>
+              </div>
+            </div>
           </header>
 
-          {data === undefined && <p style={{ fontSize: 21, color: 'var(--muted)' }}>Loading…</p>}
-          {data === null && (
-            <p style={{ fontSize: 21, color: 'var(--muted)' }}>Could not load the leaderboard.</p>
-          )}
-          {data && data.entries.length === 0 && (
-            <p style={{ fontSize: 21, color: 'var(--muted)' }}>No placements yet.</p>
-          )}
+          {data === undefined && <p className="quad-leaderboard__state">Loading...</p>}
+          {data === null && <p className="quad-leaderboard__state">Could not load the leaderboard.</p>}
+          {data && data.entries.length === 0 && <p className="quad-leaderboard__state">No placements yet.</p>}
 
           {entries.length > 0 && (
             <>
-              {/* Podium — presentational highlight; the canonical ranking is the list below. */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1.1fr 1fr',
-                  gap: 14,
-                  alignItems: 'end',
-                  marginBottom: 22,
-                }}
-              >
+              <div className="quad-leaderboard__podium">
                 {podium.map((slot, i) => {
-                  const e = slot.entry;
-                  if (!e) return <div key={i} />;
-                  const name = e.displayName ?? e.handle;
+                  const entry = slot.entry;
+                  if (!entry) return <div key={i} />;
+                  const name = entryName(entry);
                   const avatarSize = slot.elevated ? 58 : 48;
                   return (
-                    <div
-                      key={i}
-                      className={slot.elevated ? 'quad-card quad-card--lg' : 'quad-card'}
-                      style={{
-                        padding: slot.elevated ? 24 : 20,
-                        textAlign: 'center',
-                        ...(slot.elevated
-                          ? {
-                              background: 'var(--qa-tint2)',
-                              borderWidth: 'var(--border-structural)',
-                            }
-                          : null),
-                      }}
-                    >
+                    <article key={entry.handle} className={slot.elevated ? 'quad-card quad-card--lg' : 'quad-card'}>
                       <div
                         className="quad-avatar"
                         style={{
@@ -125,122 +122,46 @@ export default function LeaderboardsPage(): React.ReactElement {
                       >
                         {avatarInitial(name)}
                       </div>
-                      <div
-                        className="quad-pixel"
-                        style={{
-                          fontSize: 13,
-                          color: slot.elevated ? 'var(--qa)' : 'var(--ink-soft)',
-                          marginTop: 14,
-                        }}
-                      >
-                        {ordinal(e.rank)}
+                      <div className="quad-pixel quad-leaderboard__rank" style={{ color: slot.elevated ? 'var(--qa)' : 'var(--ink-soft)' }}>
+                        {ordinal(entry.rank)}
                       </div>
-                      <a
-                        href={`/profiles/${encodeURIComponent(e.handle)}`}
-                        style={{
-                          display: 'block',
-                          fontSize: slot.elevated ? 22 : 21,
-                          color: 'var(--ink)',
-                          textDecoration: 'none',
-                          marginTop: 6,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {name}
-                      </a>
-                      <div
-                        className="quad-pixel"
-                        style={{
-                          fontSize: slot.elevated ? 22 : 16,
-                          color: 'var(--ink)',
-                          marginTop: 8,
-                        }}
-                      >
-                        {e.pixelsPlaced}
-                      </div>
-                      {slot.elevated && (
-                        <div
-                          style={{
-                            fontSize: 16,
-                            color: 'var(--ink-soft)',
-                            marginTop: 8,
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          pixels placed
-                        </div>
-                      )}
-                    </div>
+                      <a href={`/profiles/${encodeURIComponent(entry.handle)}`}>{name}</a>
+                      <div className="quad-pixel quad-leaderboard__score">{entry.score.toLocaleString()}</div>
+                      {slot.elevated && <div className="quad-leaderboard__metric">{label} pixels</div>}
+                    </article>
                   );
                 })}
               </div>
 
-              {/* Full ranking. */}
-              <div className="quad-card" style={{ overflow: 'hidden' }}>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: rowCols,
-                    padding: '11px 20px',
-                    background: 'var(--paper)',
-                    borderBottom: 'var(--border-component) solid var(--ink)',
-                  }}
-                >
+              <div className="quad-card quad-leaderboard__table">
+                <div className="quad-leaderboard__row quad-leaderboard__row--head">
                   <span className="quad-stat-label">Rank</span>
-                  <span className="quad-stat-label">Member</span>
+                  <span className="quad-stat-label">Student</span>
+                  <span className="quad-stat-label">{label}</span>
                   <span className="quad-stat-label" style={{ textAlign: 'right' }}>
                     Pixels
                   </span>
                 </div>
-                <ol style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Top placers">
-                  {entries.map((e, i) => {
-                    const name = e.displayName ?? e.handle;
+                <ol aria-label={`${label} leaderboard, ${windowLabel(window)}`}>
+                  {entries.map((entry, i) => {
+                    const name = entryName(entry);
                     return (
                       <li
-                        key={e.handle}
+                        key={entry.handle}
+                        className="quad-leaderboard__row"
                         style={{
-                          display: 'grid',
-                          gridTemplateColumns: rowCols,
-                          alignItems: 'center',
-                          padding: '12px 20px',
-                          borderBottom:
-                            i < entries.length - 1 ? '2px solid var(--hairline)' : undefined,
+                          borderBottom: i < entries.length - 1 ? '2px solid var(--hairline)' : undefined,
                         }}
                       >
-                        <span className="quad-pixel" style={{ fontSize: 15, color: 'var(--ink)' }}>
-                          {e.rank}
+                        <span className="quad-pixel quad-leaderboard__place">{entry.rank}</span>
+                        <span className="quad-leaderboard__member">
+                          <span className="quad-avatar">{avatarInitial(name)}</span>
+                          <a href={`/profiles/${encodeURIComponent(entry.handle)}`}>{name}</a>
                         </span>
-                        <span
-                          style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}
-                        >
-                          <span
-                            className="quad-avatar"
-                            style={{ width: 30, height: 30, fontSize: 11, flex: 'none' }}
-                          >
-                            {avatarInitial(name)}
-                          </span>
-                          <a
-                            href={`/profiles/${encodeURIComponent(e.handle)}`}
-                            style={{
-                              fontSize: 20,
-                              color: 'var(--ink)',
-                              textDecoration: 'none',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {name}
-                          </a>
+                        <span className="quad-leaderboard__bar" aria-label={`${entry.score} ${label.toLowerCase()} pixels`}>
+                          <span style={{ width: `${Math.max(4, (entry.score / maxScore) * 100)}%` }} />
                         </span>
-                        <span
-                          className="quad-pixel"
-                          style={{ fontSize: 14, color: 'var(--ink)', textAlign: 'right' }}
-                        >
-                          {e.pixelsPlaced}
-                        </span>
+                        <span className="quad-pixel quad-leaderboard__pixels">{entry.score.toLocaleString()}</span>
                       </li>
                     );
                   })}

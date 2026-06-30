@@ -307,7 +307,15 @@ export interface ProfileRow {
 export interface LeaderboardRow {
   readonly handle: string;
   readonly displayName: string | null;
+  readonly score: number;
   readonly pixelsPlaced: number;
+  readonly survivingPixels: number;
+}
+
+export interface LeaderboardQuery {
+  readonly category: 'placements' | 'surviving';
+  readonly window: 'all' | 'today';
+  readonly limit: number;
 }
 
 export interface PlacementRepository {
@@ -326,7 +334,7 @@ export interface PlacementRepository {
   /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
   getProfileByUserId(tenantId: string, userId: string): Promise<ProfileRow | null>;
   /** Top placers in the tenant (active members, DC2), ordered by placement count desc. */
-  getLeaderboard(tenantId: string, limit: number): Promise<readonly LeaderboardRow[]>;
+  getLeaderboard(tenantId: string, query: LeaderboardQuery): Promise<readonly LeaderboardRow[]>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** One canvas by id within a tenant, or null (used to reconstruct idempotent command results). */
@@ -578,39 +586,90 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced, contributions };
     },
 
-    async getLeaderboard(tenantId, limit) {
-      // Rank by placement count, ties broken deterministically by user id. Page the grouped counts
+    async getLeaderboard(tenantId, query) {
+      // Rank by the requested metric, ties broken deterministically by user id. Page grouped counts
       // until `limit` ELIGIBLE members (active + public handle, DC2) are collected — so a run of
       // suspended/handle-less top placers can't truncate the board while eligible members remain.
-      const rows: LeaderboardRow[] = [];
-      const batch = Math.max(limit, 1) * 2;
+      const rows: Array<{ userId: string; handle: string; displayName: string | null; score: number }> = [];
+      const batch = Math.max(query.limit, 1) * 2;
+      const since = query.window === 'today' ? new Date(new Date().setHours(0, 0, 0, 0)) : null;
       let skip = 0;
-      for (let guard = 0; guard < 50 && rows.length < limit; guard++) {
-        const grouped = await prisma.pixelEvent.groupBy({
-          by: ['actorUserId'],
-          where: { tenantId, type: 'PixelPlaced' },
-          _count: { _all: true },
-          orderBy: [{ _count: { actorUserId: 'desc' } }, { actorUserId: 'asc' }],
-          take: batch,
-          skip,
-        });
+      for (let guard = 0; guard < 50 && rows.length < query.limit; guard++) {
+        const grouped: Array<{ userId: string; count: number }> =
+          query.category === 'placements'
+            ? (
+                await prisma.pixelEvent.groupBy({
+                  by: ['actorUserId'],
+                  where: {
+                    tenantId,
+                    type: 'PixelPlaced',
+                    ...(since ? { createdAt: { gte: since } } : {}),
+                  },
+                  _count: { _all: true },
+                  orderBy: [{ _count: { actorUserId: 'desc' } }, { actorUserId: 'asc' }],
+                  take: batch,
+                  skip,
+                })
+              ).map((g) => ({ userId: g.actorUserId, count: g._count._all }))
+            : (
+                await prisma.pixel.groupBy({
+                  by: ['ownerUserId'],
+                  where: {
+                    tenantId,
+                    ...(since ? { placedAt: { gte: since } } : {}),
+                  },
+                  _count: { _all: true },
+                  orderBy: [{ _count: { ownerUserId: 'desc' } }, { ownerUserId: 'asc' }],
+                  take: batch,
+                  skip,
+                })
+              ).map((g) => ({ userId: g.ownerUserId, count: g._count._all }));
         if (grouped.length === 0) break;
-        const ids = grouped.map((g) => g.actorUserId);
+        const ids = grouped.map((g) => g.userId);
         const memberships = await prisma.membership.findMany({
           where: { tenantId, status: 'active', userId: { in: ids } },
           select: { userId: true, user: { select: { publicHandle: true, displayName: true } } },
         });
         const byUser = new Map(memberships.map((m) => [m.userId, m.user]));
         for (const g of grouped) {
-          const u = byUser.get(g.actorUserId);
+          const u = byUser.get(g.userId);
           if (!u || u.publicHandle === null) continue; // inactive/banned or no handle → omit
-          rows.push({ handle: u.publicHandle, displayName: u.displayName, pixelsPlaced: g._count._all });
-          if (rows.length >= limit) break;
+          rows.push({ userId: g.userId, handle: u.publicHandle, displayName: u.displayName, score: g.count });
+          if (rows.length >= query.limit) break;
         }
         if (grouped.length < batch) break; // exhausted all groups
         skip += batch;
       }
-      return rows;
+      const userIds = rows.map((r) => r.userId);
+      if (userIds.length === 0) return [];
+      const placementGroups = await prisma.pixelEvent.groupBy({
+        by: ['actorUserId'],
+        where: {
+          tenantId,
+          type: 'PixelPlaced',
+          actorUserId: { in: userIds },
+          ...(since ? { createdAt: { gte: since } } : {}),
+        },
+        _count: { _all: true },
+      });
+      const survivingGroups = await prisma.pixel.groupBy({
+        by: ['ownerUserId'],
+        where: {
+          tenantId,
+          ownerUserId: { in: userIds },
+          ...(since ? { placedAt: { gte: since } } : {}),
+        },
+        _count: { _all: true },
+      });
+      const placementsByUser = new Map(placementGroups.map((g) => [g.actorUserId, g._count._all]));
+      const survivingByUser = new Map(survivingGroups.map((g) => [g.ownerUserId, g._count._all]));
+      return rows.map((r) => ({
+        handle: r.handle,
+        displayName: r.displayName,
+        score: r.score,
+        pixelsPlaced: placementsByUser.get(r.userId) ?? 0,
+        survivingPixels: survivingByUser.get(r.userId) ?? 0,
+      }));
     },
 
     async findActiveMembership(tenantId, userId) {

@@ -197,7 +197,12 @@ export interface LeaderboardEntry {
   readonly rank: number;
   readonly handle: string;
   readonly displayName?: string;
+  /** The value this response is ranked by (category + window). */
+  readonly score: number;
+  /** Placement count for the selected window. */
   readonly pixelsPlaced: number;
+  /** Current surviving-pixel count for the selected window. */
+  readonly survivingPixels: number;
 }
 
 /** A ranked leaderboard for a (category, window). DC2; eventually consistent. */

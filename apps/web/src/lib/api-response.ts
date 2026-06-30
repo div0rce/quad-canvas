@@ -152,7 +152,9 @@ export function isLeaderboardResponse(value: unknown): value is dto.LeaderboardR
         isNonNegativeInteger(entry['rank']) &&
         typeof entry['handle'] === 'string' &&
         (entry['displayName'] === undefined || typeof entry['displayName'] === 'string') &&
-        isNonNegativeInteger(entry['pixelsPlaced']),
+        isNonNegativeInteger(entry['score']) &&
+        isNonNegativeInteger(entry['pixelsPlaced']) &&
+        isNonNegativeInteger(entry['survivingPixels']),
     )
   );
 }

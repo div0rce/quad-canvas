@@ -5,14 +5,15 @@
 // then pick a color and Confirm — the write POSTs to the server (the authoritative path) with the
 // session cookie and an idempotency key, and the result returns as a WS delta. Anonymous users get a
 // clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { domain, ws } from '@quad/core';
 import { colorHexForValue, colorNameForValue, encodeCustomColor, getPaletteByKey } from '@quad/config';
 import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
 import { CanvasClient, type SocketLike } from './canvas-client';
 import { cellFromPoint, moveCell, placementIntentIsSettled, placementStatusMessage, type CellArrowKey } from './placement';
 import { fetchCurrentPixel, quickLookLabel, type CurrentPixelResult } from './quick-look-client';
-import { clampPan, pinchScale } from './gestures';
+import { pinchScale } from './gestures';
 import {
   isCanvasMetaResponse,
   isCanvasSnapshotResponse,
@@ -20,6 +21,7 @@ import {
   isRecord,
 } from '@/lib/api-response';
 import { apiBase, apiPath, websocketApiBase } from '@/lib/api-base';
+import { fetchSession, type SessionInfo } from '@/auth/auth-client';
 
 const SCALE_MIN = 1; // fit-to-width
 const SCALE_MAX = 8;
@@ -30,22 +32,6 @@ import { PixelInspector } from './pixel-inspector';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
 const DEFAULT_CUSTOM_HEX = '#1D70B8';
-const MIXER_BASE_HEX = '#CC0033';
-const HUE_STOPS = [
-  { h: 0, name: 'Red' },
-  { h: 30, name: 'Orange' },
-  { h: 60, name: 'Yellow' },
-  { h: 90, name: 'Lime' },
-  { h: 120, name: 'Green' },
-  { h: 150, name: 'Mint' },
-  { h: 180, name: 'Cyan' },
-  { h: 210, name: 'Sky' },
-  { h: 240, name: 'Blue' },
-  { h: 270, name: 'Violet' },
-  { h: 300, name: 'Magenta' },
-  { h: 330, name: 'Rose' },
-] as const;
-const MIXER_STEPS = [0.2, 0.35, 0.5, 0.65, 0.8] as const;
 const RGB_CHANNELS = [
   { key: 'r', label: 'Red' },
   { key: 'g', label: 'Green' },
@@ -84,6 +70,26 @@ interface Dims {
   readonly width: number;
   readonly height: number;
   readonly palette: string;
+}
+
+interface StageSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+interface BoardFit {
+  readonly width: number;
+  readonly height: number;
+  readonly cell: number;
+  readonly baseX: number;
+  readonly baseY: number;
+}
+
+interface PlacementFeedEntry {
+  readonly id: string;
+  readonly hex: string;
+  readonly by: string;
+  readonly coord: string;
 }
 
 function colorByteToHex(value: number): string {
@@ -171,16 +177,6 @@ function hexToHsv(hex: string): HsvColor {
   return rgbToHsv(hexToRgb(hex));
 }
 
-function mixHex(a: string, b: string, weight: number): string {
-  const left = hexToRgb(a);
-  const right = hexToRgb(b);
-  return rgbToHex({
-    r: left.r * (1 - weight) + right.r * weight,
-    g: left.g * (1 - weight) + right.g * weight,
-    b: left.b * (1 - weight) + right.b * weight,
-  });
-}
-
 function paint(canvas: HTMLCanvasElement | null, buffer: CanvasBuffer, paletteKey: string): void {
   if (!canvas) return;
   if (canvas.width !== buffer.width * CELL_PX) canvas.width = buffer.width * CELL_PX;
@@ -199,6 +195,41 @@ function currentPixelLabel(result: CurrentPixelResult, paletteKey: string): stri
   return quickLookLabel(result, colorName);
 }
 
+function clampAxis(offset: number, stage: number, content: number, base: number, scale: number): number {
+  const scaled = content * scale;
+  if (scaled <= stage) return (stage - scaled) / 2 - base;
+  return Math.min(-base, Math.max(stage - scaled - base, offset));
+}
+
+function clampCanvasPan(vp: Viewport, stage: StageSize, fit: BoardFit): Viewport {
+  const scale = clampScale(vp.scale, SCALE_MIN, SCALE_MAX);
+  return {
+    scale,
+    offsetX: clampAxis(vp.offsetX, stage.width, fit.width, fit.baseX, scale),
+    offsetY: clampAxis(vp.offsetY, stage.height, fit.height, fit.baseY, scale),
+  };
+}
+
+function placementActorLabel(identity: domain.PublicIdentity | undefined): string {
+  if (identity?.displayName) return identity.displayName;
+  if (identity?.handle) return `@${identity.handle.replace(/^@/, '')}`;
+  return 'Someone';
+}
+
+function sessionIdentity(session: SessionInfo | null): domain.PublicIdentity | undefined {
+  if (!session?.authenticated || !session.handle) return undefined;
+  return { handle: session.handle.replace(/^@/, '') as domain.PublicHandle };
+}
+
+function feedEntryFromPlacement(message: ws.PixelPlaced, paletteKey: string): PlacementFeedEntry {
+  return {
+    id: String(message.seq),
+    hex: colorHexForValue(paletteKey, message.color, EMPTY_HEX),
+    by: placementActorLabel(message.by),
+    coord: `(${message.at.x}, ${message.at.y})`,
+  };
+}
+
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const placementDialogRef = useRef<HTMLDivElement>(null);
@@ -208,6 +239,7 @@ export function CanvasView(): React.ReactElement {
   // Pan/zoom (P-AC-11) — declared up here so the click/hover handlers below can read them.
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 });
+  const [stageSize, setStageSize] = useState<StageSize>({ width: 0, height: 0 });
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<number | null>(null);
   const dragMoved = useRef(false);
@@ -227,6 +259,23 @@ export function CanvasView(): React.ReactElement {
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
   const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms the cooldown ends (display only)
   const [nowTick, setNowTick] = useState(0); // latest clock sample; updated outside render only
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [placementFeed, setPlacementFeed] = useState<readonly PlacementFeedEntry[]>([]);
+
+  const boardFit = useMemo<BoardFit | null>(() => {
+    if (!dims || stageSize.width <= 0 || stageSize.height <= 0) return null;
+    const rawCell = Math.min(stageSize.width / dims.width, stageSize.height / dims.height);
+    const cell = rawCell >= 1 ? Math.max(1, Math.floor(rawCell)) : rawCell;
+    const width = dims.width * cell;
+    const height = dims.height * cell;
+    return {
+      width,
+      height,
+      cell,
+      baseX: (stageSize.width - width) / 2,
+      baseY: (stageSize.height - height) / 2,
+    };
+  }, [dims, stageSize.height, stageSize.width]);
 
   // Tick once a second while a cooldown is pending so the countdown updates (server still enforces).
   useEffect(() => {
@@ -244,6 +293,21 @@ export function CanvasView(): React.ReactElement {
     const now = Date.now();
     setNowTick(now);
     setCooldownUntil(now + durationMs);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchSession().then((next) => {
+      if (active) setSession(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const addPlacementToFeed = useCallback((message: ws.PixelPlaced, paletteKey: string) => {
+    const entry = feedEntryFromPlacement(message, paletteKey);
+    setPlacementFeed((items) => [entry, ...items.filter((item) => item.id !== entry.id)].slice(0, 5));
   }, []);
 
   useEffect(() => {
@@ -270,6 +334,7 @@ export function CanvasView(): React.ReactElement {
         paint(canvasRef.current, buffer, ctx.palette);
         setLoadState('ready');
       },
+      onPlacement: (message, ctx) => addPlacementToFeed(message, ctx.palette),
     });
     clientRef.current = client;
     // Surface a load failure instead of leaving a blank canvas, and never let the initial load reject
@@ -279,7 +344,7 @@ export function CanvasView(): React.ReactElement {
       client.stop();
       clientRef.current = null;
     };
-  }, []);
+  }, [addPlacementToFeed]);
 
   // Quick-look: the current cell's owner + time, lighter than the click-to-open history. On desktop it
   // follows the pointer (hover); on every device a selected cell shows the same quick-look line (so touch
@@ -410,12 +475,29 @@ export function CanvasView(): React.ReactElement {
 
   // Re-clamp the offset (and pin scale ≥ fit) against the container's current size.
   const settle = useCallback((vp: Viewport): Viewport => {
-    const el = containerRef.current;
-    if (!el) return vp;
-    const scale = clampScale(vp.scale, SCALE_MIN, SCALE_MAX);
-    const { offsetX, offsetY } = clampPan(scale, vp.offsetX, vp.offsetY, el.clientWidth, el.clientHeight);
-    return { scale, offsetX, offsetY };
-  }, []);
+    if (!boardFit || stageSize.width <= 0 || stageSize.height <= 0) {
+      return { scale: clampScale(vp.scale, SCALE_MIN, SCALE_MAX), offsetX: 0, offsetY: 0 };
+    }
+    return clampCanvasPan(vp, stageSize, boardFit);
+  }, [boardFit, stageSize]);
+
+  const zoomViewportAt = useCallback(
+    (vp: Viewport, anchorX: number, anchorY: number, nextScale: number): Viewport => {
+      if (!boardFit) return settle({ scale: nextScale, offsetX: vp.offsetX, offsetY: vp.offsetY });
+      const absolute = {
+        scale: vp.scale,
+        offsetX: boardFit.baseX + vp.offsetX,
+        offsetY: boardFit.baseY + vp.offsetY,
+      };
+      const zoomed = zoomAt(absolute, anchorX, anchorY, nextScale);
+      return settle({
+        scale: nextScale,
+        offsetX: zoomed.offsetX - boardFit.baseX,
+        offsetY: zoomed.offsetY - boardFit.baseY,
+      });
+    },
+    [boardFit, settle],
+  );
 
   const resetView = useCallback(() => setViewport({ scale: SCALE_MIN, offsetX: 0, offsetY: 0 }), []);
 
@@ -429,9 +511,9 @@ export function CanvasView(): React.ReactElement {
         setViewport((vp) => settle({ scale: next, offsetX: vp.offsetX, offsetY: vp.offsetY }));
         return;
       }
-      setViewport((vp) => settle(zoomAt(vp, el.clientWidth / 2, el.clientHeight / 2, next)));
+      setViewport((vp) => zoomViewportAt(vp, el.clientWidth / 2, el.clientHeight / 2, next));
     },
-    [settle],
+    [settle, zoomViewportAt],
   );
 
   // Wheel zoom needs a non-passive listener so the page doesn't scroll.
@@ -441,7 +523,9 @@ export function CanvasView(): React.ReactElement {
     const onWheel = (e: WheelEvent): void => {
       e.preventDefault();
       const anchor = containerPoint(e.clientX, e.clientY);
-      setViewport((vp) => settle(zoomAt(vp, anchor.x, anchor.y, clampScale(vp.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), SCALE_MIN, SCALE_MAX))));
+      setViewport((vp) =>
+        zoomViewportAt(vp, anchor.x, anchor.y, clampScale(vp.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), SCALE_MIN, SCALE_MAX)),
+      );
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -452,9 +536,15 @@ export function CanvasView(): React.ReactElement {
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => setViewport((vp) => settle(vp)));
+    const updateStage = (): void => setStageSize({ width: el.clientWidth, height: el.clientHeight });
+    updateStage();
+    const ro = new ResizeObserver(updateStage);
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setViewport((vp) => settle(vp));
   }, [settle]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -490,7 +580,7 @@ export function CanvasView(): React.ReactElement {
         pinchRef.current = dist;
         const mid = containerPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
         dragMoved.current = true;
-        setViewport((vp) => settle(zoomAt(vp, mid.x, mid.y, pinchScale(vp.scale, dist, prevDist, SCALE_MIN, SCALE_MAX))));
+        setViewport((vp) => zoomViewportAt(vp, mid.x, mid.y, pinchScale(vp.scale, dist, prevDist, SCALE_MIN, SCALE_MAX)));
         return;
       }
       // Cumulative distance from the press origin — a slow multi-step drag still counts as a drag, not a tap.
@@ -499,7 +589,7 @@ export function CanvasView(): React.ReactElement {
       if (!dragMoved.current) return; // still within the tap dead-zone — don't pan on jitter
       setViewport((vp) => settle({ scale: vp.scale, offsetX: vp.offsetX + (cur.x - prev.x), offsetY: vp.offsetY + (cur.y - prev.y) }));
     },
-    [containerPoint, settle],
+    [containerPoint, settle, zoomViewportAt],
   );
 
   const onPointerUp = useCallback(
@@ -558,39 +648,6 @@ export function CanvasView(): React.ReactElement {
     setCustomDraftHsv((hsv) => rgbToHsv({ ...hsvToRgb(hsv), [channel]: colorByte(value) }));
   }, []);
 
-  const setCustomHue = useCallback((hue: number) => {
-    setCustomDraftHsv((hsv) => ({ ...hsv, h: colorHue(hue), s: Math.max(hsv.s, 12), v: Math.max(hsv.v, 18) }));
-  }, []);
-
-  const setCustomSaturationValue = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-    setCustomDraftHsv((hsv) => ({
-      ...hsv,
-      s: colorPercent((x / rect.width) * 100),
-      v: colorPercent(100 - (y / rect.height) * 100),
-    }));
-  }, []);
-
-  const onCustomSvPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      setCustomSaturationValue(event);
-    },
-    [setCustomSaturationValue],
-  );
-
-  const onCustomSvPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.buttons !== 1) return;
-      event.preventDefault();
-      setCustomSaturationValue(event);
-    },
-    [setCustomSaturationValue],
-  );
-
   const chooseCustomDraft = useCallback((hex: string) => {
     setCustomDraftHsv(hexToHsv(hex));
   }, []);
@@ -645,7 +702,7 @@ export function CanvasView(): React.ReactElement {
           setStatus('The server returned an invalid placement response. Try again.');
           return;
         }
-        clientRef.current?.applyConfirmedPlacement(body, placementCanvasId);
+        clientRef.current?.applyConfirmedPlacement(body, placementCanvasId, sessionIdentity(session));
         if (body.cooldownMs > 0) startCooldown(body.cooldownMs); // display the countdown
         setStatus(placementStatusMessage(201));
         setPendingColor(null);
@@ -667,7 +724,7 @@ export function CanvasView(): React.ReactElement {
     } finally {
       setSubmitting(false);
     }
-  }, [selected, pendingColor, submitting, startCooldown]);
+  }, [selected, pendingColor, submitting, startCooldown, session]);
 
   const cancel = useCallback(() => {
     setSelected(null);
@@ -680,9 +737,6 @@ export function CanvasView(): React.ReactElement {
   const customDraftHex = hsvToHex(customDraftHsv);
   const customDraftRgb = hsvToRgb(customDraftHsv);
   const savedCustomColorValue = savedCustomHex ? encodeCustomColor(savedCustomHex) : null;
-  const mixerBaseHex =
-    pendingColor !== null && dims ? colorHexForValue(dims.palette, pendingColor, MIXER_BASE_HEX) : savedCustomHex ?? MIXER_BASE_HEX;
-  const mixerColors = MIXER_STEPS.map((step) => mixHex(mixerBaseHex, customDraftHex, step));
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
     ? 'Placing…'
@@ -693,9 +747,11 @@ export function CanvasView(): React.ReactElement {
         : 'Confirm';
   const placeHint =
     cooldownRemainingMs > 0
-      ? 'Your cooldown is running — the same for everyone.'
+      ? 'Your cooldown is running.'
       : 'Placement is a deliberate two step, so a stray tap never wastes your cooldown.';
   const cdBig = cooldownRemainingMs > 0 ? formatCountdown(cooldownRemainingMs) : loadState === 'error' ? 'Offline' : 'Ready';
+  const coordinateLabel = selected ? `(${selected.x}, ${selected.y})` : keyboardCell ? `(${keyboardCell.x}, ${keyboardCell.y})` : '(--, --)';
+  const showGrid = Boolean(dims && boardFit && viewport.scale > 1.25);
   const statusLine = (
     <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: 0, fontSize: 18, color: 'var(--ink-soft)' }}>
       {status}
@@ -713,57 +769,71 @@ export function CanvasView(): React.ReactElement {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerCancel}
             className="quad-canvas-stage"
-            style={{ touchAction: 'none', cursor: loadState === 'ready' ? 'grab' : 'default', borderWidth: 0 }}
+            style={{ touchAction: 'none', cursor: loadState === 'ready' ? 'grab' : 'default' }}
           >
             <div
+              className="quad-canvas-fit"
               style={{
-                transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`,
-                transformOrigin: '0 0',
-                position: 'relative',
-                width: '100%',
-                height: '100%',
+                width: boardFit ? `${boardFit.width}px` : '100%',
+                height: boardFit ? `${boardFit.height}px` : '100%',
+                left: boardFit ? `${boardFit.baseX}px` : 0,
+                top: boardFit ? `${boardFit.baseY}px` : 0,
               }}
             >
-              <canvas
-                ref={canvasRef}
-                tabIndex={0}
-                onMouseMove={onCanvasMove}
-                onMouseLeave={onCanvasLeave}
-                onFocus={onCanvasFocus}
-                onKeyDown={onCanvasKeyDown}
-                aria-busy={loadState === 'loading'}
-                aria-label="Live canvas — focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color; tap a cell to place; drag to pan, pinch or scroll to zoom"
-                className="quad-canvas"
-                style={{ width: '100%', height: '100%', display: 'block', cursor: dims && loadState === 'ready' ? 'crosshair' : 'default' }}
-              />
-              {selected && dims && (
-                <div
-                  aria-hidden
-                  className="quad-marquee"
-                  style={{
-                    left: `${(selected.x / dims.width) * 100}%`,
-                    top: `${(selected.y / dims.height) * 100}%`,
-                    width: `${100 / dims.width}%`,
-                    height: `${100 / dims.height}%`,
-                  }}
+              <div
+                className="quad-canvas-layer"
+                style={{
+                  transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`,
+                }}
+              >
+                <canvas
+                  ref={canvasRef}
+                  tabIndex={0}
+                  onMouseMove={onCanvasMove}
+                  onMouseLeave={onCanvasLeave}
+                  onFocus={onCanvasFocus}
+                  onKeyDown={onCanvasKeyDown}
+                  aria-busy={loadState === 'loading'}
+                  aria-label="Live canvas — focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color; tap a cell to place; drag to pan, pinch or scroll to zoom"
+                  className="quad-canvas"
+                  style={{ width: '100%', height: '100%', display: 'block', cursor: dims && loadState === 'ready' ? 'crosshair' : 'default' }}
                 />
-              )}
-              {!selected && keyboardCell && dims && (
-                <div
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    left: `${(keyboardCell.x / dims.width) * 100}%`,
-                    top: `${(keyboardCell.y / dims.height) * 100}%`,
-                    width: `${100 / dims.width}%`,
-                    height: `${100 / dims.height}%`,
-                    outline: '2px dashed var(--qa)',
-                    outlineOffset: '-1px',
-                    boxSizing: 'border-box',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
+                {showGrid && dims && (
+                  <div
+                    aria-hidden
+                    className="quad-canvas-grid"
+                    style={{ backgroundSize: `${100 / dims.width}% ${100 / dims.height}%` }}
+                  />
+                )}
+                {selected && dims && (
+                  <div
+                    aria-hidden
+                    className="quad-marquee"
+                    style={{
+                      left: `${(selected.x / dims.width) * 100}%`,
+                      top: `${(selected.y / dims.height) * 100}%`,
+                      width: `${100 / dims.width}%`,
+                      height: `${100 / dims.height}%`,
+                    }}
+                  />
+                )}
+                {!selected && keyboardCell && dims && (
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: `${(keyboardCell.x / dims.width) * 100}%`,
+                      top: `${(keyboardCell.y / dims.height) * 100}%`,
+                      width: `${100 / dims.width}%`,
+                      height: `${100 / dims.height}%`,
+                      outline: '2px dashed var(--qa)',
+                      outlineOffset: '-1px',
+                      boxSizing: 'border-box',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             <div className="quad-hud" style={{ top: 12, left: 12, pointerEvents: 'none' }}>
@@ -771,10 +841,10 @@ export function CanvasView(): React.ReactElement {
               <span>{loadState === 'ready' ? 'LIVE' : loadState === 'error' ? 'OFFLINE' : 'LOADING'}</span>
             </div>
             <div
-              className="quad-hud quad-hud--ink quad-pixel"
-              style={{ bottom: 12, left: 12, pointerEvents: 'none', fontSize: 15 }}
+              className="quad-coordinate-readout quad-pixel"
+              style={{ bottom: 52, right: 12, pointerEvents: 'none' }}
             >
-              {selected ? `(${selected.x}, ${selected.y})` : keyboardCell ? `(${keyboardCell.x}, ${keyboardCell.y})` : '(--, --)'}
+              {coordinateLabel}
             </div>
             <div
               style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}
@@ -895,77 +965,25 @@ export function CanvasView(): React.ReactElement {
                 </div>
                 {customEditorOpen && (
                   <div id="quad-custom-color-editor" className="quad-custom-editor">
-                    <input
-                      ref={customColorNativeRef}
-                      type="color"
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      value={customDraftHex}
-                      onChange={(event) => chooseCustomDraft(event.currentTarget.value.toUpperCase())}
-                      className="quad-color-native"
-                    />
                     <div className="quad-custom-editor__top">
-                      <button
-                        type="button"
-                        className="quad-custom-preview"
-                        data-custom-preview-color={customDraftHex}
-                        style={{ '--custom-color': customDraftHex } as React.CSSProperties}
-                        onClick={() => customColorNativeRef.current?.click()}
-                        aria-label="Open browser color picker"
-                      />
+                      <label className="quad-native-color-shell">
+                        <span className="quad-sr-only">Choose custom color</span>
+                        <input
+                          ref={customColorNativeRef}
+                          type="color"
+                          value={customDraftHex}
+                          onChange={(event) => chooseCustomDraft(event.currentTarget.value.toUpperCase())}
+                          className="quad-native-color-input"
+                        />
+                      </label>
+                      <div className="quad-custom-color-meta">
+                        <span>Custom color</span>
+                        <strong>{customDraftHex}</strong>
+                      </div>
                       <button type="button" className="quad-eyedropper-btn" onClick={() => void pickScreenColor()} disabled={submitting}>
                         <span aria-hidden="true" className="quad-eyedropper-icon" />
                         <span>Eyedrop</span>
                       </button>
-                    </div>
-                    <div className="quad-custom-tools">
-                      <div className="quad-hue-wheel" aria-label="Hue wheel">
-                        <span aria-hidden="true" className="quad-hue-wheel__ring" />
-                        {HUE_STOPS.map((stop) => {
-                          const radians = ((stop.h - 90) * Math.PI) / 180;
-                          const hueHex = hsvToHex({ h: stop.h, s: 100, v: 100 });
-                          return (
-                            <button
-                              key={stop.h}
-                              type="button"
-                              data-hue-stop
-                              className={Math.abs(customDraftHsv.h - stop.h) < 8 ? 'quad-hue-stop quad-hue-stop--selected' : 'quad-hue-stop'}
-                              style={
-                                {
-                                  '--hue-color': hueHex,
-                                  left: `${50 + Math.cos(radians) * 39}%`,
-                                  top: `${50 + Math.sin(radians) * 39}%`,
-                                } as React.CSSProperties
-                              }
-                              aria-label={`Hue ${stop.name}`}
-                              aria-pressed={Math.abs(customDraftHsv.h - stop.h) < 8}
-                              onClick={() => setCustomHue(stop.h)}
-                            />
-                          );
-                        })}
-                        <button
-                          type="button"
-                          className="quad-hue-current"
-                          style={{ '--custom-color': customDraftHex } as React.CSSProperties}
-                          onClick={() => customColorNativeRef.current?.click()}
-                          aria-label="Open browser color picker"
-                        />
-                      </div>
-                      <div
-                        className="quad-sv-square"
-                        aria-label="Saturation and brightness"
-                        onPointerDown={onCustomSvPointerDown}
-                        onPointerMove={onCustomSvPointerMove}
-                        style={
-                          {
-                            '--sv-hue': hsvToHex({ h: customDraftHsv.h, s: 100, v: 100 }),
-                            '--sv-x': `${customDraftHsv.s}%`,
-                            '--sv-y': `${100 - customDraftHsv.v}%`,
-                          } as React.CSSProperties
-                        }
-                      >
-                        <span aria-hidden="true" className="quad-sv-thumb" />
-                      </div>
                     </div>
                     <div className="quad-custom-sliders">
                       {RGB_CHANNELS.map((channel) => (
@@ -984,30 +1002,6 @@ export function CanvasView(): React.ReactElement {
                           />
                         </label>
                       ))}
-                    </div>
-                    <div className="quad-mixer" aria-label="Palette mixer">
-                      <div className="quad-mixer__label">
-                        <span>Palette mixer</span>
-                        <span>blend with selected color</span>
-                      </div>
-                      <div className="quad-mixer__row">
-                        {mixerColors.map((hex) => {
-                          const normalizedMixerHex = hsvToHex(hexToHsv(hex));
-                          const selectedMixerColor = customDraftHex === normalizedMixerHex;
-                          return (
-                            <button
-                              key={hex}
-                              type="button"
-                              data-mixer-color
-                              className={selectedMixerColor ? 'quad-mixer-color quad-mixer-color--selected' : 'quad-mixer-color'}
-                              style={{ background: hex }}
-                              aria-label={`Mixer color ${hex}`}
-                              aria-pressed={selectedMixerColor}
-                              onClick={() => chooseCustomDraft(hex)}
-                            />
-                          );
-                        })}
-                      </div>
                     </div>
                     <button type="button" className="quad-btn quad-btn--primary" onClick={saveCustomColor} disabled={submitting}>
                       Save custom color
@@ -1064,9 +1058,6 @@ export function CanvasView(): React.ReactElement {
                 <div className="quad-pixel" style={{ fontSize: 26, color: 'var(--ink)', marginTop: 10 }}>
                   {cdBig}
                 </div>
-                <p style={{ fontSize: 18, color: 'var(--ink-strong)', margin: '12px 0 0', lineHeight: 1.45 }}>
-                  One pixel at a time. The cooldown is the same for everyone on campus.
-                </p>
               </div>
               <div style={{ textAlign: 'center', padding: '10px 8px' }}>
                 <div style={{ fontSize: 20, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -1075,6 +1066,25 @@ export function CanvasView(): React.ReactElement {
                 <p style={{ fontSize: 18, color: 'var(--muted-tag)', margin: '4px 0 0', lineHeight: 1.45 }}>
                   Pick a color, confirm, and your pixel appears for everyone at once.
                 </p>
+              </div>
+              <div className="quad-just-placed">
+                <div className="quad-just-placed__title">
+                  <span className="quad-dot quad-blink" style={{ background: 'var(--live-red)' }} />
+                  <span>Just placed</span>
+                </div>
+                <div className="quad-just-placed__list">
+                  {placementFeed.length > 0 ? (
+                    placementFeed.map((entry) => (
+                      <div key={entry.id} className="quad-just-placed__row">
+                        <span className="quad-just-placed__swatch" style={{ background: entry.hex }} />
+                        <span>{entry.by}</span>
+                        <span>{entry.coord}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="quad-just-placed__empty">Waiting for live placements.</div>
+                  )}
+                </div>
               </div>
               {statusLine}
             </div>

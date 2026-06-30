@@ -11,5 +11,7 @@ describe('CanvasView', () => {
     expect(html).not.toContain('id="canvas-keyboard-status"');
     expect(html).not.toContain('aria-describedby="canvas-keyboard-status"');
     expect(html).not.toContain('class="quad-canvas-keyboard-status"');
+    expect(html).toContain('Just placed');
+    expect(html).not.toContain('One pixel at a time. The cooldown is the same for everyone on campus.');
   });
 });

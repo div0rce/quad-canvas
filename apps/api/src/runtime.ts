@@ -18,7 +18,9 @@ import { RedisRateCounter, type RateCounter } from './services/rate-counter.js';
 
 const VERIFICATION_TTL_SECONDS = 15 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
-const COOKIE_SECURE = process.env['QUAD_COOKIE_INSECURE'] !== '1';
+// Local HTTP dev must not emit a Secure cookie or the browser will ignore the sign-in session.
+// Production stays Secure-by-default; QUAD_COOKIE_INSECURE remains an explicit escape hatch.
+const COOKIE_SECURE = process.env['QUAD_COOKIE_INSECURE'] === '1' ? false : process.env['NODE_ENV'] === 'production';
 const DATABASE_URL = process.env['DATABASE_URL'];
 const REDIS_URL = process.env['REDIS_URL'];
 // Behind the LB, trust forwarded headers so per-IP rate limiting sees the real client. A NUMBER is a

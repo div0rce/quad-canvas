@@ -74,7 +74,7 @@ export interface SessionInfo {
 
 export async function fetchSession(): Promise<SessionInfo> {
   try {
-    const res = await fetch(apiPath('/api/v1/session'), { credentials: 'include' });
+    const res = await fetch(apiPath('/api/v1/session'), { credentials: 'include', cache: 'no-store' });
     if (!res.ok) return { authenticated: false };
     const body = (await res.json()) as unknown;
     if (!isSessionResponse(body)) return { authenticated: false };

@@ -1528,11 +1528,26 @@ describe('leaderboards (HTTP)', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/api/v1/leaderboards', headers: { host: 'rutgers.localhost' } });
       expect(res.statusCode).toBe(200);
-      const body = res.json() as { category: string; entries: Array<{ rank: number; handle: string; pixelsPlaced: number }> };
+      const body = res.json() as {
+        category: string;
+        window: string;
+        entries: Array<{ rank: number; handle: string; score: number; pixelsPlaced: number; survivingPixels: number }>;
+      };
       expect(body.category).toBe('placements');
-      expect(body.entries[0]).toMatchObject({ rank: 1, handle: 'bob', pixelsPlaced: 2 });
-      expect(body.entries[1]).toMatchObject({ rank: 2, handle: 'alice', pixelsPlaced: 1 });
+      expect(body.window).toBe('all');
+      expect(body.entries[0]).toMatchObject({ rank: 1, handle: 'bob', score: 2, pixelsPlaced: 2, survivingPixels: 2 });
+      expect(body.entries[1]).toMatchObject({ rank: 2, handle: 'alice', score: 1, pixelsPlaced: 1, survivingPixels: 1 });
       expect(res.body).not.toContain('@'); // no DC3 email
+
+      const surviving = await app.inject({
+        method: 'GET',
+        url: '/api/v1/leaderboards?category=surviving&window=today',
+        headers: { host: 'rutgers.localhost' },
+      });
+      expect(surviving.statusCode).toBe(200);
+      const survivingBody = surviving.json() as { category: string; window: string; entries: Array<{ handle: string; score: number }> };
+      expect(survivingBody).toMatchObject({ category: 'surviving', window: 'today' });
+      expect(survivingBody.entries[0]).toMatchObject({ handle: 'bob', score: 2 });
 
       const bad = await app.inject({ method: 'GET', url: '/api/v1/leaderboards?category=nope', headers: { host: 'rutgers.localhost' } });
       expect(bad.statusCode).toBe(422);

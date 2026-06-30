@@ -173,11 +173,25 @@ export async function placePixel(
         // swallow — the counter is advisory; a failure must never fail the (committed) placement
       }
     }
+    let publicIdentity: Awaited<ReturnType<PlacementRepository['getPublicIdentity']>> = null;
+    try {
+      publicIdentity = await deps.repo.getPublicIdentity(principal.userId);
+    } catch {
+      // Attribution is display-only. The placement is already committed, so this cannot fail it.
+    }
     const broadcast: ws.PixelPlaced = {
       type: 'PixelPlaced',
       at: { x: outcome.row.x, y: outcome.row.y },
       color: outcome.row.color as domain.ColorIndex,
       seq: outcome.row.seq as domain.PerCanvasSequence,
+      ...(publicIdentity
+        ? {
+            by:
+              publicIdentity.displayName !== undefined
+                ? { handle: publicIdentity.handle as domain.PublicHandle, displayName: publicIdentity.displayName }
+                : { handle: publicIdentity.handle as domain.PublicHandle },
+          }
+        : {}),
     };
     // Best-effort fan-out: the placement is already durably committed in Postgres, so a transport
     // failure must NOT fail it — clients reconcile from the snapshot (watermark) on next connect.

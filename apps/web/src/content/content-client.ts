@@ -16,9 +16,23 @@ export async function fetchProfile(handle: string): Promise<dto.ProfileResponse 
   }
 }
 
-export async function fetchLeaderboard(): Promise<dto.LeaderboardResponse | null> {
+export type LeaderboardCategory = 'placements' | 'surviving';
+export type LeaderboardWindow = 'all' | 'today';
+
+export async function fetchLeaderboard(
+  query: {
+    readonly category?: LeaderboardCategory;
+    readonly window?: LeaderboardWindow;
+    readonly limit?: number;
+  } = {},
+): Promise<dto.LeaderboardResponse | null> {
   try {
-    const res = await fetch(apiPath('/api/v1/leaderboards'));
+    const params = new URLSearchParams();
+    if (query.category) params.set('category', query.category);
+    if (query.window) params.set('window', query.window);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const res = await fetch(apiPath(`/api/v1/leaderboards${suffix}`), { credentials: 'include' });
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isLeaderboardResponse(body) ? body : null;

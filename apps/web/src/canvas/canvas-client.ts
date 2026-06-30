@@ -29,6 +29,8 @@ export interface CanvasClientOptions {
   readonly openSocket: () => SocketLike;
   /** Called after the snapshot loads and after each applied delta — repaint from the buffer. */
   readonly onUpdate: (buffer: CanvasBuffer, context: CanvasUpdateContext) => void;
+  /** Called after a placement delta is actually reflected in the buffer. */
+  readonly onPlacement?: (message: ws.PixelPlaced, context: CanvasUpdateContext) => void;
   /** Backoff before a reconnect attempt (ms). Default 1000. */
   readonly reconnectDelayMs?: number;
   /** Scheduler for the reconnect backoff (injectable for tests). Default `setTimeout`. */
@@ -321,13 +323,17 @@ export class CanvasClient {
 
   #applyLive(message: ws.PixelPlaced | ws.PixelRolledBack): boolean {
     if (!this.#buffer) return false;
-    return message.type === 'PixelPlaced' ? this.#buffer.applyDelta(message) : this.#buffer.applyRollback(message);
+    const applied = message.type === 'PixelPlaced' ? this.#buffer.applyDelta(message) : this.#buffer.applyRollback(message);
+    if (applied && message.type === 'PixelPlaced') {
+      this.#opts.onPlacement?.(message, { palette: this.#palette });
+    }
+    return applied;
   }
 
   /** Feed a successful REST placement through the same sequence/gap guard as its WS echo. */
-  applyConfirmedPlacement(result: dto.PlacePixelResultResponse, canvasId: string | null): void {
+  applyConfirmedPlacement(result: dto.PlacePixelResultResponse, canvasId: string | null, by?: ws.PixelPlaced['by']): void {
     if (canvasId === null || canvasId !== this.#canvasId) return;
-    this.#onMessage({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq });
+    this.#onMessage({ type: 'PixelPlaced', at: result.at, color: result.color, seq: result.seq, ...(by ? { by } : {}) });
   }
 
   /** Stop the live connection (component unmount). No further reconnects. */

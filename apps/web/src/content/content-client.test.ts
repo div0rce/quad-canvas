@@ -45,4 +45,25 @@ describe('content response validation', () => {
     await expect(fetchProfile('alice')).resolves.toBeNull();
     await expect(fetchLeaderboard()).resolves.toBeNull();
   });
+
+  it('passes leaderboard filters through as query params', async () => {
+    let requested = '';
+    vi.stubGlobal('fetch', async (url: string) => {
+      requested = url;
+      return Response.json({
+        category: 'surviving',
+        window: 'today',
+        entries: [{ rank: 1, handle: 'alice', score: 3, pixelsPlaced: 4, survivingPixels: 3 }],
+      });
+    });
+
+    await expect(fetchLeaderboard({ category: 'surviving', window: 'today', limit: 10 })).resolves.toMatchObject({
+      category: 'surviving',
+      window: 'today',
+    });
+    expect(requested).toContain('/api/v1/leaderboards?');
+    expect(requested).toContain('category=surviving');
+    expect(requested).toContain('window=today');
+    expect(requested).toContain('limit=10');
+  });
 });
