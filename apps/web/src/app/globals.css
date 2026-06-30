@@ -584,7 +584,9 @@ a {
 .quad-canvas-page {
   display: flex;
   flex-direction: column;
+  flex: 0 0 100dvh;
   height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
 }
 .quad-canvas-main {
@@ -592,6 +594,7 @@ a {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .quad-canvas-body {
   flex: 1;
@@ -606,22 +609,6 @@ a {
   display: flex;
   flex-direction: column;
 }
-.quad-canvas-keyboard-status {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  flex: none;
-  margin: 0;
-  min-height: 44px;
-  padding: 10px 16px;
-  background-color: var(--canvas-well);
-  background-image: linear-gradient(var(--rail) 1px, transparent 1px), linear-gradient(90deg, var(--rail) 1px, transparent 1px);
-  background-size: 14px 14px;
-  border-top: var(--border-structural) solid var(--ink);
-  color: var(--ink-soft);
-  font-size: 16px;
-  line-height: 1.35;
-}
 .quad-canvas-rail {
   border-left: var(--border-structural) solid var(--ink);
   background: var(--surface);
@@ -630,6 +617,10 @@ a {
   overflow-y: auto;
 }
 .quad-canvas-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;

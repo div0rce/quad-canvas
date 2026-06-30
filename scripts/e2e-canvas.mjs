@@ -28,6 +28,32 @@ try {
   await page.goto(E2E_URL, { waitUntil: 'networkidle' });
   await page.waitForSelector('canvas', { timeout: 15000 });
   const box = await (await page.$('canvas')).boundingBox();
+  const layoutContract = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas.quad-canvas');
+    const stage = document.querySelector('.quad-canvas-stage');
+    const footer = document.querySelector('.quad-canvas-footer');
+    const canvasRect = canvas?.getBoundingClientRect();
+    const stageRect = stage?.getBoundingClientRect();
+    const footerRect = footer?.getBoundingClientRect();
+    const canvasLabel = canvas?.getAttribute('aria-label') ?? '';
+
+    return {
+      canvasAboveFooter: !!canvasRect && !!footerRect && canvasRect.bottom <= footerRect.top + 1,
+      canvasFillsStage:
+        !!canvasRect &&
+        !!stageRect &&
+        Math.abs(canvasRect.width - stageRect.width) < 1 &&
+        Math.abs(canvasRect.height - stageRect.height) < 1,
+      canvasInstructionsOnLabel:
+        canvasLabel.includes('focus the canvas to navigate cells with the arrow keys') &&
+        canvasLabel.includes('press Enter to choose a color'),
+      footerPinnedInViewport: !!footerRect && footerRect.bottom <= window.innerHeight && footerRect.top >= window.innerHeight - 96,
+      noCanvasStatusDescription: canvas?.getAttribute('aria-describedby') !== 'canvas-keyboard-status',
+      noDocumentScroll: document.documentElement.scrollHeight <= window.innerHeight && document.body.scrollHeight <= window.innerHeight,
+      noKeyboardStatusElement:
+        !document.getElementById('canvas-keyboard-status') && !document.querySelector('.quad-canvas-keyboard-status'),
+    };
+  });
   const transformOf = () =>
     page.evaluate(() => {
       const c = document.querySelector('canvas');
@@ -43,10 +69,11 @@ try {
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
   const selectWorks = !!(await page.waitForSelector(DIALOG, { timeout: 5000 }).catch(() => null));
 
-  // Wheel zoom → the Reset-view control appears (scale > fit).
+  // Wheel zoom → the canvas layer scale increases.
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  const scaleBeforeWheel = await scaleOf();
   await page.mouse.wheel(0, -360);
-  const zoomWorks = !!(await page.waitForSelector('button:has-text("Reset view")', { timeout: 4000 }).catch(() => null));
+  const zoomWorks = (await scaleOf()) > scaleBeforeWheel + 0.05;
 
   // Drag pan → the layer transform changes.
   const before = await transformOf();
@@ -76,7 +103,15 @@ try {
   const pinchWorks = (await scaleOf()) > scaleBeforePinch + 0.05;
   const oneQuickLookPerSelection = currentPixelReads === 2;
 
-  const results = { selectWorks, zoomWorks, panWorks, selectAfterGestures, pinchWorks, oneQuickLookPerSelection };
+  const results = {
+    ...layoutContract,
+    selectWorks,
+    zoomWorks,
+    panWorks,
+    selectAfterGestures,
+    pinchWorks,
+    oneQuickLookPerSelection,
+  };
   const failed = Object.entries(results).filter(([, ok]) => !ok).map(([k]) => k);
   console.log(JSON.stringify(results, null, 2));
   if (failed.length) {

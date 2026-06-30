@@ -476,12 +476,6 @@ export function CanvasView(): React.ReactElement {
       {status}
     </p>
   );
-  const keyboardStatus =
-    keyboardCell && !selected
-      ? `Keyboard cell (${keyboardCell.x}, ${keyboardCell.y}): ${
-          keyboardQuickLook?.key === `${keyboardCell.x},${keyboardCell.y}` ? keyboardQuickLook.label : 'Loading…'
-        } Press Enter to choose a color.`
-      : 'Focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color.';
 
   return (
     <div className="quad-canvas-main">
@@ -513,8 +507,7 @@ export function CanvasView(): React.ReactElement {
                 onFocus={onCanvasFocus}
                 onKeyDown={onCanvasKeyDown}
                 aria-busy={loadState === 'loading'}
-                aria-describedby="canvas-keyboard-status"
-                aria-label="Live canvas — tap a cell to place; drag to pan, pinch or scroll to zoom; use arrow keys and Enter to place"
+                aria-label="Live canvas — focus the canvas to navigate cells with the arrow keys, then press Enter to choose a color; tap a cell to place; drag to pan, pinch or scroll to zoom"
                 className="quad-canvas"
                 style={{ width: '100%', height: '100%', display: 'block', cursor: dims && loadState === 'ready' ? 'crosshair' : 'default' }}
               />
@@ -609,10 +602,6 @@ export function CanvasView(): React.ReactElement {
               </div>
             )}
           </div>
-
-          <p id="canvas-keyboard-status" className="quad-canvas-keyboard-status" role="status" aria-live="polite">
-            {keyboardStatus}
-          </p>
         </div>
 
         <div className="quad-canvas-rail">
