@@ -6,7 +6,7 @@ import { cooldown } from '@quad/core';
 import { createPlacementRepository, createPrismaClient } from '@quad/db';
 import { InMemoryRealtimeBus, RedisRealtimeBus, type RealtimeBus } from '@quad/realtime';
 import { AuthService } from './auth/auth-service.js';
-import { LogMailTransport, NullMailTransport } from './auth/mail.js';
+import { LogMailTransport, NullMailTransport, ResendMailTransport, type MailTransport } from './auth/mail.js';
 import { InMemorySessionStore, RedisSessionStore, type SessionStore } from './auth/session-store.js';
 import { InMemoryVerificationStore, RedisVerificationStore } from './auth/verification-store.js';
 import { buildApp } from './app.js';
@@ -60,13 +60,68 @@ export interface RuntimeAppOptions {
   readonly logger?: FastifyServerOptions['logger'];
 }
 
+interface MailRuntimeConfig {
+  readonly logToken: boolean;
+  readonly provider?: string;
+  readonly resendApiKey?: string;
+  readonly emailApiKey?: string;
+  readonly emailFrom?: string;
+  readonly webBaseUrl?: string;
+  readonly log: (message: string) => void;
+}
+
+interface MailRuntimeSelection {
+  readonly mail: MailTransport;
+  readonly delivers: boolean;
+  readonly warning?: string;
+}
+
+function configuredResendApiKey(config: MailRuntimeConfig): string | undefined {
+  if (config.resendApiKey) return config.resendApiKey;
+  return config.provider?.toLowerCase() === 'resend' ? config.emailApiKey : undefined;
+}
+
+function buildRuntimeMailTransport(config: MailRuntimeConfig): MailRuntimeSelection {
+  const provider = config.provider?.trim().toLowerCase();
+  const apiKey = configuredResendApiKey(config);
+  if ((provider === undefined || provider === '' || provider === 'resend') && apiKey && config.emailFrom && config.webBaseUrl) {
+    return {
+      mail: new ResendMailTransport({
+        apiKey,
+        from: config.emailFrom,
+        baseUrl: config.webBaseUrl,
+        log: config.log,
+      }),
+      delivers: true,
+    };
+  }
+
+  if (config.logToken) {
+    return { mail: new LogMailTransport(config.log), delivers: false };
+  }
+
+  const missing = [
+    ...(apiKey ? [] : ['RESEND_API_KEY']),
+    ...(config.emailFrom ? [] : ['EMAIL_FROM']),
+    ...(config.webBaseUrl ? [] : ['WEB_BASE_URL']),
+  ];
+  const unsupportedProvider =
+    provider && provider !== 'resend' ? ` Unsupported EMAIL_PROVIDER "${provider}" is not wired.` : '';
+  const missingConfig = missing.length > 0 ? ` Missing ${missing.join(', ')}.` : '';
+  return {
+    mail: new NullMailTransport(config.log),
+    delivers: false,
+    warning: `No mail provider is configured: email verification links are NOT delivered.${unsupportedProvider}${missingConfig}`,
+  };
+}
+
 export async function createRuntimeApp(opts: RuntimeAppOptions = {}): Promise<RuntimeApp> {
   let placement: PlacementDeps | undefined;
   let bus: RealtimeBus | undefined;
   let sessionStore: SessionStore | undefined;
   let sessionRedis: Redis | undefined;
   let authService: AuthService | undefined;
-  let mailNotDelivered = false; // prod with no real provider → warn (links aren't delivered)
+  let mailWarning: string | undefined;
   const readinessChecks: ReadinessCheck[] = [];
   const cleanups: RuntimeCleanup[] = [];
   if (DATABASE_URL) {
@@ -130,19 +185,27 @@ export async function createRuntimeApp(opts: RuntimeAppOptions = {}): Promise<Ru
     } else {
       sessionStore = new InMemorySessionStore();
     }
-    // Verification front-door: tokens share the session Redis (distinct key prefix). The mail
-    // transport is a no-op logger by default — production wires the real provider (B6/SMTP).
+    // Verification front-door: tokens share the session Redis (distinct key prefix).
     const verifications = sessionRedis ? new RedisVerificationStore(sessionRedis) : new InMemoryVerificationStore();
     // Mail transport. The verification token is a bearer credential (it alone mints a session), so it
     // must never reach production logs. Log it ONLY outside production (dev needs it to complete the
     // local flow with no provider) or on an explicit opt-in; in production with no real provider, use
     // the token-free transport AND warn that links aren't delivered (no silent "success"). Production
-    // wires B6/SMTP via this same MailTransport seam.
+    // wires Resend via this same MailTransport seam.
     const isProd = process.env['NODE_ENV'] === 'production';
     const logToken = !isProd || process.env['QUAD_LOG_MAIL_TOKEN'] === '1';
     const logAuth = (m: string): void => void process.stdout.write(`[auth] ${m}\n`);
-    const mail = logToken ? new LogMailTransport(logAuth) : new NullMailTransport(logAuth);
-    mailNotDelivered = !logToken; // no real SMTP is wired here; the null transport doesn't deliver
+    const mailSelection = buildRuntimeMailTransport({
+      logToken,
+      ...(process.env['EMAIL_PROVIDER'] ? { provider: process.env['EMAIL_PROVIDER'] } : {}),
+      ...(process.env['RESEND_API_KEY'] ? { resendApiKey: process.env['RESEND_API_KEY'] } : {}),
+      ...(process.env['EMAIL_API_KEY'] ? { emailApiKey: process.env['EMAIL_API_KEY'] } : {}),
+      ...(process.env['EMAIL_FROM'] ? { emailFrom: process.env['EMAIL_FROM'] } : {}),
+      ...(process.env['WEB_BASE_URL'] ? { webBaseUrl: process.env['WEB_BASE_URL'] } : {}),
+      log: logAuth,
+    });
+    const mail = mailSelection.mail;
+    mailWarning = !mailSelection.delivers && !logToken ? mailSelection.warning : undefined;
     authService = new AuthService({
       verifications,
       mail,
@@ -175,10 +238,8 @@ export async function createRuntimeApp(opts: RuntimeAppOptions = {}): Promise<Ru
   if (!placement) {
     app.log.warn('DATABASE_URL is not set — placement routes are disabled (health only).');
   }
-  if (mailNotDelivered) {
-    app.log.warn(
-      'No mail provider is configured: email verification links are NOT delivered. Wire SMTP/B6 before launch.',
-    );
+  if (mailWarning) {
+    app.log.warn(mailWarning);
   }
 
   return { app, cleanups };

@@ -13,7 +13,8 @@
     "@quad/realtime": "workspace:*",
     "fastify": "^5",
     "fastify-plugin": "^5",
-    "ioredis": "^5"
+    "ioredis": "^5",
+    "resend": "^6.16.0"
   },
   "devDependencies": {
     "@types/node": "^22",
