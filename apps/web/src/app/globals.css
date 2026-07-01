@@ -362,23 +362,6 @@ a {
   border: var(--border-component) solid var(--ink);
   border-radius: 50%;
   background: var(--custom-color);
-  cursor: pointer;
-  overflow: hidden;
-}
-.quad-native-color-input {
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.quad-native-color-input::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-.quad-native-color-input::-webkit-color-swatch {
-  border: 0;
 }
 .quad-eyedropper-btn {
   display: grid;

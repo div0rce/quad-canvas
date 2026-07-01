@@ -300,7 +300,6 @@ function writeStoredPlacementFeed(entries: readonly PlacementFeedEntry[]): void 
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const placementDialogRef = useRef<HTMLDivElement>(null);
-  const customColorNativeRef = useRef<HTMLInputElement>(null);
   const customSvRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<CanvasClient | null>(null);
   const placementIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -817,7 +816,7 @@ export function CanvasView(): React.ReactElement {
       }
       return;
     }
-    customColorNativeRef.current?.click();
+    setStatus('Eyedropper is unavailable in this browser.');
   }, [chooseAndSelectCustomHex]);
 
   const confirm = useCallback(async () => {
@@ -1161,16 +1160,7 @@ export function CanvasView(): React.ReactElement {
                       <button type="button" className="quad-eyedropper-btn" onClick={() => void pickScreenColor()} disabled={submitting} aria-label="Eyedropper">
                         <span aria-hidden="true" className="quad-eyedropper-icon" />
                       </button>
-                      <label className="quad-native-color-shell" title={customDraftHex}>
-                        <input
-                          ref={customColorNativeRef}
-                          type="color"
-                          value={customDraftHex}
-                          onChange={(event) => chooseAndSelectCustomHex(event.currentTarget.value.toUpperCase())}
-                          aria-label="Custom color"
-                          className="quad-native-color-input"
-                        />
-                      </label>
+                      <span className="quad-native-color-shell" title={customDraftHex} aria-hidden="true" />
                       <label className="quad-hue-slider">
                         <span className="quad-sr-only">Hue</span>
                         <input
