@@ -24,6 +24,30 @@ function isPublicIdentity(value: unknown): boolean {
   );
 }
 
+function isProfileStats(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonNegativeInteger(value['pixelsPlaced']) &&
+    isNonNegativeInteger(value['survivingPixels']) &&
+    isNonNegativeInteger(value['streakDays']) &&
+    isNonNegativeInteger(value['longestStreakDays']) &&
+    isNonNegativeInteger(value['canvasesParticipated']) &&
+    (value['favoriteColor'] === undefined || isNonNegativeInteger(value['favoriteColor']))
+  );
+}
+
+function isProfileRecentPlacement(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    typeof value['term'] === 'string' &&
+    isCoordinate(value['at']) &&
+    isNonNegativeInteger(value['color']) &&
+    typeof value['placedAt'] === 'string' &&
+    typeof value['surviving'] === 'boolean'
+  );
+}
+
 export function isCanvasMetaResponse(value: unknown): value is dto.CanvasMetaResponse {
   return (
     isRecord(value) &&
@@ -136,7 +160,11 @@ export function isProfileResponse(value: unknown): value is dto.ProfileResponse 
     Array.isArray(value['contributions']) &&
     value['contributions'].every(
       (entry) => isRecord(entry) && typeof entry['date'] === 'string' && isNonNegativeInteger(entry['count']),
-    )
+    ) &&
+    isProfileStats(value['lifetimeStats']) &&
+    isProfileStats(value['currentTermStats']) &&
+    Array.isArray(value['recentPlacements']) &&
+    value['recentPlacements'].every(isProfileRecentPlacement)
   );
 }
 

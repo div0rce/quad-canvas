@@ -1490,14 +1490,57 @@ describe('profiles (HTTP)', () => {
       expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2, currentTermPixelsPlaced: 2 });
       expect(pub.body).not.toContain('@'); // no DC3 email
       // Contribution histogram: both placements are today → one active day with count 2.
-      const pubData = pub.json() as { contributions: Array<{ date: string; count: number }> };
+      const pubData = pub.json() as {
+        contributions: Array<{ date: string; count: number }>;
+        lifetimeStats: {
+          pixelsPlaced: number;
+          survivingPixels: number;
+          streakDays: number;
+          longestStreakDays: number;
+          canvasesParticipated: number;
+          favoriteColor?: number;
+        };
+        currentTermStats: {
+          pixelsPlaced: number;
+          survivingPixels: number;
+          streakDays: number;
+          longestStreakDays: number;
+          canvasesParticipated: number;
+          favoriteColor?: number;
+        };
+        recentPlacements: Array<{ at: { x: number; y: number }; color: number; surviving: boolean }>;
+      };
       expect(pubData.contributions).toHaveLength(1);
       expect(pubData.contributions[0]?.count).toBe(2);
+      expect(pubData.lifetimeStats).toMatchObject({
+        pixelsPlaced: 2,
+        survivingPixels: 2,
+        streakDays: 1,
+        longestStreakDays: 1,
+        canvasesParticipated: 1,
+        favoriteColor: 1,
+      });
+      expect(pubData.currentTermStats).toMatchObject({
+        pixelsPlaced: 2,
+        survivingPixels: 2,
+        streakDays: 1,
+        longestStreakDays: 1,
+        canvasesParticipated: 1,
+        favoriteColor: 1,
+      });
+      expect(pubData.recentPlacements).toHaveLength(2);
+      expect(pubData.recentPlacements[0]).toMatchObject({ at: { x: 1, y: 0 }, color: 2, surviving: true });
+      expect(pubData.recentPlacements[1]).toMatchObject({ at: { x: 0, y: 0 }, color: 1, surviving: true });
 
       // A new term (later canvas) with no placements → lifetime stays, current-term resets to 0.
       await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F27', status: 'active', width: 10, height: 10 } });
       const afterRollover = await app.inject({ method: 'GET', url: '/api/v1/profiles/alice', headers: { host: 'rutgers.localhost' } });
-      expect(afterRollover.json() as object).toMatchObject({ pixelsPlaced: 2, currentTermPixelsPlaced: 0 });
+      expect(afterRollover.json() as object).toMatchObject({
+        pixelsPlaced: 2,
+        currentTermPixelsPlaced: 0,
+        lifetimeStats: { pixelsPlaced: 2, survivingPixels: 2, canvasesParticipated: 1, favoriteColor: 1 },
+        currentTermStats: { pixelsPlaced: 0, survivingPixels: 0, canvasesParticipated: 0 },
+      });
 
       const me = await app.inject({ method: 'GET', url: '/api/v1/profiles/me', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
       expect(me.statusCode).toBe(200);

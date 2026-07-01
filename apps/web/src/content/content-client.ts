@@ -51,5 +51,11 @@ export function ordinal(n: number): string {
 /** Heat bucket (0–4) for a day's count relative to the busiest day, for the contribution heatmap. */
 export function heatLevel(count: number, max: number): number {
   if (count <= 0 || max <= 0) return 0;
-  return Math.min(4, Math.ceil((count / max) * 4));
+  if (count === 1 || max <= 1) return 1;
+  if (count <= 3) return 2;
+  if (count <= 7) return 3;
+  const ratio = count / max;
+  if (ratio <= 0.33) return 2;
+  if (ratio <= 0.66) return 3;
+  return 4;
 }

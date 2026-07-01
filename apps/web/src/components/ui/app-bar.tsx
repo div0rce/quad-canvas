@@ -31,7 +31,7 @@ export function AppBar({
 
   return (
     <header className={variant === 'dark' ? 'quad-appbar quad-appbar--dark' : 'quad-appbar'}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div className="quad-appbar__left">
         <div className="quad-appbar__brand">
           <Link href="/" className="quad-appbar__home" aria-label="Quad — home">
             <PixelLogo size={logoSize} />
@@ -58,7 +58,7 @@ export function AppBar({
           </nav>
         ) : null}
       </div>
-      {right ? <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>{right}</div> : null}
+      {right ? <div className="quad-appbar__right">{right}</div> : null}
     </header>
   );
 }

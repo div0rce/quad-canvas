@@ -4,11 +4,13 @@ import { ordinal, heatLevel, fetchLeaderboard, fetchProfile } from './content-cl
 afterEach(() => vi.unstubAllGlobals());
 
 describe('heatLevel', () => {
-  it('buckets a day count 0–4 relative to the busiest day', () => {
+  it('keeps single-placement days low and climbs toward the busiest day', () => {
     expect(heatLevel(0, 10)).toBe(0);
     expect(heatLevel(1, 10)).toBe(1);
-    expect(heatLevel(5, 10)).toBe(2);
+    expect(heatLevel(3, 3)).toBe(2);
+    expect(heatLevel(5, 10)).toBe(3);
     expect(heatLevel(10, 10)).toBe(4);
+    expect(heatLevel(1, 1)).toBe(1);
   });
 
   it('guards empty input', () => {

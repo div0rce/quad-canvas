@@ -3,6 +3,7 @@ import {
   isCanvasMetaResponse,
   isCanvasSnapshotResponse,
   isPlacePixelResultResponse,
+  isProfileResponse,
   isReplayMetaResponse,
 } from './api-response';
 
@@ -34,5 +35,53 @@ describe('API response guards', () => {
   it('rejects incomplete replay metadata', () => {
     expect(isReplayMetaResponse({ term: 'F26', eventCount: 2, fromSeq: 1, toSeq: 2, available: false })).toBe(true);
     expect(isReplayMetaResponse({ term: 'F26', eventCount: 2 })).toBe(false);
+  });
+
+  it('requires the full public profile stats contract', () => {
+    expect(
+      isProfileResponse({
+        handle: 'alice',
+        role: 'participant',
+        joinedAt: '2026-06-29T00:00:00.000Z',
+        pixelsPlaced: 2,
+        currentTermPixelsPlaced: 1,
+        contributions: [{ date: '2026-06-29', count: 2 }],
+        lifetimeStats: {
+          pixelsPlaced: 2,
+          survivingPixels: 1,
+          streakDays: 1,
+          longestStreakDays: 1,
+          canvasesParticipated: 1,
+          favoriteColor: 3,
+        },
+        currentTermStats: {
+          pixelsPlaced: 1,
+          survivingPixels: 1,
+          streakDays: 1,
+          longestStreakDays: 1,
+          canvasesParticipated: 1,
+        },
+        recentPlacements: [
+          {
+            id: 'evt_1',
+            term: 'F26',
+            at: { x: 1, y: 2 },
+            color: 3,
+            placedAt: '2026-06-29T00:00:00.000Z',
+            surviving: true,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isProfileResponse({
+        handle: 'alice',
+        role: 'participant',
+        joinedAt: '2026-06-29T00:00:00.000Z',
+        pixelsPlaced: 2,
+        currentTermPixelsPlaced: 1,
+        contributions: [],
+      }),
+    ).toBe(false);
   });
 });

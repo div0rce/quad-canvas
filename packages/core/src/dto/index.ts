@@ -225,12 +225,34 @@ export interface ProfileResponse {
   readonly currentTermPixelsPlaced: number;
   /** Per-day placement counts (recent window, oldest→newest) for the contribution heatmap. */
   readonly contributions: ContributionDay[];
+  readonly lifetimeStats: ProfileStats;
+  readonly currentTermStats: ProfileStats;
+  /** Latest visible public placement facts for the member, newest first. */
+  readonly recentPlacements: readonly ProfileRecentPlacement[];
 }
 
 /** One day's placement count for the contribution heatmap. `date` is `YYYY-MM-DD`. */
 export interface ContributionDay {
   readonly date: string;
   readonly count: number;
+}
+
+export interface ProfileStats {
+  readonly pixelsPlaced: number;
+  readonly survivingPixels: number;
+  readonly streakDays: number;
+  readonly longestStreakDays: number;
+  readonly canvasesParticipated: number;
+  readonly favoriteColor?: number;
+}
+
+export interface ProfileRecentPlacement {
+  readonly id: string;
+  readonly term: string;
+  readonly at: Coordinate;
+  readonly color: number;
+  readonly placedAt: string;
+  readonly surviving: boolean;
 }
 
 /** The caller's own profile. Currently the same DC2 shape (private fields are a follow-on). */
