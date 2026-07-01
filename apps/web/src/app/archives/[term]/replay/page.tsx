@@ -121,7 +121,7 @@ export default function ReplayPage(): React.ReactElement {
           tenantLabel={tenant?.title ?? null}
           nav={[
             { label: 'Canvas', href: '/canvas' },
-            { label: 'Board', href: '/leaderboards' },
+            { label: 'Leaderboard', href: '/leaderboards' },
             { label: 'Archive', href: '/archives', active: true },
           ]}
           right={<span className="quad-eyebrow">From the permanent history</span>}

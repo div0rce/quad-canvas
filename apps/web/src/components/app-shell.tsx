@@ -69,7 +69,7 @@ export function AppShell(): React.ReactElement {
           tenantLabel={tenant.title}
           nav={[
             { label: 'Canvas', href: '/canvas' },
-            { label: 'Board', href: '/leaderboards' },
+            { label: 'Leaderboard', href: '/leaderboards' },
             { label: 'Archive', href: '/archives' },
           ]}
           right={<SessionBadge />}

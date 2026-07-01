@@ -145,8 +145,8 @@ export default function ProfilePage(): React.ReactElement {
           tenantLabel={tenant?.title ?? null}
           nav={[
             { label: 'Canvas', href: '/canvas' },
-            { label: 'Profile', href: `/profiles/${handle}`, active: true },
-            { label: 'Board', href: '/leaderboards' },
+            { label: 'Leaderboard', href: '/leaderboards' },
+            { label: 'Archive', href: '/archives' },
           ]}
           right={<SessionBadge />}
         />

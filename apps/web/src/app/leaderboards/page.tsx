@@ -63,7 +63,7 @@ export default function LeaderboardsPage(): React.ReactElement {
           tenantLabel={tenant?.title ?? null}
           nav={[
             { label: 'Canvas', href: '/canvas' },
-            { label: 'Board', href: '/leaderboards', active: true },
+            { label: 'Leaderboard', href: '/leaderboards', active: true },
             { label: 'Archive', href: '/archives' },
           ]}
           right={<SessionBadge />}

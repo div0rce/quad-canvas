@@ -32,10 +32,11 @@ import { PixelInspector } from './pixel-inspector';
 const CELL_PX = 8;
 const EMPTY_HEX = '#F4F4F4';
 const DEFAULT_CUSTOM_HEX = '#1D70B8';
+const PLACEMENT_FEED_STORAGE_KEY = 'quad:canvas:just-placed:v1';
 const RGB_CHANNELS = [
-  { key: 'r', label: 'Red' },
-  { key: 'g', label: 'Green' },
-  { key: 'b', label: 'Blue' },
+  { key: 'r', label: 'R' },
+  { key: 'g', label: 'G' },
+  { key: 'b', label: 'B' },
 ] as const;
 
 type RgbChannel = (typeof RGB_CHANNELS)[number]['key'];
@@ -230,10 +231,39 @@ function feedEntryFromPlacement(message: ws.PixelPlaced, paletteKey: string): Pl
   };
 }
 
+function readStoredPlacementFeed(): readonly PlacementFeedEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PLACEMENT_FEED_STORAGE_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry) => {
+      if (!isRecord(entry)) return [];
+      const id = entry['id'];
+      const hex = entry['hex'];
+      const by = entry['by'];
+      const coord = entry['coord'];
+      return typeof id === 'string' && typeof hex === 'string' && typeof by === 'string' && typeof coord === 'string'
+        ? [{ id, hex, by, coord }]
+        : [];
+    }).slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredPlacementFeed(entries: readonly PlacementFeedEntry[]): void {
+  try {
+    window.localStorage.setItem(PLACEMENT_FEED_STORAGE_KEY, JSON.stringify(entries.slice(0, 5)));
+  } catch {
+    // Storage can be unavailable in private contexts; the live feed still works in memory.
+  }
+}
+
 export function CanvasView(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const placementDialogRef = useRef<HTMLDivElement>(null);
   const customColorNativeRef = useRef<HTMLInputElement>(null);
+  const customSvRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<CanvasClient | null>(null);
   const placementIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
   // Pan/zoom (P-AC-11) — declared up here so the click/hover handlers below can read them.
@@ -305,6 +335,14 @@ export function CanvasView(): React.ReactElement {
     };
   }, []);
 
+  useEffect(() => {
+    setPlacementFeed(readStoredPlacementFeed());
+  }, []);
+
+  useEffect(() => {
+    if (placementFeed.length > 0) writeStoredPlacementFeed(placementFeed);
+  }, [placementFeed]);
+
   const addPlacementToFeed = useCallback((message: ws.PixelPlaced, paletteKey: string) => {
     const entry = feedEntryFromPlacement(message, paletteKey);
     setPlacementFeed((items) => [entry, ...items.filter((item) => item.id !== entry.id)].slice(0, 5));
@@ -352,8 +390,6 @@ export function CanvasView(): React.ReactElement {
   const [hover, setHover] = useState<{ label: string; left: number; top: number } | null>(null);
   const hoverCell = useRef<string>('');
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [selectedQuickLook, setSelectedQuickLook] = useState<{ key: string; label: string } | null>(null);
-  const selectedKey = selected ? `${selected.x},${selected.y}` : null;
 
   // Select the cell at a screen point. Driven by pointer-UP (a tap), not click — with pointer capture a
   // click can target the capturing container rather than the canvas, which would break selection.
@@ -390,9 +426,7 @@ export function CanvasView(): React.ReactElement {
     let active = true;
     void fetchCurrentPixel(selected.x, selected.y).then((result) => {
       if (active) {
-        const next = { key, label: currentPixelLabel(result, dims?.palette ?? 'default') };
-        setSelectedQuickLook(next);
-        setKeyboardQuickLook(next);
+        setKeyboardQuickLook({ key, label: currentPixelLabel(result, dims?.palette ?? 'default') });
       }
     });
     return () => {
@@ -435,7 +469,7 @@ export function CanvasView(): React.ReactElement {
       hoverTimer.current = setTimeout(() => {
         void fetchCurrentPixel(cell.x, cell.y).then((result) => {
           if (hoverCell.current === key) {
-            setHover({ label: `(${cell.x}, ${cell.y}): ${currentPixelLabel(result, dims.palette)}`, left, top });
+            setHover({ label: currentPixelLabel(result, dims.palette), left, top });
           }
         });
       }, 120);
@@ -644,36 +678,78 @@ export function CanvasView(): React.ReactElement {
     setPendingColor(color);
   }, []);
 
-  const setCustomChannel = useCallback((channel: RgbChannel, value: number) => {
-    setCustomDraftHsv((hsv) => rgbToHsv({ ...hsvToRgb(hsv), [channel]: colorByte(value) }));
-  }, []);
+  const selectCustomDraft = useCallback((hsv: HsvColor = customDraftHsv) => {
+    const hex = hsvToHex(hsv);
+    const encoded = encodeCustomColor(hex);
+    if (encoded === null) return;
+    setSavedCustomHex(hex);
+    setPendingColor(encoded);
+  }, [customDraftHsv]);
 
-  const chooseCustomDraft = useCallback((hex: string) => {
-    setCustomDraftHsv(hexToHsv(hex));
-  }, []);
+  const setCustomChannel = useCallback((channel: RgbChannel, value: number) => {
+    setCustomDraftHsv((hsv) => {
+      const next = rgbToHsv({ ...hsvToRgb(hsv), [channel]: colorByte(value) });
+      selectCustomDraft(next);
+      return next;
+    });
+  }, [selectCustomDraft]);
+
+  const setCustomHue = useCallback((value: number) => {
+    setCustomDraftHsv((hsv) => {
+      const next = { ...hsv, h: colorHue(value) };
+      selectCustomDraft(next);
+      return next;
+    });
+  }, [selectCustomDraft]);
+
+  const chooseAndSelectCustomHex = useCallback((hex: string) => {
+    const hsv = hexToHsv(hex);
+    setCustomDraftHsv(hsv);
+    selectCustomDraft(hsv);
+  }, [selectCustomDraft]);
+
+  const openCustomEditor = useCallback(() => {
+    setCustomEditorOpen((open) => {
+      if (!open) selectCustomDraft();
+      return !open;
+    });
+  }, [selectCustomDraft]);
+
+  const updateCustomSv = useCallback((clientX: number, clientY: number) => {
+    const rect = customSvRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    const s = colorPercent(((clientX - rect.left) / rect.width) * 100);
+    const v = colorPercent(100 - ((clientY - rect.top) / rect.height) * 100);
+    setCustomDraftHsv((hsv) => {
+      const next = { ...hsv, s, v };
+      selectCustomDraft(next);
+      return next;
+    });
+  }, [selectCustomDraft]);
+
+  const onCustomSvPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateCustomSv(event.clientX, event.clientY);
+  }, [updateCustomSv]);
+
+  const onCustomSvPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.buttons & 1) !== 1) return;
+    updateCustomSv(event.clientX, event.clientY);
+  }, [updateCustomSv]);
 
   const pickScreenColor = useCallback(async () => {
     const EyeDropper = window.EyeDropper;
     if (EyeDropper) {
       try {
         const result = await new EyeDropper().open();
-        chooseCustomDraft(result.sRGBHex.toUpperCase());
+        chooseAndSelectCustomHex(result.sRGBHex.toUpperCase());
       } catch {
         // The user can cancel the eyedropper; leave the existing selection unchanged.
       }
       return;
     }
     customColorNativeRef.current?.click();
-  }, [chooseCustomDraft]);
-
-  const saveCustomColor = useCallback(() => {
-    const customDraftHex = hsvToHex(customDraftHsv);
-    const encoded = encodeCustomColor(customDraftHex);
-    if (encoded === null) return;
-    setSavedCustomHex(customDraftHex);
-    setPendingColor(encoded);
-    setCustomEditorOpen(false);
-  }, [customDraftHsv]);
+  }, [chooseAndSelectCustomHex]);
 
   const confirm = useCallback(async () => {
     if (!selected || pendingColor === null || submitting) return; // single in-flight placement only
@@ -736,7 +812,9 @@ export function CanvasView(): React.ReactElement {
   const palette = dims ? getPaletteByKey(dims.palette) : null;
   const customDraftHex = hsvToHex(customDraftHsv);
   const customDraftRgb = hsvToRgb(customDraftHsv);
+  const customDraftHueHex = hsvToHex({ h: customDraftHsv.h, s: 100, v: 100 });
   const savedCustomColorValue = savedCustomHex ? encodeCustomColor(savedCustomHex) : null;
+  const customDraftColorValue = encodeCustomColor(customDraftHex);
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
     ? 'Placing…'
@@ -842,7 +920,7 @@ export function CanvasView(): React.ReactElement {
             </div>
             <div
               className="quad-coordinate-readout quad-pixel"
-              style={{ bottom: 52, right: 12, pointerEvents: 'none' }}
+              style={{ bottom: 52, left: 12, pointerEvents: 'none' }}
             >
               {coordinateLabel}
             </div>
@@ -945,8 +1023,12 @@ export function CanvasView(): React.ReactElement {
                     aria-controls="quad-custom-color-editor"
                     title="Custom color editor"
                     disabled={submitting}
-                    onClick={() => setCustomEditorOpen((open) => !open)}
-                    className={customEditorOpen ? 'quad-swatch quad-swatch--custom-toggle quad-swatch--selected' : 'quad-swatch quad-swatch--custom-toggle'}
+                    onClick={openCustomEditor}
+                    className={
+                      customEditorOpen || pendingColor === customDraftColorValue
+                        ? 'quad-swatch quad-swatch--custom-toggle quad-swatch--selected'
+                        : 'quad-swatch quad-swatch--custom-toggle'
+                    }
                   >
                     <span aria-hidden="true" className="quad-custom-plus" />
                   </button>
@@ -964,48 +1046,89 @@ export function CanvasView(): React.ReactElement {
                   )}
                 </div>
                 {customEditorOpen && (
-                  <div id="quad-custom-color-editor" className="quad-custom-editor">
-                    <div className="quad-custom-editor__top">
-                      <label className="quad-native-color-shell">
+                  <div
+                    id="quad-custom-color-editor"
+                    className="quad-custom-editor"
+                    style={
+                      {
+                        '--custom-color': customDraftHex,
+                        '--custom-hue': customDraftHueHex,
+                        '--sv-x': `${customDraftHsv.s}%`,
+                        '--sv-y': `${100 - customDraftHsv.v}%`,
+                        '--hue-x': `${(customDraftHsv.h / 359) * 100}%`,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <div
+                      ref={customSvRef}
+                      className="quad-custom-sv"
+                      role="slider"
+                      aria-label="Color shade"
+                      aria-valuetext={customDraftHex}
+                      tabIndex={0}
+                      onPointerDown={onCustomSvPointerDown}
+                      onPointerMove={onCustomSvPointerMove}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          setCustomDraftHsv((hsv) => {
+                            const next =
+                              event.key === 'ArrowLeft'
+                                ? { ...hsv, s: colorPercent(hsv.s - 2) }
+                                : event.key === 'ArrowRight'
+                                  ? { ...hsv, s: colorPercent(hsv.s + 2) }
+                                  : event.key === 'ArrowUp'
+                                    ? { ...hsv, v: colorPercent(hsv.v + 2) }
+                                    : { ...hsv, v: colorPercent(hsv.v - 2) };
+                            selectCustomDraft(next);
+                            return next;
+                          });
+                        }
+                      }}
+                    >
+                      <span className="quad-custom-sv__thumb" />
+                    </div>
+                    <div className="quad-custom-native-row">
+                      <button type="button" className="quad-eyedropper-btn" onClick={() => void pickScreenColor()} disabled={submitting} aria-label="Eyedropper">
+                        <span aria-hidden="true" className="quad-eyedropper-icon" />
+                      </button>
+                      <label className="quad-native-color-shell" title={customDraftHex}>
                         <span className="quad-sr-only">Choose custom color</span>
                         <input
                           ref={customColorNativeRef}
                           type="color"
                           value={customDraftHex}
-                          onChange={(event) => chooseCustomDraft(event.currentTarget.value.toUpperCase())}
+                          onChange={(event) => chooseAndSelectCustomHex(event.currentTarget.value.toUpperCase())}
                           className="quad-native-color-input"
                         />
                       </label>
-                      <div className="quad-custom-color-meta">
-                        <span>Custom color</span>
-                        <strong>{customDraftHex}</strong>
-                      </div>
-                      <button type="button" className="quad-eyedropper-btn" onClick={() => void pickScreenColor()} disabled={submitting}>
-                        <span aria-hidden="true" className="quad-eyedropper-icon" />
-                        <span>Eyedrop</span>
-                      </button>
+                      <label className="quad-hue-slider">
+                        <span className="quad-sr-only">Hue</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="359"
+                          value={customDraftHsv.h}
+                          onChange={(event) => setCustomHue(Number(event.currentTarget.value))}
+                        />
+                      </label>
                     </div>
-                    <div className="quad-custom-sliders">
+                    <div className="quad-custom-rgb">
                       {RGB_CHANNELS.map((channel) => (
-                        <label key={channel.key} className="quad-color-slider">
-                          <span>
-                            {channel.label} <i>{customDraftRgb[channel.key]}</i>
-                          </span>
+                        <label key={channel.key} className="quad-color-number">
                           <input
                             id={`quad-custom-color-${channel.key}`}
-                            type="range"
+                            type="number"
                             min="0"
                             max="255"
                             value={customDraftRgb[channel.key]}
                             onChange={(event) => setCustomChannel(channel.key, Number(event.currentTarget.value))}
                             aria-label={`${channel.label} channel`}
                           />
+                          <span>{channel.label}</span>
                         </label>
                       ))}
                     </div>
-                    <button type="button" className="quad-btn quad-btn--primary" onClick={saveCustomColor} disabled={submitting}>
-                      Save custom color
-                    </button>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -1032,9 +1155,6 @@ export function CanvasView(): React.ReactElement {
                 <span className="quad-eyebrow" style={{ fontSize: 18 }}>
                   Pixel story
                 </span>
-                {selectedQuickLook?.key === selectedKey && (
-                  <p style={{ fontSize: 18, color: 'var(--ink-soft)', margin: '10px 0 0' }}>{selectedQuickLook.label}</p>
-                )}
                 {dims && (
                   <div style={{ marginTop: 12 }}>
                     <PixelInspector

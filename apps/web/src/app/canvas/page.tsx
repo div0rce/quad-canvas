@@ -15,7 +15,7 @@ export default async function CanvasPage(): Promise<React.ReactElement> {
           tenantLabel={tenant?.title ?? null}
           nav={[
             { label: 'Canvas', href: '/canvas', active: true },
-            { label: 'Board', href: '/leaderboards' },
+            { label: 'Leaderboard', href: '/leaderboards' },
             { label: 'Archive', href: '/archives' },
           ]}
           right={<SessionBadge />}
