@@ -689,6 +689,68 @@ a {
   color: var(--ink);
 }
 
+/* ----- Signed-in user menu (chip button + dropdown) ----- */
+.quad-usermenu {
+  position: relative;
+  display: inline-flex;
+}
+.quad-usermenu__chip {
+  cursor: pointer;
+  font: inherit;
+  font-size: 20px;
+}
+.quad-usermenu__caret {
+  font-size: 12px;
+  color: var(--muted-tag);
+  margin-left: 2px;
+}
+.quad-usermenu__chip:focus-visible {
+  outline: 3px solid var(--status-blue);
+  outline-offset: 2px;
+}
+.quad-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.quad-menu__item {
+  appearance: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 18px;
+  text-align: left;
+  padding: 10px 16px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.quad-menu__item:hover {
+  background: var(--qa-tint2);
+}
+.quad-menu__item:focus-visible {
+  outline: 3px solid var(--status-blue);
+  outline-offset: -3px;
+}
+.quad-menu__item--separated {
+  border-top: var(--border-component) solid var(--ink);
+}
+.quad-menu__item--destructive {
+  color: var(--muted-tag);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 16px;
+}
+.quad-menu__item--destructive:hover {
+  color: var(--ink);
+}
+
 /* ----- Canvas stage (the framed live surface) + HUD overlays ----- */
 .quad-canvas-stage {
   position: relative;

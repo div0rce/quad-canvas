@@ -3,8 +3,8 @@
 // apps/web — session badge. Reflects the current identity from GET /session (DC2 handle/role) and
 // offers sign-in / sign-out. The server stays authoritative — this is display + a convenience link.
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { fetchSession, signOut, type SessionInfo } from './auth-client';
+import { UserMenu } from './user-menu';
 
 function normalizedHandle(handle: string | undefined): string {
   return handle?.replace(/^@/, '') ?? '';
@@ -30,24 +30,13 @@ export function SessionBadgeView({
     );
   }
 
-  const handle = normalizedHandle(session.handle);
-  const atHandle = handle ? `@${handle}` : '';
-  const initial = (handle[0] ?? '?').toUpperCase();
   return (
-    <span className="quad-session-actions">
-      <Link className="quad-btn quad-btn--primary" href={profileHrefForSession(session)}>
-        Profile
-      </Link>
-      <span className="quad-chip" title={session.role ? `Signed in (${session.role})` : 'Signed in'}>
-        <span>{atHandle || 'Signed in'}</span>
-        <span className="quad-avatar" style={{ width: 26, height: 26, fontSize: 11 }}>
-          {initial}
-        </span>
-      </span>
-      <button type="button" onClick={onSignOut} className="quad-session-signout">
-        Sign out
-      </button>
-    </span>
+    <UserMenu
+      handle={normalizedHandle(session.handle)}
+      {...(session.role ? { role: session.role } : {})}
+      profileHref={profileHrefForSession(session)}
+      onSignOut={onSignOut ?? (() => undefined)}
+    />
   );
 }
 
