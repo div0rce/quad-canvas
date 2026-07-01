@@ -315,12 +315,12 @@ export function CanvasView(): React.ReactElement {
   const [dims, setDims] = useState<Dims | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  const [pointerCell, setPointerCell] = useState<{ x: number; y: number } | null>(null);
   const [keyboardCell, setKeyboardCell] = useState<{ x: number; y: number } | null>(null);
   const [keyboardQuickLook, setKeyboardQuickLook] = useState<{ key: string; label: string } | null>(null);
   const [pendingColor, setPendingColor] = useState<number | null>(null);
   const [customEditorOpen, setCustomEditorOpen] = useState(false);
   const [customDraftHsv, setCustomDraftHsv] = useState<HsvColor>(() => hexToHsv(DEFAULT_CUSTOM_HEX));
-  const [savedCustomHex, setSavedCustomHex] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [inspectorNonce, setInspectorNonce] = useState(0); // bumps to refetch the inspector after a placement
@@ -520,10 +520,12 @@ export function CanvasView(): React.ReactElement {
   const onCanvasMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
-      if (!canvas || !dims || selected) return; // selected-cell quick-look owns the same information
+      if (!canvas || !dims) return;
       if (pointers.current.size > 0) return; // an active pan/pinch is not a hover-inspection intent
       const rect = canvas.getBoundingClientRect();
       const cell = cellFromPoint(rect, event.clientX, event.clientY, dims.width, dims.height);
+      setPointerCell(cell);
+      if (selected) return; // selected-cell quick-look owns the same information
       const key = cell ? `${cell.x},${cell.y}` : '';
       if (key === hoverCell.current) return; // only refetch/reposition when the cell changes
       hoverCell.current = key;
@@ -548,6 +550,7 @@ export function CanvasView(): React.ReactElement {
   const onCanvasLeave = useCallback(() => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverCell.current = '';
+    setPointerCell(null);
     setHover(null);
   }, []);
 
@@ -750,7 +753,6 @@ export function CanvasView(): React.ReactElement {
     const hex = hsvToHex(hsv);
     const encoded = encodeCustomColor(hex);
     if (encoded === null) return;
-    setSavedCustomHex(hex);
     setPendingColor(encoded);
   }, [customDraftHsv]);
 
@@ -878,10 +880,10 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   const palette = dims ? getPaletteByKey(dims.palette) : null;
+  const pickerColors = palette?.colors.slice(0, 15) ?? [];
   const customDraftHex = hsvToHex(customDraftHsv);
   const customDraftRgb = hsvToRgb(customDraftHsv);
   const customDraftHueHex = hsvToHex({ h: customDraftHsv.h, s: 100, v: 100 });
-  const savedCustomColorValue = savedCustomHex ? encodeCustomColor(savedCustomHex) : null;
   const customDraftColorValue = encodeCustomColor(customDraftHex);
   const confirmReady = pendingColor !== null && !submitting && cooldownRemainingMs === 0;
   const confirmLabel = submitting
@@ -896,7 +898,8 @@ export function CanvasView(): React.ReactElement {
       ? 'Your cooldown is running.'
       : 'Placement is a deliberate two step, so a stray tap never wastes your cooldown.';
   const cdBig = cooldownRemainingMs > 0 ? formatCountdown(cooldownRemainingMs) : loadState === 'error' ? 'Offline' : 'Ready';
-  const coordinateLabel = selected ? `(${selected.x}, ${selected.y})` : keyboardCell ? `(${keyboardCell.x}, ${keyboardCell.y})` : '(--, --)';
+  const coordinateCell = pointerCell ?? selected ?? keyboardCell;
+  const coordinateLabel = coordinateCell ? `(${coordinateCell.x}, ${coordinateCell.y})` : '(--, --)';
   const showGrid = Boolean(dims && boardFit && viewport.scale > 1.25);
   const statusLine = (
     <p role="status" aria-live="polite" style={{ minHeight: '1.2em', margin: 0, fontSize: 18, color: 'var(--ink-soft)' }}>
@@ -1055,23 +1058,23 @@ export function CanvasView(): React.ReactElement {
               onKeyDown={(event) => {
                 if (event.key === 'Escape' && !submitting) cancel();
               }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+              className="quad-placement-panel"
             >
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span className="quad-eyebrow" style={{ fontSize: 18 }}>
+                <div className="quad-placement-head">
+                  <span className="quad-eyebrow">
                     Place a pixel
                   </span>
-                  <span className="quad-pixel" style={{ fontSize: 14, color: 'var(--ink)' }}>
+                  <span className="quad-pixel">
                     ({selected.x}, {selected.y})
                   </span>
                 </div>
                 <div
                   role="group"
                   aria-label="Choose a color"
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginTop: 14 }}
+                  className="quad-color-grid"
                 >
-                  {palette?.colors.map((c) => (
+                  {pickerColors.map((c) => (
                     <button
                       key={c.index}
                       type="button"
@@ -1100,18 +1103,6 @@ export function CanvasView(): React.ReactElement {
                   >
                     <span aria-hidden="true" className="quad-custom-plus" />
                   </button>
-                  {savedCustomColorValue !== null && savedCustomHex && (
-                    <button
-                      type="button"
-                      data-custom-color-swatch
-                      aria-label={`Use saved custom color ${savedCustomHex}`}
-                      aria-pressed={pendingColor === savedCustomColorValue}
-                      disabled={submitting}
-                      onClick={() => selectPaletteColor(savedCustomColorValue)}
-                      className={pendingColor === savedCustomColorValue ? 'quad-swatch quad-swatch--selected' : 'quad-swatch'}
-                      style={{ background: savedCustomHex }}
-                    />
-                  )}
                 </div>
                 {customEditorOpen && (
                   <div
@@ -1190,7 +1181,7 @@ export function CanvasView(): React.ReactElement {
                     </div>
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <div className="quad-placement-actions">
                   <button
                     type="button"
                     onClick={() => void confirm()}
@@ -1204,18 +1195,18 @@ export function CanvasView(): React.ReactElement {
                     Cancel
                   </button>
                 </div>
-                <p style={{ fontSize: 18, color: 'var(--muted-tag)', margin: '12px 0 0', lineHeight: 1.45 }}>{placeHint}</p>
-                <div style={{ marginTop: 12 }}>
+                <p className="quad-place-hint">{placeHint}</p>
+                <div className="quad-report-slot">
                   <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
                 </div>
               </div>
 
-              <div style={{ borderTop: '2px solid var(--hairline-2)', paddingTop: 18 }}>
-                <span className="quad-eyebrow" style={{ fontSize: 18 }}>
+              <div className="quad-pixel-story">
+                <span className="quad-eyebrow">
                   Pixel story
                 </span>
                 {dims && (
-                  <div style={{ marginTop: 12 }}>
+                  <div className="quad-pixel-story__body">
                     <PixelInspector
                       key={`${selected.x},${selected.y}:${inspectorNonce}`}
                       x={selected.x}

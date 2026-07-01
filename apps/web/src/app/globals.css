@@ -317,39 +317,44 @@ a {
 }
 .quad-eyedropper-icon {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex: none;
+  transform: rotate(-45deg);
+  filter: drop-shadow(2px 2px 0 #8b8b8b);
 }
 .quad-eyedropper-icon::before {
   content: '';
   position: absolute;
   left: 12px;
-  top: 1px;
-  width: 7px;
-  height: 20px;
+  top: 2px;
+  width: 12px;
+  height: 15px;
   box-sizing: border-box;
-  border: 3px solid var(--ink);
-  background: #fff;
-  transform: rotate(45deg);
-  transform-origin: center;
+  background: #3f3f3f;
+  border: 2px solid #2a2a2a;
+  box-shadow:
+    0 -5px 0 #6f6f6f,
+    0 5px 0 #2a2a2a;
 }
 .quad-eyedropper-icon::after {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 19px;
-  width: 10px;
-  height: 5px;
-  background: var(--ink);
-  transform: rotate(45deg);
-  box-shadow: -5px 5px 0 var(--ink);
+  left: 8px;
+  top: 17px;
+  width: 8px;
+  height: 16px;
+  box-sizing: border-box;
+  background: #f8f8f8;
+  border: 3px solid #2a2a2a;
+  border-top: 0;
+  box-shadow: 0 12px 0 -5px #2a2a2a;
 }
 .quad-custom-editor {
   display: grid;
-  gap: 16px;
-  margin-top: 14px;
-  padding: 0 0 16px;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 0 0 10px;
   border: var(--border-component) solid var(--ink);
   background: var(--surface);
   box-shadow: var(--shadow-xs);
@@ -357,17 +362,17 @@ a {
 }
 .quad-native-color-shell {
   display: block;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border: var(--border-component) solid var(--ink);
   border-radius: 50%;
   background: var(--custom-color);
 }
 .quad-eyedropper-btn {
   display: grid;
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
   padding: 0;
   place-items: center;
   border: 0;
@@ -381,7 +386,7 @@ a {
 }
 .quad-custom-sv {
   position: relative;
-  height: 184px;
+  height: 116px;
   border-bottom: var(--border-component) solid var(--ink);
   cursor: crosshair;
   touch-action: none;
@@ -404,10 +409,10 @@ a {
 }
 .quad-custom-native-row {
   display: grid;
-  grid-template-columns: 38px 64px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 40px 48px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 .quad-hue-slider {
   position: relative;
@@ -448,42 +453,42 @@ a {
 .quad-custom-rgb {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  padding: 0 16px;
+  gap: 10px;
+  padding: 0 12px;
 }
 .quad-color-number {
   display: grid;
-  gap: 9px;
+  gap: 5px;
   text-align: center;
   color: var(--ink);
-  font-size: 22px;
+  font-size: 18px;
 }
 .quad-color-number input {
   width: 100%;
   min-width: 0;
-  height: 54px;
+  height: 40px;
   border: 2px solid #c9c9c3;
   background: #fff;
   font: inherit;
-  font-size: 22px;
+  font-size: 18px;
   text-align: center;
   color: var(--ink);
 }
 .quad-color-number span {
-  font-size: 22px;
+  font-size: 18px;
 }
 
 @media (max-width: 900px) {
   .quad-custom-sv {
-    height: 168px;
+    height: 112px;
   }
   .quad-custom-native-row {
-    grid-template-columns: 34px 58px minmax(0, 1fr);
+    grid-template-columns: 38px 46px minmax(0, 1fr);
     gap: 12px;
   }
   .quad-native-color-shell {
-    width: 58px;
-    height: 58px;
+    width: 46px;
+    height: 46px;
   }
   .quad-custom-rgb {
     gap: 10px;
@@ -687,7 +692,14 @@ a {
 /* ----- Canvas stage (the framed live surface) + HUD overlays ----- */
 .quad-canvas-stage {
   position: relative;
-  background: var(--canvas-well);
+  background-color: var(--canvas-well);
+  background-image:
+    linear-gradient(45deg, #0000000a 25%, transparent 25%),
+    linear-gradient(-45deg, #0000000a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #0000000a 75%),
+    linear-gradient(-45deg, transparent 75%, #0000000a 75%);
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  background-size: 20px 20px;
   border: var(--border-structural) solid var(--ink);
   overflow: hidden;
   width: 100%;
@@ -865,7 +877,12 @@ a {
 .quad-canvas-col {
   min-width: 0;
   min-height: 0;
-  background: var(--canvas-well);
+  background-color: var(--canvas-well);
+  background-image:
+    linear-gradient(#00000010 1px, transparent 1px),
+    linear-gradient(90deg, #00000010 1px, transparent 1px),
+    radial-gradient(#ffffff80 1px, transparent 1.4px);
+  background-size: 24px 24px, 24px 24px, 8px 8px;
   display: flex;
   flex-direction: column;
   padding: 20px;
@@ -873,9 +890,55 @@ a {
 .quad-canvas-rail {
   border-left: var(--border-structural) solid var(--ink);
   background: var(--surface);
-  padding: 20px;
+  padding: 14px;
   min-height: 0;
   overflow-y: auto;
+}
+.quad-placement-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.quad-placement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.quad-placement-head .quad-eyebrow,
+.quad-pixel-story .quad-eyebrow {
+  font-size: 16px;
+}
+.quad-placement-head .quad-pixel {
+  font-size: 14px;
+  color: var(--ink);
+}
+.quad-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.quad-placement-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.quad-place-hint {
+  font-size: 15px;
+  color: var(--muted-tag);
+  margin: 8px 0 0;
+  line-height: 1.35;
+}
+.quad-report-slot {
+  margin-top: 8px;
+}
+.quad-pixel-story {
+  border-top: 2px solid var(--hairline-2);
+  padding-top: 12px;
+}
+.quad-pixel-story__body {
+  margin-top: 8px;
 }
 .quad-canvas-footer {
   position: sticky;
