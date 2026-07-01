@@ -39,11 +39,15 @@ try {
 
     return {
       canvasAboveFooter: !!canvasRect && !!footerRect && canvasRect.bottom <= footerRect.top + 1,
-      canvasFillsStage:
-        !!canvasRect &&
-        !!stageRect &&
-        Math.abs(canvasRect.width - stageRect.width) < 1 &&
-        Math.abs(canvasRect.height - stageRect.height) < 1,
+	      canvasFitsStage:
+	        !!canvasRect &&
+	        !!stageRect &&
+	        canvasRect.width <= stageRect.width + 1 &&
+	        canvasRect.height <= stageRect.height + 1,
+	      canvasPreservesPixelAspect:
+	        !!canvas &&
+	        !!canvasRect &&
+	        Math.abs(canvasRect.width / canvasRect.height - canvas.width / canvas.height) < 0.01,
       canvasInstructionsOnLabel:
         canvasLabel.includes('focus the canvas to navigate cells with the arrow keys') &&
         canvasLabel.includes('press Enter to choose a color'),
