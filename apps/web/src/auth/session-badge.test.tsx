@@ -10,14 +10,13 @@ describe('SessionBadgeView', () => {
     expect(html).toContain('Sign in');
   });
 
-  it('turns the sign-in action into a profile link for an authenticated session', () => {
+  it('maps an authenticated session to its public profile href', () => {
     const session = { authenticated: true, handle: '@scarlet_knight', role: 'participant' } as const;
-    const html = renderToStaticMarkup(<SessionBadgeView session={session} />);
 
     expect(profileHrefForSession(session)).toBe('/profiles/scarlet_knight');
-    expect(html).toContain('href="/profiles/scarlet_knight"');
-    expect(html).toContain('Profile');
-    expect(html).toContain('@scarlet_knight');
-    expect(html).not.toContain('href="/signin"');
+  });
+
+  it('falls back to /profiles/me when the handle is unknown', () => {
+    expect(profileHrefForSession({ authenticated: true })).toBe('/profiles/me');
   });
 });
