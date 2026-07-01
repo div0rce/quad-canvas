@@ -1,0 +1,51 @@
+name: Deploy web (Vercel)
+
+# Continuous deployment for apps/web. Every push to main (i.e. every merged change) ships the web
+# app to Vercel production. Vercel builds remotely from the uploaded working tree using the
+# project's Root Directory (apps/web) and build command, mirroring the manual `vercel --prod` flow.
+# Project identifiers are non-secret; the only secret is VERCEL_TOKEN (a Vercel account/scoped
+# token). Add it once: `gh secret set VERCEL_TOKEN` (or repo Settings → Secrets → Actions).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never let two production deploys race; a newer push supersedes an in-flight one.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Vercel production
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_e7kTlB5cPeSFxLQ1Rv7rzE7E
+      VERCEL_PROJECT_ID: prj_AaOIfMUROE9YBV6WeD8waG2aDcCZ
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Require the deploy token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret is not set. Add it with: gh secret set VERCEL_TOKEN"
+            exit 1
+          fi
+
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url="$(npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN")"
+          echo "Deployed: $url"
+          echo "### Vercel production deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"
