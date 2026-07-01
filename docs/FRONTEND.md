@@ -56,8 +56,8 @@ Routes are tenant-scoped (the active tenant is resolved upstream, mechanism in `
 
 | Page / Route (illustrative) | Nature | Auth | Primary data sources | Notes |
 | --- | --- | --- | --- | --- |
-| **Landing / tenant home** | Mostly server-rendered | Public (`B1`) | REST (tenant meta, current canvas summary) | Tenant-branded; entry to sign-in; optional read-only canvas preview pending `P-Q-2` |
-| **Live canvas** (`/`) | Client island over server shell | Public view / `B2` to place | REST snapshot + **WebSocket** deltas | The heartbeat; mounts `@quad/render` (§8); placement requires `B2` |
+| **Landing / tenant home** (`/`) | Mostly server-rendered | Public (`B1`) | REST (tenant meta, current canvas summary) | Tenant-branded; entry to sign-in; optional read-only canvas preview pending `P-Q-2`. A signed-in visitor (session cookie present) is redirected to the live canvas, so the root serves the landing only to signed-out visitors |
+| **Live canvas** (`/canvas`) | Client island over server shell | Public view / `B2` to place | REST snapshot + **WebSocket** deltas | The heartbeat; mounts `@quad/render` (§8); placement requires `B2` |
 | **Auth entry / verification states** | Server + client | Transitional | Auth flow (mechanism → `AUTHENTICATION.md`) | States: signed-out, email-sent, verifying, verified, error; **no passwords** (`NG-ANON`) |
 | **Pixel history / inspector** | Client (modal or route) | Public view | REST (per-pixel history) + per-pixel replay | Opened from a cell (`P-ATTR-5/6`); shows `DC2` handle only |
 | **Profile** | Server shell + client | `B2` (own) / public view per policy | REST (profile stats, heatmap) | `DC2` identity; respects profile privacy (`P-PROF-4`) |
