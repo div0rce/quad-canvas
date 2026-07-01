@@ -317,48 +317,33 @@ a {
 }
 .quad-eyedropper-icon {
   position: relative;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   flex: none;
 }
 .quad-eyedropper-icon::before {
   content: '';
   position: absolute;
-  left: 20px;
+  left: 12px;
   top: 1px;
-  width: 4px;
-  height: 4px;
-  background: var(--ink);
-  box-shadow:
-    -4px 0 0 var(--ink),
-    -8px 4px 0 var(--ink),
-    -12px 8px 0 var(--ink),
-    -8px 8px 0 var(--ink),
-    -4px 8px 0 var(--ink),
-    0 8px 0 var(--ink),
-    -16px 12px 0 var(--ink),
-    -12px 12px 0 #fff,
-    -8px 12px 0 #fff,
-    -4px 12px 0 var(--ink),
-    -20px 16px 0 var(--ink),
-    -16px 16px 0 #fff,
-    -12px 16px 0 #fff,
-    -8px 16px 0 #fff,
-    -4px 16px 0 var(--ink),
-    -24px 20px 0 var(--ink),
-    -20px 20px 0 #fff,
-    -16px 20px 0 #fff,
-    -12px 20px 0 var(--ink),
-    -28px 24px 0 var(--ink),
-    -24px 24px 0 #fff,
-    -20px 24px 0 var(--ink),
-    -32px 28px 0 var(--ink),
-    -28px 28px 0 var(--ink);
+  width: 7px;
+  height: 20px;
+  box-sizing: border-box;
+  border: 3px solid var(--ink);
+  background: #fff;
+  transform: rotate(45deg);
+  transform-origin: center;
 }
 .quad-eyedropper-icon::after {
   content: '';
   position: absolute;
-  display: none;
+  left: 5px;
+  top: 19px;
+  width: 10px;
+  height: 5px;
+  background: var(--ink);
+  transform: rotate(45deg);
+  box-shadow: -5px 5px 0 var(--ink);
 }
 .quad-custom-editor {
   display: grid;
@@ -583,11 +568,14 @@ a {
 }
 .quad-appbar__left {
   gap: 24px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .quad-appbar__right {
   gap: 12px;
   flex: none;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 .quad-appbar__brand {
   display: flex;
@@ -1507,8 +1495,9 @@ a {
     gap: 10px 16px;
   }
   .quad-appbar__right {
-    width: 100%;
-    justify-content: flex-start;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
   }
   .quad-nav {
     width: 100%;

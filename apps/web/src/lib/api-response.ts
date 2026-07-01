@@ -186,3 +186,20 @@ export function isLeaderboardResponse(value: unknown): value is dto.LeaderboardR
     )
   );
 }
+
+function isCanvasRecentPlacement(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isRecord(value['at']) &&
+    isNonNegativeInteger(value['at']['x']) &&
+    isNonNegativeInteger(value['at']['y']) &&
+    typeof value['color'] === 'number' &&
+    isNonNegativeInteger(value['seq']) &&
+    typeof value['placedAt'] === 'string' &&
+    (value['owner'] === undefined || isPublicIdentity(value['owner']))
+  );
+}
+
+export function isCanvasRecentPlacementsResponse(value: unknown): value is dto.CanvasRecentPlacementsResponse {
+  return isRecord(value) && Array.isArray(value['data']) && value['data'].every(isCanvasRecentPlacement);
+}

@@ -6,7 +6,7 @@
 // session cookie and an idempotency key, and the result returns as a WS delta. Anonymous users get a
 // clear "sign in" message (no anonymous writes). Server-authoritative: the UI never mutates locally.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { domain, ws } from '@quad/core';
+import type { domain, dto, ws } from '@quad/core';
 import { colorHexForValue, colorNameForValue, encodeCustomColor, getPaletteByKey } from '@quad/config';
 import type { CanvasBuffer, Viewport } from '@quad/render';
 import { EMPTY_CELL, zoomAt, clampScale } from '@quad/render';
@@ -16,6 +16,7 @@ import { fetchCurrentPixel, quickLookLabel, type CurrentPixelResult } from './qu
 import { pinchScale } from './gestures';
 import {
   isCanvasMetaResponse,
+  isCanvasRecentPlacementsResponse,
   isCanvasSnapshotResponse,
   isPlacePixelResultResponse,
   isRecord,
@@ -231,6 +232,43 @@ function feedEntryFromPlacement(message: ws.PixelPlaced, paletteKey: string): Pl
   };
 }
 
+function feedEntryFromRecentPlacement(entry: dto.CanvasRecentPlacement, paletteKey: string): PlacementFeedEntry {
+  return {
+    id: String(entry.seq),
+    hex: colorHexForValue(paletteKey, entry.color, EMPTY_HEX),
+    by: placementActorLabel(entry.owner),
+    coord: `(${entry.at.x}, ${entry.at.y})`,
+  };
+}
+
+function mergePlacementFeeds(
+  primary: readonly PlacementFeedEntry[],
+  fallback: readonly PlacementFeedEntry[],
+): readonly PlacementFeedEntry[] {
+  const seen = new Set<string>();
+  const merged: PlacementFeedEntry[] = [];
+  for (const entry of [...primary, ...fallback]) {
+    if (seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    merged.push(entry);
+    if (merged.length === 5) break;
+  }
+  return merged;
+}
+
+async function fetchRecentPlacementFeed(paletteKey: string): Promise<readonly PlacementFeedEntry[]> {
+  try {
+    const res = await fetch(apiPath('/api/v1/canvas/current/placements/recent?limit=5'));
+    if (!res.ok) return [];
+    const body = (await res.json()) as unknown;
+    return isCanvasRecentPlacementsResponse(body)
+      ? body.data.map((entry) => feedEntryFromRecentPlacement(entry, paletteKey))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function readStoredPlacementFeed(): readonly PlacementFeedEntry[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -335,8 +373,9 @@ export function CanvasView(): React.ReactElement {
     };
   }, []);
 
-  useEffect(() => {
-    setPlacementFeed(readStoredPlacementFeed());
+  const hydrateStoredPlacementFeed = useCallback(() => {
+    const stored = readStoredPlacementFeed();
+    if (stored.length > 0) setPlacementFeed((items) => mergePlacementFeeds(items, stored));
   }, []);
 
   useEffect(() => {
@@ -347,6 +386,36 @@ export function CanvasView(): React.ReactElement {
     const entry = feedEntryFromPlacement(message, paletteKey);
     setPlacementFeed((items) => [entry, ...items.filter((item) => item.id !== entry.id)].slice(0, 5));
   }, []);
+
+  useEffect(() => {
+    hydrateStoredPlacementFeed();
+  }, [hydrateStoredPlacementFeed]);
+
+  useEffect(() => {
+    if (!dims) return undefined;
+    let active = true;
+    const refresh = (): void => {
+      hydrateStoredPlacementFeed();
+      void fetchRecentPlacementFeed(dims.palette).then((entries) => {
+        if (active && entries.length > 0) {
+          setPlacementFeed((items) => mergePlacementFeeds(entries, mergePlacementFeeds(items, readStoredPlacementFeed())));
+        }
+      });
+    };
+    const onVisibilityChange = (): void => {
+      if (!document.hidden) refresh();
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [dims, hydrateStoredPlacementFeed]);
 
   useEffect(() => {
     const base = apiBase();
@@ -920,7 +989,7 @@ export function CanvasView(): React.ReactElement {
             </div>
             <div
               className="quad-coordinate-readout quad-pixel"
-              style={{ bottom: 52, left: 12, pointerEvents: 'none' }}
+              style={{ bottom: 12, left: 12, pointerEvents: 'none' }}
             >
               {coordinateLabel}
             </div>
@@ -1093,12 +1162,12 @@ export function CanvasView(): React.ReactElement {
                         <span aria-hidden="true" className="quad-eyedropper-icon" />
                       </button>
                       <label className="quad-native-color-shell" title={customDraftHex}>
-                        <span className="quad-sr-only">Choose custom color</span>
                         <input
                           ref={customColorNativeRef}
                           type="color"
                           value={customDraftHex}
                           onChange={(event) => chooseAndSelectCustomHex(event.currentTarget.value.toUpperCase())}
+                          aria-label="Custom color"
                           className="quad-native-color-input"
                         />
                       </label>

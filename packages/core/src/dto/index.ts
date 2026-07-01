@@ -109,6 +109,20 @@ export interface PixelHistoryEntry {
 /** Cursor-paginated per-cell placement history (oldest→newest). */
 export type PixelHistoryListResponse = Paginated<PixelHistoryEntry>;
 
+/** One recent placement on the current canvas (newest-first list, DC2 attribution only). */
+export interface CanvasRecentPlacement {
+  readonly at: Coordinate;
+  readonly color: ColorIndex;
+  readonly seq: PerCanvasSequence;
+  readonly owner?: PublicIdentity;
+  /** Display-only ISO-8601 timestamp. */
+  readonly placedAt: string;
+}
+
+export interface CanvasRecentPlacementsResponse {
+  readonly data: readonly CanvasRecentPlacement[];
+}
+
 /** Current auth state for the resolved tenant — DC2 only. `authenticated:false` for anonymous. */
 export interface SessionResponse {
   readonly authenticated: boolean;

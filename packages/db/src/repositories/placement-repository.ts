@@ -47,6 +47,16 @@ export interface HistoryQuery {
   readonly limit: number;
 }
 
+export interface RecentPlacementRow {
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+  readonly seq: number;
+  readonly ownerHandle: string | null;
+  readonly ownerDisplayName: string | null;
+  readonly placedAt: Date;
+}
+
 /** A projected cell. `ownerHandle` is DC2 (public) — the owner's email (DC3) is never read here. */
 export interface PixelRow {
   readonly x: number;
@@ -363,6 +373,8 @@ export interface PlacementRepository {
   findCanvasById(tenantId: string, canvasId: string): Promise<CurrentCanvasRow | null>;
   /** Count of placements on a canvas since `since` — the load input for the dynamic cooldown. */
   countRecentPlacements(canvasId: string, since: Date): Promise<number>;
+  /** Latest placement events on a canvas, newest first (public DC2 attribution only). */
+  listRecentCanvasPlacements(canvasId: string, limit: number): Promise<readonly RecentPlacementRow[]>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
   findActiveMembership(tenantId: string, userId: string): Promise<{ role: string } | null>;
   /** Find or create a user by email (DC3); a placeholder public handle is generated for new users. */
@@ -667,6 +679,37 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async countRecentPlacements(canvasId, since) {
       return prisma.pixelEvent.count({ where: { canvasId, type: 'PixelPlaced', createdAt: { gte: since } } });
+    },
+
+    async listRecentCanvasPlacements(canvasId, limit) {
+      const rows = await prisma.pixelEvent.findMany({
+        where: { canvasId, type: 'PixelPlaced', x: { not: null }, y: { not: null }, newColor: { not: null } },
+        orderBy: { seq: 'desc' },
+        take: limit,
+        select: {
+          x: true,
+          y: true,
+          newColor: true,
+          seq: true,
+          createdAt: true,
+          actor: { select: { publicHandle: true, displayName: true } },
+        },
+      });
+      return rows.flatMap((row) =>
+        row.x !== null && row.y !== null && row.newColor !== null
+          ? [
+              {
+                x: row.x,
+                y: row.y,
+                color: row.newColor,
+                seq: row.seq,
+                ownerHandle: row.actor.publicHandle,
+                ownerDisplayName: row.actor.displayName,
+                placedAt: row.createdAt,
+              },
+            ]
+          : [],
+      );
     },
 
     async listArchives(tenantId, query) {
