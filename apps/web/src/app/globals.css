@@ -1614,3 +1614,127 @@ a {
     font-size: 14px;
   }
 }
+
+/* ----- Signed-in dashboard (/home) ----- */
+.quad-home {
+  display: flex;
+  flex-direction: column;
+}
+.quad-home__loading {
+  padding: 48px 24px;
+  color: var(--muted-tag);
+  font-size: 20px;
+}
+.quad-home__hero {
+  padding: 28px 24px 8px;
+}
+.quad-home__welcome {
+  font-size: 22px;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.3;
+}
+.quad-home__subtitle {
+  font-size: 20px;
+  color: var(--ink-strong);
+  margin: 10px 0 0;
+}
+.quad-home__grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 20px;
+  padding: 20px 24px 32px;
+}
+@media (max-width: 720px) {
+  .quad-home__grid {
+    grid-template-columns: 1fr;
+  }
+}
+.quad-home__canvas-card,
+.quad-home__profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  text-decoration: none;
+  color: var(--ink);
+  transition: box-shadow 0.08s ease, transform 0.08s ease;
+}
+.quad-home__canvas-card:hover,
+.quad-home__profile-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translate(-1px, -1px);
+}
+.quad-home__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.quad-home__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--live-green);
+  text-transform: uppercase;
+}
+.quad-home__live-dot {
+  width: 9px;
+  height: 9px;
+  background: var(--live-green);
+  animation: qblink 1.1s steps(1, end) infinite;
+}
+.quad-home__canvas-title {
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+  font-size: 15px;
+  color: var(--ink);
+}
+.quad-home__stats {
+  display: flex;
+  gap: 26px;
+  margin: 0;
+}
+.quad-home__stats dt {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-tag);
+}
+.quad-home__stats dd {
+  margin: 2px 0 0;
+  font-size: 24px;
+  color: var(--ink);
+}
+.quad-home__cta,
+.quad-home__profile-link {
+  align-self: flex-start;
+}
+.quad-home__profile-link {
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-tag);
+}
+.quad-home__canvas-card:hover .quad-home__profile-link,
+.quad-home__profile-card:hover .quad-home__profile-link {
+  color: var(--ink);
+}
+.quad-home__profile-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.quad-home__profile-avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 20px;
+}
+.quad-home__profile-handle {
+  font-size: 22px;
+  color: var(--ink);
+}
+.quad-home__profile-stats {
+  font-size: 18px;
+  color: var(--muted-tag);
+}

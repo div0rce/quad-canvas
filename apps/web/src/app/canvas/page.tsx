@@ -14,6 +14,7 @@ export default async function CanvasPage(): Promise<React.ReactElement> {
         <AppBar
           tenantLabel={tenant?.title ?? null}
           nav={[
+            { label: 'Home', href: '/home' },
             { label: 'Canvas', href: '/canvas', active: true },
             { label: 'Leaderboard', href: '/leaderboards' },
             { label: 'Archive', href: '/archives' },
