@@ -258,7 +258,8 @@ function mergePlacementFeeds(
 
 async function fetchRecentPlacementFeed(paletteKey: string): Promise<readonly PlacementFeedEntry[]> {
   try {
-    const res = await fetch(apiPath('/api/v1/canvas/current/placements/recent?limit=5'));
+    const publicReadBase = websocketApiBase() || apiBase();
+    const res = await fetch(`${publicReadBase}/api/v1/canvas/current/placements/recent?limit=5`);
     if (!res.ok) return [];
     const body = (await res.json()) as unknown;
     return isCanvasRecentPlacementsResponse(body)
