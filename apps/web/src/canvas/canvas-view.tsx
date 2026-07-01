@@ -327,7 +327,7 @@ export function CanvasView(): React.ReactElement {
   const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms the cooldown ends (display only)
   const [nowTick, setNowTick] = useState(0); // latest clock sample; updated outside render only
   const [session, setSession] = useState<SessionInfo | null>(null);
-  const [placementFeed, setPlacementFeed] = useState<readonly PlacementFeedEntry[]>([]);
+  const [placementFeed, setPlacementFeed] = useState<readonly PlacementFeedEntry[]>(() => readStoredPlacementFeed());
 
   const boardFit = useMemo<BoardFit | null>(() => {
     if (!dims || stageSize.width <= 0 || stageSize.height <= 0) return null;
@@ -385,10 +385,6 @@ export function CanvasView(): React.ReactElement {
     const entry = feedEntryFromPlacement(message, paletteKey);
     setPlacementFeed((items) => [entry, ...items.filter((item) => item.id !== entry.id)].slice(0, 5));
   }, []);
-
-  useEffect(() => {
-    hydrateStoredPlacementFeed();
-  }, [hydrateStoredPlacementFeed]);
 
   useEffect(() => {
     if (!dims) return undefined;
@@ -634,7 +630,7 @@ export function CanvasView(): React.ReactElement {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [containerPoint, settle]);
+  }, [containerPoint, zoomViewportAt]);
 
   // Re-clamp the viewport when the container resizes (window resize / orientation change) — an old
   // panned offset can fall outside the new valid range.
@@ -649,7 +645,8 @@ export function CanvasView(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    setViewport((vp) => settle(vp));
+    const frame = requestAnimationFrame(() => setViewport((vp) => settle(vp)));
+    return () => cancelAnimationFrame(frame);
   }, [settle]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -1119,6 +1116,9 @@ export function CanvasView(): React.ReactElement {
                       className="quad-custom-sv"
                       role="slider"
                       aria-label="Color shade"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(customDraftHsv.v)}
                       aria-valuetext={customDraftHex}
                       tabIndex={0}
                       onPointerDown={onCustomSvPointerDown}

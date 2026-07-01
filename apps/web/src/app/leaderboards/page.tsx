@@ -33,7 +33,6 @@ export default function LeaderboardsPage(): React.ReactElement {
 
   useEffect(() => {
     let active = true;
-    setData(undefined);
     void fetchLeaderboard({ category, window, limit: 50 }).then((next) => {
       if (active) setData(next);
     });
@@ -42,7 +41,7 @@ export default function LeaderboardsPage(): React.ReactElement {
     };
   }, [category, window]);
 
-  const entries = data?.entries ?? [];
+  const entries = useMemo(() => data?.entries ?? [], [data]);
   const maxScore = Math.max(1, ...entries.map((entry) => entry.score));
   const podium = useMemo(
     () =>
