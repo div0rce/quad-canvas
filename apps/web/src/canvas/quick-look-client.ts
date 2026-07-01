@@ -2,8 +2,7 @@
 // from the full click-to-open history in the inspector). Public read; DC2 (handle only, never email).
 import type { dto } from '@quad/core';
 import { isPixelResponse } from '@/lib/api-response';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 export type CurrentPixelResult =
   | { readonly kind: 'pixel'; readonly pixel: dto.PixelResponse }
@@ -13,7 +12,7 @@ export type CurrentPixelResult =
 /** Current cell state. A real 404 is empty; transport/server failures remain distinguishable. */
 export async function fetchCurrentPixel(x: number, y: number): Promise<CurrentPixelResult> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}`);
+    const res = await fetch(apiPath(`/api/v1/canvas/current/pixels/${x}/${y}`));
     if (res.status === 404) return { kind: 'empty' };
     if (!res.ok) return { kind: 'unavailable' };
     const body = (await res.json()) as unknown;

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { domain } from '@quad/core';
+import { encodeCustomColor } from '@quad/config';
 import { createPrismaClient, createPlacementRepository } from '@quad/db';
 import { InMemoryRealtimeBus } from '@quad/realtime';
 import { buildApp } from '../app.js';
@@ -109,6 +110,19 @@ describe('placement service', () => {
     const r = await placePixel(deps(), principal(s), { id: s.tenantId, palette: 'default' }, { x: 0, y: 0, color: 999, idempotencyKey: 'k' });
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('accepts an encoded custom RGB color', async () => {
+    const s = await seed();
+    const color = encodeCustomColor('#12AB34');
+    expect(color).not.toBeNull();
+
+    const r = await placePixel(deps(), principal(s), { id: s.tenantId, palette: 'default' }, { x: 2, y: 4, color: color ?? -1, idempotencyKey: 'custom' });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.result.color).toBe(color);
+
+    const pixel = await repo.getPixel(s.canvasId, 2, 4);
+    expect(pixel?.color).toBe(color);
   });
 
   it('rejects placement when there is no active canvas', async () => {
@@ -1476,14 +1490,57 @@ describe('profiles (HTTP)', () => {
       expect(pub.json() as object).toMatchObject({ handle: 'alice', role: 'participant', pixelsPlaced: 2, currentTermPixelsPlaced: 2 });
       expect(pub.body).not.toContain('@'); // no DC3 email
       // Contribution histogram: both placements are today → one active day with count 2.
-      const pubData = pub.json() as { contributions: Array<{ date: string; count: number }> };
+      const pubData = pub.json() as {
+        contributions: Array<{ date: string; count: number }>;
+        lifetimeStats: {
+          pixelsPlaced: number;
+          survivingPixels: number;
+          streakDays: number;
+          longestStreakDays: number;
+          canvasesParticipated: number;
+          favoriteColor?: number;
+        };
+        currentTermStats: {
+          pixelsPlaced: number;
+          survivingPixels: number;
+          streakDays: number;
+          longestStreakDays: number;
+          canvasesParticipated: number;
+          favoriteColor?: number;
+        };
+        recentPlacements: Array<{ at: { x: number; y: number }; color: number; surviving: boolean }>;
+      };
       expect(pubData.contributions).toHaveLength(1);
       expect(pubData.contributions[0]?.count).toBe(2);
+      expect(pubData.lifetimeStats).toMatchObject({
+        pixelsPlaced: 2,
+        survivingPixels: 2,
+        streakDays: 1,
+        longestStreakDays: 1,
+        canvasesParticipated: 1,
+        favoriteColor: 1,
+      });
+      expect(pubData.currentTermStats).toMatchObject({
+        pixelsPlaced: 2,
+        survivingPixels: 2,
+        streakDays: 1,
+        longestStreakDays: 1,
+        canvasesParticipated: 1,
+        favoriteColor: 1,
+      });
+      expect(pubData.recentPlacements).toHaveLength(2);
+      expect(pubData.recentPlacements[0]).toMatchObject({ at: { x: 1, y: 0 }, color: 2, surviving: true });
+      expect(pubData.recentPlacements[1]).toMatchObject({ at: { x: 0, y: 0 }, color: 1, surviving: true });
 
       // A new term (later canvas) with no placements → lifetime stays, current-term resets to 0.
       await prisma.canvas.create({ data: { tenantId: 'ten_rutgers', termLabel: 'F27', status: 'active', width: 10, height: 10 } });
       const afterRollover = await app.inject({ method: 'GET', url: '/api/v1/profiles/alice', headers: { host: 'rutgers.localhost' } });
-      expect(afterRollover.json() as object).toMatchObject({ pixelsPlaced: 2, currentTermPixelsPlaced: 0 });
+      expect(afterRollover.json() as object).toMatchObject({
+        pixelsPlaced: 2,
+        currentTermPixelsPlaced: 0,
+        lifetimeStats: { pixelsPlaced: 2, survivingPixels: 2, canvasesParticipated: 1, favoriteColor: 1 },
+        currentTermStats: { pixelsPlaced: 0, survivingPixels: 0, canvasesParticipated: 0 },
+      });
 
       const me = await app.inject({ method: 'GET', url: '/api/v1/profiles/me', headers: { host: 'rutgers.localhost', cookie: `quad_session=${sid}` } });
       expect(me.statusCode).toBe(200);
@@ -1514,11 +1571,26 @@ describe('leaderboards (HTTP)', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/api/v1/leaderboards', headers: { host: 'rutgers.localhost' } });
       expect(res.statusCode).toBe(200);
-      const body = res.json() as { category: string; entries: Array<{ rank: number; handle: string; pixelsPlaced: number }> };
+      const body = res.json() as {
+        category: string;
+        window: string;
+        entries: Array<{ rank: number; handle: string; score: number; pixelsPlaced: number; survivingPixels: number }>;
+      };
       expect(body.category).toBe('placements');
-      expect(body.entries[0]).toMatchObject({ rank: 1, handle: 'bob', pixelsPlaced: 2 });
-      expect(body.entries[1]).toMatchObject({ rank: 2, handle: 'alice', pixelsPlaced: 1 });
+      expect(body.window).toBe('all');
+      expect(body.entries[0]).toMatchObject({ rank: 1, handle: 'bob', score: 2, pixelsPlaced: 2, survivingPixels: 2 });
+      expect(body.entries[1]).toMatchObject({ rank: 2, handle: 'alice', score: 1, pixelsPlaced: 1, survivingPixels: 1 });
       expect(res.body).not.toContain('@'); // no DC3 email
+
+      const surviving = await app.inject({
+        method: 'GET',
+        url: '/api/v1/leaderboards?category=surviving&window=today',
+        headers: { host: 'rutgers.localhost' },
+      });
+      expect(surviving.statusCode).toBe(200);
+      const survivingBody = surviving.json() as { category: string; window: string; entries: Array<{ handle: string; score: number }> };
+      expect(survivingBody).toMatchObject({ category: 'surviving', window: 'today' });
+      expect(survivingBody.entries[0]).toMatchObject({ handle: 'bob', score: 2 });
 
       const bad = await app.inject({ method: 'GET', url: '/api/v1/leaderboards?category=nope', headers: { host: 'rutgers.localhost' } });
       expect(bad.statusCode).toBe(422);

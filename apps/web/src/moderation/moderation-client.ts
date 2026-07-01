@@ -2,8 +2,8 @@
 // reports. Server enforces the moderator role (403 for everyone else); this is display + actions.
 import type { dto } from '@quad/core';
 import { fetchAllPages } from '@/lib/fetch-all-pages';
+import { apiPath } from '@/lib/api-base';
 
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
 const pendingActionKeys = new Map<string, string>();
 
 export type ReportAction = 'resolve_report' | 'dismiss_report';
@@ -23,10 +23,10 @@ function isReportItem(value: unknown): value is dto.ReportItem {
 export async function fetchReports(): Promise<{ status: number; data: dto.ReportQueueResponse | null }> {
   try {
     // Only the actionable (open) reports — resolved/dismissed ones stay out of the console.
-    const first = await fetch(`${API_BASE}/api/v1/moderation/reports?status=open&limit=200`, { credentials: 'include' });
+    const first = await fetch(apiPath('/api/v1/moderation/reports?status=open&limit=200'), { credentials: 'include' });
     if (!first.ok) return { status: first.status, data: null };
     const data = await fetchAllPages(
-      `${API_BASE}/api/v1/moderation/reports?status=open&limit=200`,
+      apiPath('/api/v1/moderation/reports?status=open&limit=200'),
       { credentials: 'include' },
       isReportItem,
       first,
@@ -42,7 +42,7 @@ export async function actOnReport(reportId: string, action: ReportAction): Promi
   const intent = JSON.stringify([reportId, action, reason]);
   const key = pendingActionKeys.get(intent) ?? crypto.randomUUID();
   pendingActionKeys.set(intent, key);
-  const res = await fetch(`${API_BASE}/api/v1/moderation/actions`, {
+  const res = await fetch(apiPath('/api/v1/moderation/actions'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'idempotency-key': key },
     credentials: 'include',

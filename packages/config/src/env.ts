@@ -8,6 +8,7 @@ export const ENV_KEYS = [
   'NODE_ENV',
   'WEB_BASE_URL',
   'API_BASE_URL',
+  'API_PROXY_ORIGIN',
   'DATABASE_URL',
   'REDIS_URL',
   'AUTH_SECRET',
@@ -23,6 +24,7 @@ export const ENV_KEYS = [
   'OTEL_EXPORTER_OTLP_ENDPOINT',
   'LOG_LEVEL',
   'ALLOWED_ORIGINS',
+  'QUAD_TENANT_HOSTS',
 ] as const;
 
 export type EnvKey = (typeof ENV_KEYS)[number];

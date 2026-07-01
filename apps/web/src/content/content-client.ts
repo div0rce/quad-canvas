@@ -3,12 +3,11 @@
 // preserve the browser's tenant Host; a cross-origin NEXT_PUBLIC_API_BASE must forward it).
 import type { dto } from '@quad/core';
 import { isLeaderboardResponse, isProfileResponse } from '@/lib/api-response';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 export async function fetchProfile(handle: string): Promise<dto.ProfileResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/profiles/${encodeURIComponent(handle)}`, { credentials: 'include' });
+    const res = await fetch(apiPath(`/api/v1/profiles/${encodeURIComponent(handle)}`), { credentials: 'include' });
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isProfileResponse(body) ? body : null;
@@ -17,9 +16,23 @@ export async function fetchProfile(handle: string): Promise<dto.ProfileResponse 
   }
 }
 
-export async function fetchLeaderboard(): Promise<dto.LeaderboardResponse | null> {
+export type LeaderboardCategory = 'placements' | 'surviving';
+export type LeaderboardWindow = 'all' | 'today';
+
+export async function fetchLeaderboard(
+  query: {
+    readonly category?: LeaderboardCategory;
+    readonly window?: LeaderboardWindow;
+    readonly limit?: number;
+  } = {},
+): Promise<dto.LeaderboardResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/leaderboards`);
+    const params = new URLSearchParams();
+    if (query.category) params.set('category', query.category);
+    if (query.window) params.set('window', query.window);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const res = await fetch(apiPath(`/api/v1/leaderboards${suffix}`), { credentials: 'include' });
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isLeaderboardResponse(body) ? body : null;
@@ -38,5 +51,11 @@ export function ordinal(n: number): string {
 /** Heat bucket (0–4) for a day's count relative to the busiest day, for the contribution heatmap. */
 export function heatLevel(count: number, max: number): number {
   if (count <= 0 || max <= 0) return 0;
-  return Math.min(4, Math.ceil((count / max) * 4));
+  if (count === 1 || max <= 1) return 1;
+  if (count <= 3) return 2;
+  if (count <= 7) return 3;
+  const ratio = count / max;
+  if (ratio <= 0.33) return 2;
+  if (ratio <= 0.66) return 3;
+  return 4;
 }

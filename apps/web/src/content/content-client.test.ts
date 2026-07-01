@@ -4,11 +4,13 @@ import { ordinal, heatLevel, fetchLeaderboard, fetchProfile } from './content-cl
 afterEach(() => vi.unstubAllGlobals());
 
 describe('heatLevel', () => {
-  it('buckets a day count 0–4 relative to the busiest day', () => {
+  it('keeps single-placement days low and climbs toward the busiest day', () => {
     expect(heatLevel(0, 10)).toBe(0);
     expect(heatLevel(1, 10)).toBe(1);
-    expect(heatLevel(5, 10)).toBe(2);
+    expect(heatLevel(3, 3)).toBe(2);
+    expect(heatLevel(5, 10)).toBe(3);
     expect(heatLevel(10, 10)).toBe(4);
+    expect(heatLevel(1, 1)).toBe(1);
   });
 
   it('guards empty input', () => {
@@ -44,5 +46,26 @@ describe('content response validation', () => {
     );
     await expect(fetchProfile('alice')).resolves.toBeNull();
     await expect(fetchLeaderboard()).resolves.toBeNull();
+  });
+
+  it('passes leaderboard filters through as query params', async () => {
+    let requested = '';
+    vi.stubGlobal('fetch', async (url: string) => {
+      requested = url;
+      return Response.json({
+        category: 'surviving',
+        window: 'today',
+        entries: [{ rank: 1, handle: 'alice', score: 3, pixelsPlaced: 4, survivingPixels: 3 }],
+      });
+    });
+
+    await expect(fetchLeaderboard({ category: 'surviving', window: 'today', limit: 10 })).resolves.toMatchObject({
+      category: 'surviving',
+      window: 'today',
+    });
+    expect(requested).toContain('/api/v1/leaderboards?');
+    expect(requested).toContain('category=surviving');
+    expect(requested).toContain('window=today');
+    expect(requested).toContain('limit=10');
   });
 });

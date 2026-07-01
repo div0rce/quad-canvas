@@ -8,7 +8,7 @@
 // AUTHENTICATION.md / ADR-0006 and lands with the auth milestone; until then no production identity
 // source exists and the route rejects writes (401).
 import type { domain, dto, ws } from '@quad/core';
-import { getPaletteByKey } from '@quad/config';
+import { getPaletteByKey, isAllowedColorValue } from '@quad/config';
 import type { PlacementRepository, PlacedRow } from '@quad/db';
 import type { RealtimeBus } from '@quad/realtime';
 import { dynamicCooldownMs, type CooldownConfig } from './cooldown.js';
@@ -92,7 +92,7 @@ export async function placePixel(
     return fail('VALIDATION_ERROR', 'Coordinates must be integers.');
   }
   if (!Number.isInteger(input.color)) {
-    return fail('VALIDATION_ERROR', 'Color must be an integer palette index.');
+    return fail('VALIDATION_ERROR', 'Color must be an integer color value.');
   }
 
   // Idempotency replay first: a retried key returns the original persisted result, regardless of
@@ -122,8 +122,8 @@ export async function placePixel(
   if (!palette) {
     return fail('INTERNAL', 'Tenant palette is not configured.');
   }
-  if (!palette.colors.some((c) => c.index === input.color)) {
-    return fail('VALIDATION_ERROR', 'Color is not in the tenant palette.');
+  if (!isAllowedColorValue(tenant.palette, input.color)) {
+    return fail('VALIDATION_ERROR', 'Color is not in the tenant palette or a valid custom color.');
   }
 
   // Cooldown: fixed floor, or load-based when configured — the recent canvas-wide placement rate
@@ -173,11 +173,25 @@ export async function placePixel(
         // swallow — the counter is advisory; a failure must never fail the (committed) placement
       }
     }
+    let publicIdentity: Awaited<ReturnType<PlacementRepository['getPublicIdentity']>> = null;
+    try {
+      publicIdentity = await deps.repo.getPublicIdentity(principal.userId);
+    } catch {
+      // Attribution is display-only. The placement is already committed, so this cannot fail it.
+    }
     const broadcast: ws.PixelPlaced = {
       type: 'PixelPlaced',
       at: { x: outcome.row.x, y: outcome.row.y },
       color: outcome.row.color as domain.ColorIndex,
       seq: outcome.row.seq as domain.PerCanvasSequence,
+      ...(publicIdentity
+        ? {
+            by:
+              publicIdentity.displayName !== undefined
+                ? { handle: publicIdentity.handle as domain.PublicHandle, displayName: publicIdentity.displayName }
+                : { handle: publicIdentity.handle as domain.PublicHandle },
+          }
+        : {}),
     };
     // Best-effort fan-out: the placement is already durably committed in Postgres, so a transport
     // failure must NOT fail it — clients reconcile from the snapshot (watermark) on next connect.

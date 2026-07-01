@@ -1,5 +1,76 @@
+/* ============================================================================
+ * Quad design language — tokens + reusable primitives.
+ *
+ * The system is "paper + ink": a warm paper field, hard near-black borders, and
+ * flat offset shadows (no blur). Two display faces — a pixel face for titles and
+ * numbers, a tall monospace for body and data. Every accent surface tracks the
+ * tenant theme through --qa, which is derived from the server-injected
+ * --tenant-primary; nothing here hardcodes a campus color.
+ * ==========================================================================*/
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+
+  /* Surfaces */
+  --paper: #f2f1ec;
+  --surface: #ffffff;
+  --canvas-well: #f4f4f4;
+
+  /* Ink + muted scale */
+  --ink: #141414;
+  --ink-strong: #34342f;
+  --ink-soft: #3a3a36;
+  --muted: #6e6e6e;
+  --muted-label: #57574f;
+  --muted-tag: #74746d;
+  --muted-faint: #a8a8a2;
+  --muted-fainter: #b8b8b2;
+  --muted-on-disabled: #9a9a95;
+  --disabled-bg: #e6e5df;
+
+  /* Hairlines + rails */
+  --hairline: #f4f4f0;
+  --hairline-2: #edede8;
+  --rail: #e4e3dc;
+
+  /* Status + accents that are NOT tenant-derived (semantic, fixed) */
+  --live-green: #2e8b57;
+  --live-red: #e8392b;
+  --status-blue: #1d70b8;
+  --status-sky: #2e9be6;
+  --status-orange: #ff9f45;
+  --pumpkin: #e0670a;
+  --silver: #c9cdd4;
+  --bronze: #9c5a2a;
+
+  /* Structure */
+  --border-structural: 3px;
+  --border-component: 2px;
+
+  /* Flat offset shadows (all share the ink color) */
+  --shadow-board: 7px 7px 0 var(--ink);
+  --shadow-lg: 6px 6px 0 var(--ink);
+  --shadow-card: 5px 5px 0 var(--ink);
+  --shadow-md: 4px 4px 0 var(--ink);
+  --shadow-sm: 3px 3px 0 var(--ink);
+  --shadow-xs: 2px 2px 0 var(--ink);
+
+  /* Display faces (filled by next/font in layout.tsx; fallbacks keep type usable
+   * before the webfont loads or if it is unavailable) */
+  --font-pixel-fallback: ui-monospace, "Courier New", monospace;
+  --font-mono-fallback: ui-monospace, "Courier New", monospace;
+}
+
+/* Tenant accent, derived from the injected --tenant-primary. Declared on <body>
+ * because layout.tsx injects --tenant-primary on the body element — aliasing on
+ * :root would pin --qa to the fallback and ignore the real tenant value. The mix
+ * ratios mirror the design's theme function (strong = 22% black; tint = 82%
+ * white; tint2 = 93% white). */
+body {
+  --qa: var(--tenant-primary, var(--ink));
+  --qa-strong: color-mix(in srgb, var(--qa) 78%, #000);
+  --qa-tint: color-mix(in srgb, var(--qa) 18%, #fff);
+  --qa-tint2: color-mix(in srgb, var(--qa) 7%, #fff);
 }
 
 * {
@@ -13,56 +84,1471 @@ body {
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #0b0c0e;
-  color: #e9eaec;
   min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono), var(--font-mono-fallback);
+  font-size: 18px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
 }
 
-.quad-shell {
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
+::selection {
+  background: var(--ink);
+  color: #fff;
 }
 
-.quad-header {
+a {
+  color: inherit;
+}
+
+/* Visually hidden, still announced to assistive tech. */
+.quad-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ----- Animations ----- */
+@keyframes qblink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes qpop {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ----- Type ----- */
+.quad-pixel {
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+}
+.quad-eyebrow {
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-label);
+}
+
+/* Crisp pixels wherever a board canvas is shown. */
+.quad-canvas {
+  image-rendering: pixelated;
+}
+
+/* ----- Panel: the outer "board" surface (paper, dotted texture, hard frame) ----- */
+.quad-panel {
+  flex: 1;
+  min-height: 0;
+  background-color: var(--paper);
+  background-image: radial-gradient(#0000000d 1px, transparent 1.3px);
+  background-size: 5px 5px;
+  border: var(--border-structural) solid var(--ink);
+  box-shadow: var(--shadow-board);
+  overflow: hidden;
+}
+/* The app screen frame: full-bleed, so the app bar spans edge to edge and content
+ * sits on the paper field below it (matching the live-canvas screen). */
+.quad-surface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* ----- Card: inner white block with a flat shadow ----- */
+.quad-card {
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-md);
+}
+.quad-card--sm {
+  box-shadow: var(--shadow-sm);
+}
+.quad-card--card {
+  box-shadow: var(--shadow-card);
+}
+.quad-card--lg {
+  box-shadow: var(--shadow-lg);
+}
+.quad-card--flat {
+  box-shadow: none;
+}
+
+/* ----- Button ----- */
+.quad-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 9px 16px;
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono), var(--font-mono-fallback);
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+.quad-btn--primary {
+  background: var(--qa);
+  color: #fff;
+}
+.quad-btn--lg {
+  padding: 13px 22px;
+  box-shadow: var(--shadow-md);
+  font-size: 21px;
+}
+.quad-btn:disabled,
+.quad-btn[aria-disabled="true"] {
+  background: var(--disabled-bg);
+  color: var(--muted-on-disabled);
+  cursor: not-allowed;
+}
+
+/* ----- Pill: small status chip (dot + label) ----- */
+.quad-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px;
+  border: var(--border-component) solid var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+.quad-pill--flush {
+  box-shadow: none;
+}
+.quad-pill--accent {
+  background: var(--qa-tint2);
+}
+.quad-pill--paper {
+  background: var(--paper);
+}
+
+/* ----- Badge: bordered uppercase tag ----- */
+.quad-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: var(--border-component) solid var(--ink);
+  background: var(--paper);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-strong);
+}
+
+/* ----- Status dot ----- */
+.quad-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+}
+.quad-blink {
+  animation: qblink 1s steps(1, end) infinite;
+}
+
+/* ----- Swatch: a palette cell ----- */
+.quad-swatch {
+  aspect-ratio: 1;
+  border: var(--border-component) solid var(--ink);
+  cursor: pointer;
+  padding: 0;
+}
+.quad-swatch--selected {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--qa);
+}
+.quad-swatch--custom-toggle {
+  display: grid;
+  place-items: center;
+  background: #fff;
+  background-image:
+    linear-gradient(45deg, var(--paper) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--paper) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--paper) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--paper) 75%);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+.quad-custom-plus {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+.quad-custom-plus::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 1px;
+  width: 4px;
+  height: 16px;
+  background: var(--ink);
+}
+.quad-custom-plus::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 7px;
+  width: 16px;
+  height: 4px;
+  background: var(--ink);
+}
+.quad-eyedropper-icon {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  transform: rotate(-45deg);
+  filter: drop-shadow(2px 2px 0 #8b8b8b);
+}
+.quad-eyedropper-icon::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 2px;
+  width: 12px;
+  height: 15px;
+  box-sizing: border-box;
+  background: #3f3f3f;
+  border: 2px solid #2a2a2a;
+  box-shadow:
+    0 -5px 0 #6f6f6f,
+    0 5px 0 #2a2a2a;
+}
+.quad-eyedropper-icon::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 17px;
+  width: 8px;
+  height: 16px;
+  box-sizing: border-box;
+  background: #f8f8f8;
+  border: 3px solid #2a2a2a;
+  border-top: 0;
+  box-shadow: 0 12px 0 -5px #2a2a2a;
+}
+.quad-custom-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 0 0 10px;
+  border: var(--border-component) solid var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.quad-native-color-shell {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border: var(--border-component) solid var(--ink);
+  border-radius: 50%;
+  background: var(--custom-color);
+}
+.quad-eyedropper-btn {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.quad-eyedropper-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.quad-custom-sv {
+  position: relative;
+  height: 116px;
+  border-bottom: var(--border-component) solid var(--ink);
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent),
+    var(--custom-hue);
+}
+.quad-custom-sv__thumb {
+  position: absolute;
+  left: var(--sv-x);
+  top: var(--sv-y);
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border: 4px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--ink);
+  pointer-events: none;
+}
+.quad-custom-native-row {
+  display: grid;
+  grid-template-columns: 40px 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 0 12px;
+}
+.quad-hue-slider {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+.quad-hue-slider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f00, #f0f, #2048ff, #00e2ff, #00e050, #fbff00, #ff9300, #f00);
+}
+.quad-hue-slider::after {
+  content: '';
+  position: absolute;
+  left: var(--hue-x);
+  top: 1px;
+  width: 22px;
+  height: 22px;
+  transform: translateX(-50%);
+  border: 4px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--ink);
+  pointer-events: none;
+}
+.quad-hue-slider input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.quad-custom-rgb {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 12px;
+}
+.quad-color-number {
+  display: grid;
+  gap: 5px;
+  text-align: center;
+  color: var(--ink);
+  font-size: 18px;
+}
+.quad-color-number input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  border: 2px solid #c9c9c3;
+  background: #fff;
+  font: inherit;
+  font-size: 18px;
+  text-align: center;
+  color: var(--ink);
+}
+.quad-color-number span {
+  font-size: 18px;
+}
+
+@media (max-width: 900px) {
+  .quad-custom-sv {
+    height: 112px;
+  }
+  .quad-custom-native-row {
+    grid-template-columns: 38px 46px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .quad-native-color-shell {
+    width: 46px;
+    height: 46px;
+  }
+  .quad-custom-rgb {
+    gap: 10px;
+  }
+}
+
+/* ----- Stat block: a label + a pixel-face value ----- */
+.quad-stat-label {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted-tag);
+}
+.quad-stat-value {
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+  color: var(--ink);
+}
+
+/* ----- Segmented toggle ----- */
+.quad-segmented {
+  display: inline-flex;
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.quad-segmented > * {
+  padding: 9px 16px;
+  background: var(--surface);
+  color: var(--muted-tag);
+  font-family: var(--font-mono), var(--font-mono-fallback);
+  font-size: 18px;
+  text-transform: uppercase;
+  border: 0;
+  border-left: var(--border-component) solid var(--ink);
+  cursor: pointer;
+}
+.quad-segmented > *:first-child {
+  border-left: 0;
+}
+.quad-segmented > [aria-pressed="true"],
+.quad-segmented > .is-active {
+  background: var(--qa);
+  color: #fff;
+}
+
+/* ----- App bar (top chrome) ----- */
+.quad-appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  height: 62px;
+  background: var(--surface);
+  border-bottom: var(--border-structural) solid var(--ink);
+}
+.quad-appbar--dark {
+  background: var(--ink);
+  border-bottom-color: var(--ink);
+  color: #fff;
+}
+.quad-appbar__left,
+.quad-appbar__right {
+  display: flex;
+  align-items: center;
+}
+.quad-appbar__left {
+  gap: 24px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.quad-appbar__right {
+  gap: 12px;
+  flex: none;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.quad-appbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.quad-wordmark {
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+  font-size: 17px;
+  color: var(--qa);
+  transition: color 0.1s ease;
+}
+.quad-appbar--dark .quad-wordmark {
+  color: #fff;
+}
+.quad-appbar--dark .quad-appbar__tenant {
+  color: var(--muted-fainter);
+  border-left-color: #3a3a36;
+}
+.quad-appbar__tenant {
+  font-size: 18px;
+  color: var(--muted-tag);
+  padding-left: 11px;
+  border-left: var(--border-component) solid var(--rail);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.quad-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 21px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.quad-navlink {
+  position: relative;
+  color: var(--ink);
+  text-decoration: none;
+}
+.quad-navlink--active {
+  color: var(--ink);
+}
+.quad-appbar--dark .quad-navlink {
+  color: #fff;
+}
+.quad-appbar--dark .quad-navlink--active {
+  color: #fff;
+}
+.quad-navlink--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -18px;
+  height: 3px;
+  background: var(--qa);
+}
+
+/* ----- Pixel logo mark (2x2, diagonal cells accented) ----- */
+.quad-logo {
+  display: grid;
+  gap: 2px;
+}
+.quad-logo > i {
+  display: block;
+  box-shadow: inset 0 0 0 1px var(--ink);
+  background: #fff;
+  transition: background 0.1s ease;
+}
+.quad-logo > i:nth-child(1),
+.quad-logo > i:nth-child(4) {
+  background: var(--qa);
+}
+.quad-appbar--dark .quad-logo > i {
+  box-shadow: inset 0 0 0 1px #fff;
+  background: var(--ink);
+}
+.quad-appbar--dark .quad-logo > i:nth-child(1),
+.quad-appbar--dark .quad-logo > i:nth-child(4) {
+  background: #fff;
+}
+
+/* ----- User chip (handle + avatar) ----- */
+.quad-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  padding: 4px 6px 4px 12px;
+  font-size: 20px;
+  color: var(--ink);
+}
+.quad-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--qa-tint);
+  border: var(--border-component) solid var(--ink);
+  color: var(--ink);
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+}
+.quad-session-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.quad-session-signout {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-tag);
+  cursor: pointer;
+}
+.quad-session-signout:hover {
+  color: var(--ink);
+}
+
+/* ----- Canvas stage (the framed live surface) + HUD overlays ----- */
+.quad-canvas-stage {
+  position: relative;
+  background-color: var(--canvas-well);
+  background-image:
+    linear-gradient(45deg, #0000000a 25%, transparent 25%),
+    linear-gradient(-45deg, #0000000a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #0000000a 75%),
+    linear-gradient(-45deg, transparent 75%, #0000000a 75%);
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  background-size: 20px 20px;
+  border: var(--border-structural) solid var(--ink);
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.quad-canvas-fit {
+  position: absolute;
+  overflow: visible;
+}
+.quad-canvas-layer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.quad-canvas-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(#00000026 1px, transparent 1px),
+    linear-gradient(90deg, #00000026 1px, transparent 1px);
+}
+.quad-hud {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-xs);
+  padding: 4px 10px;
+  font-size: 16px;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+.quad-hud--ink {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: none;
+}
+.quad-coordinate-readout {
+  position: absolute;
+  z-index: 4;
+  color: #fff;
+  font-size: 15px;
+  -webkit-text-stroke: 1px var(--ink);
+  text-shadow:
+    2px 0 0 var(--ink),
+    -2px 0 0 var(--ink),
+    0 2px 0 var(--ink),
+    0 -2px 0 var(--ink),
+    1px 1px 0 var(--ink),
+    -1px 1px 0 var(--ink),
+    1px -1px 0 var(--ink),
+    -1px -1px 0 var(--ink);
+}
+.quad-hud-btn {
+  width: 36px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-mono), var(--font-mono-fallback);
+  font-size: 16px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.quad-hud-btn[aria-pressed="true"] {
+  background: var(--qa);
+  color: #fff;
+}
+.quad-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: var(--border-structural) solid var(--ink);
+  box-shadow: var(--shadow-md);
+  padding: 7px 10px;
+  z-index: 5;
+  white-space: nowrap;
+}
+
+/* Blinking double-ring selection marquee. */
+.quad-marquee {
+  position: absolute;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink);
+  box-sizing: border-box;
+  pointer-events: none;
+  animation: qblink 1.06s steps(1, end) infinite;
+}
+
+/* ----- Interaction: hover lift + active press (the offset-shadow "tactile" feel) ----- */
+.quad-btn,
+.quad-hud-btn,
+.quad-swatch,
+.quad-segmented > * {
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.1s ease, color 0.1s ease;
+}
+.quad-btn:not(:disabled):hover,
+.quad-hud-btn:hover {
+  transform: translate(-1px, -1px);
+}
+.quad-btn:not(:disabled):active,
+.quad-hud-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+.quad-btn--primary:not(:disabled):hover {
+  background: var(--qa-strong);
+}
+.quad-swatch:hover {
+  transform: translate(-1px, -1px);
+}
+.quad-segmented > *:not([aria-pressed='true']):not(.is-active):hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+.quad-navlink {
+  transition: color 0.1s ease;
+}
+.quad-navlink:hover {
+  color: var(--qa);
+}
+.quad-appbar--dark .quad-navlink:hover {
+  color: #fff;
+}
+/* Wordmark + mark link home. */
+.quad-appbar__home {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+}
+.quad-appbar:not(.quad-appbar--dark) .quad-appbar__home:hover .quad-wordmark {
+  color: var(--ink);
+}
+.quad-appbar:not(.quad-appbar--dark) .quad-appbar__home:hover .quad-logo > i:nth-child(1),
+.quad-appbar:not(.quad-appbar--dark) .quad-appbar__home:hover .quad-logo > i:nth-child(4) {
+  background: var(--ink);
+}
+
+/* ----- Live canvas layout (full-viewport) -----
+ * The canvas route fills the screen: app bar on top, a flexible body, footer at
+ * the bottom. The canvas stage is the largest 150x95 box that fits its column
+ * (container-query units), so the canvas fills the stage exactly — which the pan
+ * clamp (gestures.ts) relies on. The column's well shows around it. */
+.quad-canvas-page {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+.quad-canvas-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.quad-canvas-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 356px;
+}
+.quad-canvas-col {
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--canvas-well);
+  background-image:
+    linear-gradient(#00000010 1px, transparent 1px),
+    linear-gradient(90deg, #00000010 1px, transparent 1px),
+    radial-gradient(#ffffff80 1px, transparent 1.4px);
+  background-size: 24px 24px, 24px 24px, 8px 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+.quad-canvas-rail {
+  border-left: var(--border-structural) solid var(--ink);
+  background: var(--surface);
+  padding: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.quad-placement-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.quad-placement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.quad-placement-head .quad-eyebrow,
+.quad-pixel-story .quad-eyebrow {
+  font-size: 16px;
+}
+.quad-placement-head .quad-pixel {
+  font-size: 14px;
+  color: var(--ink);
+}
+.quad-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.quad-placement-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.quad-report-slot {
+  margin-top: 8px;
+}
+.quad-pixel-story {
+  border-top: 2px solid var(--hairline-2);
+  padding-top: 12px;
+}
+.quad-pixel-story__body {
+  margin-top: 8px;
+}
+.quad-canvas-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 40px;
+  background: var(--surface);
+  border-top: var(--border-structural) solid var(--ink);
+}
+.quad-canvas-footer span {
+  font-size: 16px;
+  color: var(--muted-tag);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quad-just-placed {
+  border-top: var(--border-component) solid var(--hairline-2);
+  padding-top: 16px;
+}
+.quad-just-placed__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  color: var(--muted-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.quad-just-placed__list {
+  margin-top: 8px;
+}
+.quad-just-placed__row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 2px solid var(--hairline);
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+.quad-just-placed__row span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-just-placed__row span:nth-child(3),
+.quad-just-placed__empty {
+  font-size: 16px;
+  color: var(--muted-faint);
+}
+.quad-just-placed__swatch {
+  width: 16px;
+  height: 16px;
+  border: var(--border-component) solid var(--ink);
+}
+.quad-just-placed__empty {
+  padding: 10px 0 0;
+}
+
+/* ----- Leaderboard screen ----- */
+.quad-leaderboard {
+  padding: 28px;
+}
+.quad-leaderboard__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+.quad-leaderboard__header h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--ink);
+}
+.quad-leaderboard__header p,
+.quad-leaderboard__state {
+  margin: 9px 0 0;
+  font-size: 21px;
+  color: var(--muted-label);
+}
+.quad-leaderboard__filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.quad-leaderboard__podium {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1fr;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+.quad-leaderboard__podium article {
+  padding: 20px;
+  text-align: center;
+}
+.quad-leaderboard__podium article:nth-child(2) {
+  padding: 24px;
+  background: var(--qa-tint2);
+  border-width: var(--border-structural);
+}
+.quad-leaderboard__rank {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.quad-leaderboard__podium a {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 21px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-leaderboard__podium article:nth-child(2) a {
+  font-size: 22px;
+}
+.quad-leaderboard__score {
+  margin-top: 8px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.quad-leaderboard__podium article:nth-child(2) .quad-leaderboard__score {
+  font-size: 22px;
+}
+.quad-leaderboard__metric {
+  margin-top: 8px;
+  color: var(--muted-label);
+  font-size: 16px;
+  text-transform: uppercase;
+}
+.quad-leaderboard__table {
+  overflow: hidden;
+}
+.quad-leaderboard__table ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.quad-leaderboard__row {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) minmax(150px, 240px) 110px;
+  align-items: center;
+  gap: 0;
+  padding: 12px 20px;
+}
+.quad-leaderboard__row--head {
+  padding: 11px 20px;
+  background: var(--paper);
+  border-bottom: var(--border-component) solid var(--ink);
+}
+.quad-leaderboard__place {
+  color: var(--ink);
+  font-size: 15px;
+}
+.quad-leaderboard__member {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.quad-leaderboard__member .quad-avatar {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  font-size: 11px;
+}
+.quad-leaderboard__member a {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 20px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-leaderboard__bar {
+  display: block;
+  height: 12px;
+  background: var(--paper);
+  border: var(--border-component) solid var(--ink);
+  overflow: hidden;
+}
+.quad-leaderboard__bar span {
+  display: block;
+  height: 100%;
+  background: var(--qa);
+}
+.quad-leaderboard__pixels {
+  color: var(--ink);
+  font-size: 14px;
+  text-align: right;
+}
+
+/* ----- Profile screen ----- */
+.quad-profile {
+  padding: 28px;
+}
+.quad-profile__state {
+  margin: 0;
+  color: var(--muted-label);
+  font-size: 20px;
+}
+.quad-profile__state h1 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 22px;
+}
+.quad-profile__state p {
+  margin: 0;
+}
+.quad-profile__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 26px;
+}
+.quad-profile__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 17px;
+}
+.quad-profile__mark {
+  display: grid;
+  width: 70px;
+  height: 70px;
+  flex: none;
+  place-items: center;
+  background: var(--ink);
+  color: #fff;
+  font-size: 24px;
+}
+.quad-profile__name-block {
+  min-width: 0;
+}
+.quad-profile__handle-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.quad-profile__handle {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-profile__meta {
+  margin: 8px 0 0;
+  color: var(--muted-label);
+  font-size: 18px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.quad-profile .quad-segmented {
+  flex: none;
+}
+.quad-profile .quad-segmented > [aria-pressed='true'] {
+  background: var(--ink);
+  color: #fff;
+}
+.quad-profile__stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 26px;
+}
+.quad-profile__stat {
+  min-height: 98px;
+  padding: 18px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-md);
+}
+.quad-profile__stat-value {
+  margin-top: 9px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 25px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-profile__empty-value {
+  margin-top: 15px;
+  color: var(--muted-label);
+  font-size: 18px;
+}
+.quad-profile__favorite {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 12px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 18px;
+}
+.quad-profile__favorite span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-profile__swatch {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: var(--border-component) solid var(--ink);
+}
+.quad-profile__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 390px);
+  gap: 18px;
+  align-items: start;
+}
+.quad-profile-card {
+  min-width: 0;
+  padding: 20px 22px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  box-shadow: var(--shadow-md);
+}
+.quad-profile-card__head {
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #23262b;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.quad-profile-card__head span {
+  color: var(--muted-faint);
+  font-size: 15px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.quad-profile-card__title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.1;
+}
+.quad-heatmap {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.quad-heatmap__months {
+  display: grid;
+  grid-template-columns: repeat(17, 14px);
+  column-gap: 3px;
+  margin-left: 22px;
+  min-width: max-content;
+  height: 18px;
+  color: var(--muted-faint);
+  font-size: 11px;
+  line-height: 1;
+}
+.quad-heatmap__months span {
+  min-width: 38px;
+  text-transform: uppercase;
+}
+.quad-heatmap__body {
+  display: grid;
+  grid-template-columns: 14px max-content;
+  gap: 8px;
+  min-width: max-content;
+}
+.quad-heatmap__days {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  row-gap: 3px;
+  color: var(--muted-faint);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+}
+.quad-heatmap__grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(17, 14px);
+  grid-template-rows: repeat(7, 14px);
+  gap: 3px;
+}
+.quad-heatmap__cell,
+.quad-heatmap__legend i {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-shadow: inset 0 0 0 1px #00000012;
+}
+.quad-heatmap__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 13px;
+  min-width: max-content;
+  color: var(--muted-faint);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.quad-profile-recent {
+  padding-bottom: 16px;
+}
+.quad-profile-recent__list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.quad-profile-recent__row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 2px solid var(--hairline-2);
+}
+.quad-profile-recent__coord {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quad-profile-recent__status {
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.quad-profile-recent__status--surviving {
+  color: var(--live-green);
+}
+.quad-profile-recent__status--overwritten {
+  color: var(--muted-faint);
+}
+.quad-profile-recent__empty,
+.quad-profile-recent__note {
+  color: var(--muted-label);
+  font-size: 16px;
+}
+.quad-profile-recent__empty {
+  margin: 14px 0 0;
+}
+.quad-profile-recent__note {
+  margin: 18px 0 0;
+  line-height: 1.55;
 }
 
-.quad-brand {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--tenant-primary, #e9eaec);
+/* ----- Generic page wrapper (full-bleed app screen) ----- */
+.quad-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+/* The design-board caption is a design-tool artifact, not app chrome — the app bar
+ * and each screen's own heading carry the context. */
+.quad-board-label {
+  display: none;
 }
 
-.quad-tenant {
-  font-size: 1rem;
-  color: #9aa0a6;
+/* ----- Responsive (mobile-first product target: PRIN-MOBILE-FIRST) ----- */
+/* Below the rail breakpoint the canvas stacks: stage on top, the place/idle
+ * rail becomes a bottom panel (matches the mobile canvas board). */
+@media (max-width: 760px) {
+  /* The canvas page scrolls instead of locking to the viewport; the rail drops
+   * below the stage, and the stage fits the column width (container queries off). */
+  .quad-canvas-page {
+    height: auto;
+    overflow: visible;
+  }
+  .quad-canvas-main {
+    display: block;
+  }
+  .quad-canvas-body {
+    display: block;
+  }
+  .quad-canvas-stage {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 150 / 95;
+    flex: none;
+  }
+  .quad-canvas-rail {
+    border-left: 0;
+    border-top: var(--border-structural) solid var(--ink);
+    overflow-y: visible;
+  }
+  .quad-leaderboard {
+    padding: 20px;
+  }
+  .quad-leaderboard__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .quad-leaderboard__filters {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .quad-leaderboard__podium {
+    grid-template-columns: 1fr;
+  }
+  .quad-leaderboard__podium article:nth-child(2) {
+    order: -1;
+  }
+  .quad-leaderboard__table {
+    overflow-x: auto;
+  }
+  .quad-leaderboard__row {
+    grid-template-columns: 44px minmax(130px, 1fr) minmax(72px, 96px) 70px;
+    min-width: 340px;
+    padding: 11px 12px;
+  }
+  .quad-leaderboard__member {
+    gap: 8px;
+  }
+  .quad-leaderboard__member .quad-avatar {
+    width: 26px;
+    height: 26px;
+  }
+  .quad-leaderboard__member a {
+    font-size: 18px;
+  }
+  .quad-profile {
+    padding: 20px;
+  }
+  .quad-profile__hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .quad-profile__identity {
+    align-items: flex-start;
+  }
+  .quad-profile__mark {
+    width: 58px;
+    height: 58px;
+    font-size: 20px;
+  }
+  .quad-profile__handle {
+    font-size: 19px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .quad-profile__meta {
+    font-size: 16px;
+  }
+  .quad-profile .quad-segmented {
+    align-self: flex-start;
+  }
+  .quad-profile__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quad-profile__stat {
+    min-height: 92px;
+    padding: 16px;
+  }
+  .quad-profile__stat:last-child {
+    grid-column: 1 / -1;
+  }
+  .quad-profile__content {
+    grid-template-columns: 1fr;
+  }
+  .quad-profile-card {
+    padding: 18px;
+  }
 }
 
-.quad-tenant--unknown {
-  color: #d08770;
-}
-
-.quad-body {
-  margin-top: 2rem;
-  line-height: 1.6;
-}
-
-.quad-note {
-  margin-top: 1.5rem;
-  font-size: 0.9rem;
-  color: #9aa0a6;
-}
-
-code {
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  background: #16181c;
-  font-size: 0.85em;
+/* On phones the app bar wraps instead of overflowing, and nav/labels shrink. */
+@media (max-width: 640px) {
+  .quad-page {
+    padding: 18px 14px 44px;
+  }
+  .quad-appbar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .quad-appbar__left {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+  .quad-appbar__right {
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+  .quad-nav {
+    width: 100%;
+    flex-wrap: wrap;
+    font-size: 18px;
+    gap: 14px;
+  }
+  .quad-navlink--active::after {
+    bottom: -6px;
+  }
+  .quad-board-label {
+    font-size: 14px;
+  }
 }

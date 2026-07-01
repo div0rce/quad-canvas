@@ -31,7 +31,7 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['scripts/e2e-canvas.mjs'],
+    files: ['scripts/e2e-canvas.mjs', 'scripts/visual-frontend-gate.mjs'],
     languageOptions: { globals: globals.browser },
   },
   ...scoped(typescriptEslint.configs.recommended, typescriptFiles),

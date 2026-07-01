@@ -47,6 +47,16 @@ export interface HistoryQuery {
   readonly limit: number;
 }
 
+export interface RecentPlacementRow {
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+  readonly seq: number;
+  readonly ownerHandle: string | null;
+  readonly ownerDisplayName: string | null;
+  readonly placedAt: Date;
+}
+
 /** A projected cell. `ownerHandle` is DC2 (public) — the owner's email (DC3) is never read here. */
 export interface PixelRow {
   readonly x: number;
@@ -302,12 +312,42 @@ export interface ProfileRow {
   readonly pixelsPlaced: number;
   readonly currentTermPixelsPlaced: number;
   readonly contributions: ReadonlyArray<{ readonly date: string; readonly count: number }>;
+  readonly lifetimeStats: ProfileStatsRow;
+  readonly currentTermStats: ProfileStatsRow;
+  readonly recentPlacements: readonly ProfileRecentPlacementRow[];
+}
+
+export interface ProfileStatsRow {
+  readonly pixelsPlaced: number;
+  readonly survivingPixels: number;
+  readonly streakDays: number;
+  readonly longestStreakDays: number;
+  readonly canvasesParticipated: number;
+  readonly favoriteColor: number | null;
+}
+
+export interface ProfileRecentPlacementRow {
+  readonly id: string;
+  readonly term: string;
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+  readonly placedAt: Date;
+  readonly surviving: boolean;
 }
 
 export interface LeaderboardRow {
   readonly handle: string;
   readonly displayName: string | null;
+  readonly score: number;
   readonly pixelsPlaced: number;
+  readonly survivingPixels: number;
+}
+
+export interface LeaderboardQuery {
+  readonly category: 'placements' | 'surviving';
+  readonly window: 'all' | 'today';
+  readonly limit: number;
 }
 
 export interface PlacementRepository {
@@ -326,13 +366,15 @@ export interface PlacementRepository {
   /** A member's profile by user id (for the caller's own `/me`), scoped to the tenant. */
   getProfileByUserId(tenantId: string, userId: string): Promise<ProfileRow | null>;
   /** Top placers in the tenant (active members, DC2), ordered by placement count desc. */
-  getLeaderboard(tenantId: string, limit: number): Promise<readonly LeaderboardRow[]>;
+  getLeaderboard(tenantId: string, query: LeaderboardQuery): Promise<readonly LeaderboardRow[]>;
   /** The tenant's latest canvas regardless of status (for read/view endpoints), or null. */
   findViewableCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
   /** One canvas by id within a tenant, or null (used to reconstruct idempotent command results). */
   findCanvasById(tenantId: string, canvasId: string): Promise<CurrentCanvasRow | null>;
   /** Count of placements on a canvas since `since` — the load input for the dynamic cooldown. */
   countRecentPlacements(canvasId: string, since: Date): Promise<number>;
+  /** Latest placement events on a canvas, newest first (public DC2 attribution only). */
+  listRecentCanvasPlacements(canvasId: string, limit: number): Promise<readonly RecentPlacementRow[]>;
   /** The user's ACTIVE membership role in the tenant, or null (suspended/banned/none) — for auth. */
   findActiveMembership(tenantId: string, userId: string): Promise<{ role: string } | null>;
   /** Find or create a user by email (DC3); a placeholder public handle is generated for new users. */
@@ -410,17 +452,48 @@ function actionMatches(action: StoredActionFingerprint, expected: ActionReplayEx
   );
 }
 
+function utcDay(dateKey: string): number {
+  const [year, month, day] = dateKey.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return Number.NaN;
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function streakStats(rawDays: readonly string[]): { streakDays: number; longestStreakDays: number } {
+  const days = [...new Set(rawDays)]
+    .map(utcDay)
+    .filter((day) => Number.isFinite(day))
+    .sort((a, b) => a - b);
+  if (days.length === 0) return { streakDays: 0, longestStreakDays: 0 };
+
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i += 1) {
+    run = days[i] === days[i - 1]! + 1 ? run + 1 : 1;
+    longest = Math.max(longest, run);
+  }
+
+  let current = 1;
+  for (let i = days.length - 1; i > 0; i -= 1) {
+    if (days[i - 1] !== days[i]! - 1) break;
+    current += 1;
+  }
+  return { streakDays: current, longestStreakDays: longest };
+}
+
 export function createPlacementRepository(prisma: PrismaClient): PlacementRepository {
-  // Count a user's placements in the tenant's CURRENT term: the active canvas (the placement target),
-  // or the latest canvas when none is active (between terms). 0 if the tenant has no canvas.
-  const countCurrentTermPlacements = async (tenantId: string, userId: string): Promise<number> => {
+  const findLatestCanvas = async (tenantId: string): Promise<{ id: string } | null> => {
     const active = await prisma.canvas.findFirst({
       where: { tenantId, status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
-    const canvas =
-      active ?? (await prisma.canvas.findFirst({ where: { tenantId }, orderBy: { createdAt: 'desc' }, select: { id: true } }));
+    return active ?? prisma.canvas.findFirst({ where: { tenantId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
+  };
+
+  // Count a user's placements in the tenant's CURRENT term: the active canvas (the placement target),
+  // or the latest canvas when none is active (between terms). 0 if the tenant has no canvas.
+  const countCurrentTermPlacements = async (tenantId: string, userId: string): Promise<number> => {
+    const canvas = await findLatestCanvas(tenantId);
     if (!canvas) return 0;
     return prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced', canvasId: canvas.id } });
   };
@@ -438,6 +511,145 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       ORDER BY 1 ASC`;
     return rows.map((r) => ({ date: r.day, count: Number(r.count) }));
   };
+  const placementDays = async (tenantId: string, userId: string, canvasId?: string): Promise<string[]> => {
+    if (canvasId) {
+      const rows = await prisma.$queryRaw<Array<{ day: string }>>`
+        SELECT to_char(date_trunc('day', "created_at"), 'YYYY-MM-DD') AS day
+        FROM pixel_events
+        WHERE tenant_id = ${tenantId} AND user_id = ${userId} AND canvas_id = ${canvasId} AND type = 'PixelPlaced'
+        GROUP BY 1
+        ORDER BY 1 ASC`;
+      return rows.map((r) => r.day);
+    }
+    const rows = await prisma.$queryRaw<Array<{ day: string }>>`
+      SELECT to_char(date_trunc('day', "created_at"), 'YYYY-MM-DD') AS day
+      FROM pixel_events
+      WHERE tenant_id = ${tenantId} AND user_id = ${userId} AND type = 'PixelPlaced'
+      GROUP BY 1
+      ORDER BY 1 ASC`;
+    return rows.map((r) => r.day);
+  };
+
+  const profileStats = async (tenantId: string, userId: string, canvasId?: string): Promise<ProfileStatsRow> => {
+    const placementWhere = {
+      tenantId,
+      actorUserId: userId,
+      type: 'PixelPlaced',
+      ...(canvasId ? { canvasId } : {}),
+    };
+    const [pixelsPlaced, survivingPixels, canvasGroups, favoriteGroups, days] = await Promise.all([
+      prisma.pixelEvent.count({ where: placementWhere }),
+      prisma.pixel.count({ where: { tenantId, ownerUserId: userId, ...(canvasId ? { canvasId } : {}) } }),
+      prisma.pixelEvent.groupBy({
+        by: ['canvasId'],
+        where: placementWhere,
+      }),
+      prisma.pixelEvent.groupBy({
+        by: ['newColor'],
+        where: { ...placementWhere, newColor: { not: null } },
+        _count: { _all: true },
+      }),
+      placementDays(tenantId, userId, canvasId),
+    ]);
+    const streak = streakStats(days);
+    const favorite = favoriteGroups
+      .filter((group) => typeof group.newColor === 'number')
+      .sort((a, b) => b._count._all - a._count._all || (a.newColor ?? 0) - (b.newColor ?? 0))[0]?.newColor;
+    return {
+      pixelsPlaced,
+      survivingPixels,
+      streakDays: streak.streakDays,
+      longestStreakDays: streak.longestStreakDays,
+      canvasesParticipated: canvasGroups.length,
+      favoriteColor: typeof favorite === 'number' ? favorite : null,
+    };
+  };
+
+  const recentPlacements = async (tenantId: string, userId: string): Promise<ProfileRecentPlacementRow[]> => {
+    const events = await prisma.pixelEvent.findMany({
+      where: { tenantId, actorUserId: userId, type: 'PixelPlaced', x: { not: null }, y: { not: null }, newColor: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 4,
+      select: {
+        id: true,
+        canvasId: true,
+        x: true,
+        y: true,
+        newColor: true,
+        createdAt: true,
+        canvas: { select: { termLabel: true } },
+      },
+    });
+    if (events.length === 0) return [];
+    const pixels = await prisma.pixel.findMany({
+      where: {
+        OR: events.map((event) => ({
+          canvasId: event.canvasId,
+          x: event.x ?? -1,
+          y: event.y ?? -1,
+        })),
+      },
+      select: { canvasId: true, x: true, y: true, lastEventId: true },
+    });
+    const projectionByCell = new Map(pixels.map((p) => [`${p.canvasId}:${p.x}:${p.y}`, p.lastEventId]));
+    return events.flatMap((event) => {
+      if (event.x === null || event.y === null || event.newColor === null) return [];
+      return [
+        {
+          id: event.id,
+          term: event.canvas.termLabel,
+          x: event.x,
+          y: event.y,
+          color: event.newColor,
+          placedAt: event.createdAt,
+          surviving: projectionByCell.get(`${event.canvasId}:${event.x}:${event.y}`) === event.id,
+        },
+      ];
+    });
+  };
+
+  const buildProfileRow = async (
+    tenantId: string,
+    member: {
+      readonly role: string;
+      readonly createdAt: Date;
+      readonly userId: string;
+      readonly user: { readonly publicHandle: string | null; readonly displayName: string | null };
+    },
+  ): Promise<ProfileRow | null> => {
+    if (member.user.publicHandle === null) return null;
+    const latestCanvas = await findLatestCanvas(tenantId);
+    const [pixelsPlaced, currentTermPixelsPlaced, contributions, lifetimeStats, currentTermStats, recent] = await Promise.all([
+      prisma.pixelEvent.count({ where: { tenantId, actorUserId: member.userId, type: 'PixelPlaced' } }),
+      countCurrentTermPlacements(tenantId, member.userId),
+      contributionHistogram(tenantId, member.userId),
+      profileStats(tenantId, member.userId),
+      latestCanvas
+        ? profileStats(tenantId, member.userId, latestCanvas.id)
+        : Promise.resolve({
+            pixelsPlaced: 0,
+            survivingPixels: 0,
+            streakDays: 0,
+            longestStreakDays: 0,
+            canvasesParticipated: 0,
+            favoriteColor: null,
+          }),
+      recentPlacements(tenantId, member.userId),
+    ]);
+    return {
+      handle: member.user.publicHandle,
+      displayName: member.user.displayName,
+      role: member.role,
+      joinedAt: member.createdAt,
+      pixelsPlaced,
+      currentTermPixelsPlaced,
+      contributions,
+      lifetimeStats,
+      currentTermStats,
+      recentPlacements: recent,
+    };
+  };
+
   return {
     async findCurrentCanvas(tenantId) {
       const c = await prisma.canvas.findFirst({
@@ -467,6 +679,37 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
 
     async countRecentPlacements(canvasId, since) {
       return prisma.pixelEvent.count({ where: { canvasId, type: 'PixelPlaced', createdAt: { gte: since } } });
+    },
+
+    async listRecentCanvasPlacements(canvasId, limit) {
+      const rows = await prisma.pixelEvent.findMany({
+        where: { canvasId, type: 'PixelPlaced', x: { not: null }, y: { not: null }, newColor: { not: null } },
+        orderBy: { seq: 'desc' },
+        take: limit,
+        select: {
+          x: true,
+          y: true,
+          newColor: true,
+          seq: true,
+          createdAt: true,
+          actor: { select: { publicHandle: true, displayName: true } },
+        },
+      });
+      return rows.flatMap((row) =>
+        row.x !== null && row.y !== null && row.newColor !== null
+          ? [
+              {
+                x: row.x,
+                y: row.y,
+                color: row.newColor,
+                seq: row.seq,
+                ownerHandle: row.actor.publicHandle,
+                ownerDisplayName: row.actor.displayName,
+                placedAt: row.createdAt,
+              },
+            ]
+          : [],
+      );
     },
 
     async listArchives(tenantId, query) {
@@ -559,11 +802,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         orderBy: { createdAt: 'asc' },
         select: { role: true, createdAt: true, userId: true, user: { select: { publicHandle: true, displayName: true } } },
       });
-      if (!m || m.user.publicHandle === null) return null;
-      const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: m.userId, type: 'PixelPlaced' } });
-      const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, m.userId);
-      const contributions = await contributionHistogram(tenantId, m.userId);
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced, contributions };
+      return m ? buildProfileRow(tenantId, m) : null;
     },
 
     async getProfileByUserId(tenantId, userId) {
@@ -572,45 +811,93 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         select: { role: true, status: true, createdAt: true, user: { select: { publicHandle: true, displayName: true } } },
       });
       if (!m || m.status !== 'active' || m.user.publicHandle === null) return null;
-      const pixelsPlaced = await prisma.pixelEvent.count({ where: { tenantId, actorUserId: userId, type: 'PixelPlaced' } });
-      const currentTermPixelsPlaced = await countCurrentTermPlacements(tenantId, userId);
-      const contributions = await contributionHistogram(tenantId, userId);
-      return { handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, joinedAt: m.createdAt, pixelsPlaced, currentTermPixelsPlaced, contributions };
+      return buildProfileRow(tenantId, { role: m.role, createdAt: m.createdAt, userId, user: m.user });
     },
 
-    async getLeaderboard(tenantId, limit) {
-      // Rank by placement count, ties broken deterministically by user id. Page the grouped counts
+    async getLeaderboard(tenantId, query) {
+      // Rank by the requested metric, ties broken deterministically by user id. Page grouped counts
       // until `limit` ELIGIBLE members (active + public handle, DC2) are collected — so a run of
       // suspended/handle-less top placers can't truncate the board while eligible members remain.
-      const rows: LeaderboardRow[] = [];
-      const batch = Math.max(limit, 1) * 2;
+      const rows: Array<{ userId: string; handle: string; displayName: string | null; score: number }> = [];
+      const batch = Math.max(query.limit, 1) * 2;
+      const since = query.window === 'today' ? new Date(new Date().setHours(0, 0, 0, 0)) : null;
       let skip = 0;
-      for (let guard = 0; guard < 50 && rows.length < limit; guard++) {
-        const grouped = await prisma.pixelEvent.groupBy({
-          by: ['actorUserId'],
-          where: { tenantId, type: 'PixelPlaced' },
-          _count: { _all: true },
-          orderBy: [{ _count: { actorUserId: 'desc' } }, { actorUserId: 'asc' }],
-          take: batch,
-          skip,
-        });
+      for (let guard = 0; guard < 50 && rows.length < query.limit; guard++) {
+        const grouped: Array<{ userId: string; count: number }> =
+          query.category === 'placements'
+            ? (
+                await prisma.pixelEvent.groupBy({
+                  by: ['actorUserId'],
+                  where: {
+                    tenantId,
+                    type: 'PixelPlaced',
+                    ...(since ? { createdAt: { gte: since } } : {}),
+                  },
+                  _count: { _all: true },
+                  orderBy: [{ _count: { actorUserId: 'desc' } }, { actorUserId: 'asc' }],
+                  take: batch,
+                  skip,
+                })
+              ).map((g) => ({ userId: g.actorUserId, count: g._count._all }))
+            : (
+                await prisma.pixel.groupBy({
+                  by: ['ownerUserId'],
+                  where: {
+                    tenantId,
+                    ...(since ? { placedAt: { gte: since } } : {}),
+                  },
+                  _count: { _all: true },
+                  orderBy: [{ _count: { ownerUserId: 'desc' } }, { ownerUserId: 'asc' }],
+                  take: batch,
+                  skip,
+                })
+              ).map((g) => ({ userId: g.ownerUserId, count: g._count._all }));
         if (grouped.length === 0) break;
-        const ids = grouped.map((g) => g.actorUserId);
+        const ids = grouped.map((g) => g.userId);
         const memberships = await prisma.membership.findMany({
           where: { tenantId, status: 'active', userId: { in: ids } },
           select: { userId: true, user: { select: { publicHandle: true, displayName: true } } },
         });
         const byUser = new Map(memberships.map((m) => [m.userId, m.user]));
         for (const g of grouped) {
-          const u = byUser.get(g.actorUserId);
+          const u = byUser.get(g.userId);
           if (!u || u.publicHandle === null) continue; // inactive/banned or no handle → omit
-          rows.push({ handle: u.publicHandle, displayName: u.displayName, pixelsPlaced: g._count._all });
-          if (rows.length >= limit) break;
+          rows.push({ userId: g.userId, handle: u.publicHandle, displayName: u.displayName, score: g.count });
+          if (rows.length >= query.limit) break;
         }
         if (grouped.length < batch) break; // exhausted all groups
         skip += batch;
       }
-      return rows;
+      const userIds = rows.map((r) => r.userId);
+      if (userIds.length === 0) return [];
+      const placementGroups = await prisma.pixelEvent.groupBy({
+        by: ['actorUserId'],
+        where: {
+          tenantId,
+          type: 'PixelPlaced',
+          actorUserId: { in: userIds },
+          ...(since ? { createdAt: { gte: since } } : {}),
+        },
+        _count: { _all: true },
+      });
+      const survivingGroups = await prisma.pixel.groupBy({
+        by: ['ownerUserId'],
+        where: {
+          tenantId,
+          ownerUserId: { in: userIds },
+          ...(since ? { placedAt: { gte: since } } : {}),
+        },
+        _count: { _all: true },
+      });
+      const placementsByUser = new Map(placementGroups.map((g) => [g.actorUserId, g._count._all]));
+      const survivingByUser = new Map(survivingGroups.map((g) => [g.ownerUserId, g._count._all]));
+      return rows.map((r) => ({
+        handle: r.handle,
+        displayName: r.displayName,
+        score: r.score,
+        pixelsPlaced: placementsByUser.get(r.userId) ?? 0,
+        survivingPixels: survivingByUser.get(r.userId) ?? 0,
+      }));
     },
 
     async findActiveMembership(tenantId, userId) {

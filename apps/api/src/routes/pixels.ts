@@ -43,11 +43,19 @@ function sendError(
 
 const DEFAULT_HISTORY_LIMIT = 50;
 const MAX_HISTORY_LIMIT = 200;
+const DEFAULT_RECENT_LIMIT = 5;
+const MAX_RECENT_LIMIT = 20;
 
 function clampLimit(raw: unknown): number {
   const n = typeof raw === 'string' ? Number(raw) : NaN;
   if (!Number.isInteger(n) || n <= 0) return DEFAULT_HISTORY_LIMIT;
   return Math.min(n, MAX_HISTORY_LIMIT);
+}
+
+function clampRecentLimit(raw: unknown): number {
+  const n = typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_RECENT_LIMIT;
+  return Math.min(n, MAX_RECENT_LIMIT);
 }
 
 export function makePixelRoutes(placement: PlacementDeps, rateLimit?: PreHandler): FastifyPluginAsync {
@@ -132,6 +140,34 @@ export function makePixelRoutes(placement: PlacementDeps, rateLimit?: PreHandler
         cells: snap.cells.map((c) => ({ x: c.x, y: c.y, color: c.color as domain.ColorIndex })),
       };
       return reply.send(snapshot);
+    });
+
+    // Current-canvas recent placement feed (public; DC2 attribution only), used to recover missed
+    // live events after an inactive/throttled tab resumes.
+    app.get('/api/v1/canvas/current/placements/recent', async (request, reply) => {
+      if (!request.tenant) return sendError(reply, request, 'NOT_FOUND', 'No tenant for this host.');
+      const canvas = await placement.repo.findViewableCanvas(request.tenant.id);
+      if (!canvas) return sendError(reply, request, 'NOT_FOUND', 'No current canvas.');
+      const query = request.query as { limit?: string };
+      const rows = await placement.repo.listRecentCanvasPlacements(canvas.id, clampRecentLimit(query.limit));
+      const response: dto.CanvasRecentPlacementsResponse = {
+        data: rows.map((row) => ({
+          at: { x: row.x, y: row.y },
+          color: row.color as domain.ColorIndex,
+          seq: row.seq as domain.PerCanvasSequence,
+          ...(row.ownerHandle
+            ? {
+                owner:
+                  row.ownerDisplayName !== null
+                    ? { handle: row.ownerHandle as domain.PublicHandle, displayName: row.ownerDisplayName }
+                    : { handle: row.ownerHandle as domain.PublicHandle },
+              }
+            : {}),
+          placedAt: row.placedAt.toISOString(),
+        })),
+      };
+      void reply.header('Cache-Control', 'public, max-age=5');
+      return reply.send(response);
     });
 
     // Per-cell placement history (public; DC2 attribution; cursor-paginated, oldest→newest).

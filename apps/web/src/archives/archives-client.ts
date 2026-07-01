@@ -3,8 +3,7 @@
 import type { dto } from '@quad/core';
 import { fetchAllPages } from '@/lib/fetch-all-pages';
 import { isArchiveStatsResponse, isCanvasSnapshotResponse, isReplayMetaResponse } from '@/lib/api-response';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 /** A read that distinguishes a real 404 (terminal "not found") from a transient failure (retryable). */
 export type FetchOutcome<T> =
@@ -27,7 +26,7 @@ function isArchiveSummary(value: unknown): value is dto.ArchiveSummary {
 
 export async function fetchArchives(): Promise<dto.ArchiveListResponse | null> {
   try {
-    return await fetchAllPages(`${API_BASE}/api/v1/archives?limit=200`, undefined, isArchiveSummary);
+    return await fetchAllPages(apiPath('/api/v1/archives?limit=200'), undefined, isArchiveSummary);
   } catch {
     return null;
   }
@@ -35,7 +34,7 @@ export async function fetchArchives(): Promise<dto.ArchiveListResponse | null> {
 
 export async function fetchArchiveSnapshot(term: string): Promise<FetchOutcome<dto.CanvasSnapshotResponse>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/snapshot`);
+    const res = await fetch(apiPath(`/api/v1/archives/${encodeURIComponent(term)}/snapshot`));
     if (res.ok) {
       const body = (await res.json()) as unknown;
       return isCanvasSnapshotResponse(body) ? { status: 'ok', data: body } : { status: 'error' };
@@ -48,7 +47,7 @@ export async function fetchArchiveSnapshot(term: string): Promise<FetchOutcome<d
 
 export async function fetchArchiveAt(term: string, seq: number): Promise<dto.CanvasSnapshotResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/at/${seq}`);
+    const res = await fetch(apiPath(`/api/v1/archives/${encodeURIComponent(term)}/at/${seq}`));
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isCanvasSnapshotResponse(body) ? body : null;
@@ -59,7 +58,7 @@ export async function fetchArchiveAt(term: string, seq: number): Promise<dto.Can
 
 export async function fetchArchiveStats(term: string): Promise<dto.ArchiveStatsResponse | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/stats`);
+    const res = await fetch(apiPath(`/api/v1/archives/${encodeURIComponent(term)}/stats`));
     if (!res.ok) return null;
     const body = (await res.json()) as unknown;
     return isArchiveStatsResponse(body) ? body : null;
@@ -70,7 +69,7 @@ export async function fetchArchiveStats(term: string): Promise<dto.ArchiveStatsR
 
 export async function fetchReplayMeta(term: string): Promise<FetchOutcome<dto.ReplayMetaResponse>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/archives/${encodeURIComponent(term)}/replay`);
+    const res = await fetch(apiPath(`/api/v1/archives/${encodeURIComponent(term)}/replay`));
     if (res.ok) {
       const body = (await res.json()) as unknown;
       return isReplayMetaResponse(body) ? { status: 'ok', data: body } : { status: 'error' };

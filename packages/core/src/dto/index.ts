@@ -109,6 +109,20 @@ export interface PixelHistoryEntry {
 /** Cursor-paginated per-cell placement history (oldest→newest). */
 export type PixelHistoryListResponse = Paginated<PixelHistoryEntry>;
 
+/** One recent placement on the current canvas (newest-first list, DC2 attribution only). */
+export interface CanvasRecentPlacement {
+  readonly at: Coordinate;
+  readonly color: ColorIndex;
+  readonly seq: PerCanvasSequence;
+  readonly owner?: PublicIdentity;
+  /** Display-only ISO-8601 timestamp. */
+  readonly placedAt: string;
+}
+
+export interface CanvasRecentPlacementsResponse {
+  readonly data: readonly CanvasRecentPlacement[];
+}
+
 /** Current auth state for the resolved tenant — DC2 only. `authenticated:false` for anonymous. */
 export interface SessionResponse {
   readonly authenticated: boolean;
@@ -197,7 +211,12 @@ export interface LeaderboardEntry {
   readonly rank: number;
   readonly handle: string;
   readonly displayName?: string;
+  /** The value this response is ranked by (category + window). */
+  readonly score: number;
+  /** Placement count for the selected window. */
   readonly pixelsPlaced: number;
+  /** Current surviving-pixel count for the selected window. */
+  readonly survivingPixels: number;
 }
 
 /** A ranked leaderboard for a (category, window). DC2; eventually consistent. */
@@ -220,12 +239,34 @@ export interface ProfileResponse {
   readonly currentTermPixelsPlaced: number;
   /** Per-day placement counts (recent window, oldest→newest) for the contribution heatmap. */
   readonly contributions: ContributionDay[];
+  readonly lifetimeStats: ProfileStats;
+  readonly currentTermStats: ProfileStats;
+  /** Latest visible public placement facts for the member, newest first. */
+  readonly recentPlacements: readonly ProfileRecentPlacement[];
 }
 
 /** One day's placement count for the contribution heatmap. `date` is `YYYY-MM-DD`. */
 export interface ContributionDay {
   readonly date: string;
   readonly count: number;
+}
+
+export interface ProfileStats {
+  readonly pixelsPlaced: number;
+  readonly survivingPixels: number;
+  readonly streakDays: number;
+  readonly longestStreakDays: number;
+  readonly canvasesParticipated: number;
+  readonly favoriteColor?: number;
+}
+
+export interface ProfileRecentPlacement {
+  readonly id: string;
+  readonly term: string;
+  readonly at: Coordinate;
+  readonly color: number;
+  readonly placedAt: string;
+  readonly surviving: boolean;
 }
 
 /** The caller's own profile. Currently the same DC2 shape (private fields are a follow-on). */

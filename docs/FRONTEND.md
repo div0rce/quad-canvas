@@ -69,6 +69,23 @@ Routes are tenant-scoped (the active tenant is resolved upstream, mechanism in `
 
 ---
 
+### 4a. Design realization & deferred UI data
+
+The screens are skinned to the design system in [`specs/ui/DesignSystem.md`](../specs/ui/DesignSystem.md). The design comps depict some affordances that have **no backing field or endpoint yet**; the frontend **omits them rather than fabricating data** (`FE-INV-2` posture — the UI shows only what the server provides). Tracked omissions, by screen:
+
+- **Live canvas:** the "just placed" activity feed, a live painter count, a total-pixels figure, and a global cooldown chip are omitted (cooldown is per-user from the placement result; there is no activity-feed/stats endpoint). The custom-colour eyedropper is omitted — placement takes a palette **index**, not an arbitrary hex.
+- **Landing:** marketing stat figures and a live read-only preview are decorative-only (no tenant-stats endpoint); the term label is omitted (`PublicTenant` has no term).
+- **Sign in:** accepted-domain chips are omitted — the allowed-domain list is a tenant fact **not** in `PublicTenant` (would violate `FE-INV-6` if hardcoded); link-expiry minutes and the post-verify handle are omitted (not delivered to the client).
+- **Profile:** only the real pixel counts (term / lifetime) render; surviving-pixel, streak, longest-streak, and favourite-colour stats, and a recent-placements list, are omitted (no fields on the profile DTO).
+- **Leaderboards:** the surviving-% column and the metric tabs (today / all-time / surviving) are omitted (the query exposes a single dataset with no category/window params); the "you" row highlight is omitted (the view does not fetch the session).
+- **Archives:** per-card pixel/painter/day counts and per-card thumbnails are omitted on the list (the summary carries none, and per-card snapshot fetches are avoided); the per-term "days" stat is omitted.
+- **Replay:** calendar date/month labels are omitted — the engine exposes only an event sequence, so progress is shown as a sequence-based "% of term"; the jump-to-moment and per-pixel-replay feature cards are omitted (no deep-link or per-cell-history surface).
+- **Moderation:** only the real Resolve / Dismiss actions render; roll-back / suspend / ban, the summary stat cards, and the audit-log timeline are omitted (no endpoints).
+
+**Deferred follow-ups (separate changes, owning docs update when built):** expand the canvas palette toward the ~32-colour target (`@quad/config`, `P-CANVAS-4`); surface tenant accepted email-domains (`@quad/config` / `AUTHENTICATION.md`); backend fields for profile survival/streak/favourite + recent placements (`PROFILES.md`), leaderboard survival + metric windows (`LEADERBOARDS.md`), per-term archive card stats (`ARCHIVES.md`); moderation roll-back/suspend/ban + queue counts + audit feed (`MODERATION.md`); and promotion of the token/primitive layer into `@quad/ui`.
+
+---
+
 ## 5. Component Hierarchy (Architecture Level)
 
 A logical hierarchy (not an exhaustive prop list). The canvas page is the critical surface.
@@ -195,7 +212,7 @@ Accessibility is a launch concern only at the **baseline** in MVP; richer enhanc
 
 ## 11. Tenant Theming / Branding Rules
 
-- The active tenant's **theme tokens, palette, title, and logo** come from `@quad/config`; a `TenantThemeProvider` applies them at the root.
+- The active tenant's **theme tokens, palette, title, and logo** come from `@quad/config`; the root layout injects the tenant primary as a CSS custom property and the accent token **`--qa`** (with tints `--qa-tint`/`--qa-tint2`) is **derived from it in CSS**, so the whole UI tracks config with no hardcoded campus colour. Concrete tokens, the type scale, and the `.quad-*` primitives are speced in [`specs/ui/DesignSystem.md`](../specs/ui/DesignSystem.md).
 - **No tenant literals** in components or strings, Rutgers Quad's Scarlet theme, domains, and palette are **config values for tenant #1**, identical in mechanism to any future tenant (`PRIN-CONFIG-OVER-CODE`, `ARCH-INV-8`, `FE-INV-6`).
 - The **color palette is tenant configuration** (`P-CANVAS-4`); the UI renders whatever palette config provides, with no hardcoded color set.
 - The app is effectively **white-label**: swapping the tenant changes branding/palette/feature-flags without code changes (`P-ADMIN-1/2`).
@@ -298,7 +315,7 @@ Critical UX (placement confirm, reconnect convergence, privacy non-exposure) mus
 | Data-fetching/caching library + client state-management approach | Frontend implementation decision (flagged; pick at `START IMPLEMENTATION`) |
 | Read-only spectator UI surface (changes public routes) | `P-Q-2` → `MULTI_TENANCY.md`/product |
 | Public-handle exposure specifics in profiles/attribution | `P-Q-1` → `PROFILES.md`/`AUTHENTICATION.md` |
-| Shared component inventory / design-system tokens | `specs/ui`, `@quad/ui` |
+| Shared component inventory / design-system tokens | **Resolved (app-local):** token layer + `.quad-*` primitives in `apps/web` (`app/globals.css` + `components/ui/`), fonts via `next/font`, speced in [`specs/ui/DesignSystem.md`](../specs/ui/DesignSystem.md); promotion to `@quad/ui` deferred to a later shared-extraction change |
 | Replay export UI | post-MVP (`P-POST-5`) |
 
 ---

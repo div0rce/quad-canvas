@@ -5,8 +5,8 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { dto } from '@quad/core';
 import type { PlacementRepository } from '@quad/db';
 
-const CATEGORIES = new Set<string>(['placements']);
-const WINDOWS = new Set<string>(['all']);
+const CATEGORIES = new Set<string>(['placements', 'surviving']);
+const WINDOWS = new Set<string>(['all', 'today']);
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
@@ -32,14 +32,20 @@ export function makeLeaderboardRoutes(repo: PlacementRepository): FastifyPluginA
         return err(reply, request, 422, 'VALIDATION_ERROR', 'Unsupported leaderboard category or window.');
       }
       const limit = clampLimit(q.limit);
-      const rows = await repo.getLeaderboard(request.tenant.id, limit);
+      const rows = await repo.getLeaderboard(request.tenant.id, {
+        category: category as 'placements' | 'surviving',
+        window: window as 'all' | 'today',
+        limit,
+      });
       const response: dto.LeaderboardResponse = {
         category,
         window,
         entries: rows.map((r, i) => ({
           rank: i + 1,
           handle: r.handle,
+          score: r.score,
           pixelsPlaced: r.pixelsPlaced,
+          survivingPixels: r.survivingPixels,
           ...(r.displayName !== null ? { displayName: r.displayName } : {}),
         })),
       };

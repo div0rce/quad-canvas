@@ -28,6 +28,36 @@ try {
   await page.goto(E2E_URL, { waitUntil: 'networkidle' });
   await page.waitForSelector('canvas', { timeout: 15000 });
   const box = await (await page.$('canvas')).boundingBox();
+  const layoutContract = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas.quad-canvas');
+    const stage = document.querySelector('.quad-canvas-stage');
+    const footer = document.querySelector('.quad-canvas-footer');
+    const canvasRect = canvas?.getBoundingClientRect();
+    const stageRect = stage?.getBoundingClientRect();
+    const footerRect = footer?.getBoundingClientRect();
+    const canvasLabel = canvas?.getAttribute('aria-label') ?? '';
+
+    return {
+      canvasAboveFooter: !!canvasRect && !!footerRect && canvasRect.bottom <= footerRect.top + 1,
+	      canvasFitsStage:
+	        !!canvasRect &&
+	        !!stageRect &&
+	        canvasRect.width <= stageRect.width + 1 &&
+	        canvasRect.height <= stageRect.height + 1,
+	      canvasPreservesPixelAspect:
+	        !!canvas &&
+	        !!canvasRect &&
+	        Math.abs(canvasRect.width / canvasRect.height - canvas.width / canvas.height) < 0.01,
+      canvasInstructionsOnLabel:
+        canvasLabel.includes('focus the canvas to navigate cells with the arrow keys') &&
+        canvasLabel.includes('press Enter to choose a color'),
+      footerPinnedInViewport: !!footerRect && footerRect.bottom <= window.innerHeight && footerRect.top >= window.innerHeight - 96,
+      noCanvasStatusDescription: canvas?.getAttribute('aria-describedby') !== 'canvas-keyboard-status',
+      noDocumentScroll: document.documentElement.scrollHeight <= window.innerHeight && document.body.scrollHeight <= window.innerHeight,
+      noKeyboardStatusElement:
+        !document.getElementById('canvas-keyboard-status') && !document.querySelector('.quad-canvas-keyboard-status'),
+    };
+  });
   const transformOf = () =>
     page.evaluate(() => {
       const c = document.querySelector('canvas');
@@ -43,10 +73,11 @@ try {
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
   const selectWorks = !!(await page.waitForSelector(DIALOG, { timeout: 5000 }).catch(() => null));
 
-  // Wheel zoom → the Reset-view control appears (scale > fit).
+  // Wheel zoom → the canvas layer scale increases.
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  const scaleBeforeWheel = await scaleOf();
   await page.mouse.wheel(0, -360);
-  const zoomWorks = !!(await page.waitForSelector('button:has-text("Reset view")', { timeout: 4000 }).catch(() => null));
+  const zoomWorks = (await scaleOf()) > scaleBeforeWheel + 0.05;
 
   // Drag pan → the layer transform changes.
   const before = await transformOf();
@@ -62,6 +93,63 @@ try {
   await page.waitForSelector(DIALOG, { state: 'detached', timeout: 3000 });
   await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.45);
   const selectAfterGestures = !!(await page.waitForSelector(DIALOG, { timeout: 3000 }).catch(() => null));
+	  const pickerChrome = await page.evaluate((dialogSelector) => {
+	    const dialog = document.querySelector(dialogSelector);
+	    const paletteButtons = dialog?.querySelectorAll('button[data-palette-color]');
+	    const colorCells = dialog?.querySelectorAll('.quad-color-grid > .quad-swatch');
+	    const customToggle = dialog?.querySelector('button[aria-label="Custom color editor"]');
+	    const customTextInput = dialog?.querySelector('#quad-custom-color-input');
+	    const cells = [...(colorCells ?? [])];
+	    const rowCount = new Set(cells.map((cell) => Math.round(cell.getBoundingClientRect().top))).size;
+	    return {
+	      paletteHasFifteenPresetColors: paletteButtons?.length === 15,
+	      pickerHasSixteenCells: colorCells?.length === 16,
+	      pickerHasTwoRows: rowCount === 2,
+	      hasCustomToggle: customToggle instanceof HTMLButtonElement,
+	      hasNoManualCustomColorInput: !(customTextInput instanceof HTMLInputElement),
+	    };
+	  }, DIALOG);
+  await page.click('button[aria-label="Custom color editor"]');
+  await page.waitForSelector('#quad-custom-color-editor', { timeout: 3000 });
+  const editorChrome = await page.evaluate(() => {
+	    const editor = document.querySelector('#quad-custom-color-editor');
+	    const eyedropper = editor?.querySelector('.quad-eyedropper-btn');
+	    const nativeInput = editor?.querySelector('input[type="color"]');
+	    const preview = editor?.querySelector('.quad-native-color-shell');
+	    const hueSlider = editor?.querySelector('.quad-hue-slider input[type="range"]');
+	    const saturationValueSquare = editor?.querySelector('.quad-custom-sv[role="slider"]');
+	    const rgbInputs = editor?.querySelectorAll('.quad-color-number input[type="number"]');
+	    const textInput = editor?.querySelector('input[type="text"]');
+	    return {
+	      customEditorAppearsBelow: !!editor,
+	      hasHighResEyedropperButton: !!eyedropper && !!eyedropper.querySelector('.quad-eyedropper-icon'),
+	      hasNoNativeCustomColorInput: !(nativeInput instanceof HTMLInputElement),
+	      hasPixelPreview: preview instanceof HTMLSpanElement,
+	      hasHueSlider: hueSlider instanceof HTMLInputElement,
+	      hasSaturationValueSquare: !!saturationValueSquare,
+	      hasExactRgbInputs: rgbInputs?.length === 3,
+	      editorHasNoTextInput: !(textInput instanceof HTMLInputElement),
+	    };
+	  });
+	  await page.locator('.quad-hue-slider input[type="range"]').evaluate((input) => {
+	    input.value = '180';
+	    input.dispatchEvent(new Event('input', { bubbles: true }));
+	    input.dispatchEvent(new Event('change', { bubbles: true }));
+	  });
+	  const svBox = await page.locator('.quad-custom-sv').boundingBox();
+	  await page.mouse.click(svBox.x + svBox.width * 0.82, svBox.y + svBox.height * 0.18);
+	  await page.locator('#quad-custom-color-r').fill('18');
+	  await page.locator('#quad-custom-color-g').fill('171');
+	  await page.locator('#quad-custom-color-b').fill('52');
+	  const customColorEditorWorks = await page.evaluate(() => {
+	    const editor = document.querySelector('#quad-custom-color-editor');
+	    const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Confirm');
+	    return (
+	      !!editor &&
+	      confirm instanceof HTMLButtonElement &&
+	      !confirm.disabled
+	    );
+  });
 
   // Two-finger PINCH via real touch (CDP) → the two-pointer branch zooms in (scale increases).
   const cx = Math.round(box.x + box.width / 2);
@@ -76,7 +164,18 @@ try {
   const pinchWorks = (await scaleOf()) > scaleBeforePinch + 0.05;
   const oneQuickLookPerSelection = currentPixelReads === 2;
 
-  const results = { selectWorks, zoomWorks, panWorks, selectAfterGestures, pinchWorks, oneQuickLookPerSelection };
+  const results = {
+    ...layoutContract,
+    selectWorks,
+	    ...pickerChrome,
+	    ...editorChrome,
+	    customColorEditorWorks,
+    zoomWorks,
+    panWorks,
+    selectAfterGestures,
+    pinchWorks,
+    oneQuickLookPerSelection,
+  };
   const failed = Object.entries(results).filter(([, ok]) => !ok).map(([k]) => k);
   console.log(JSON.stringify(results, null, 2));
   if (failed.length) {

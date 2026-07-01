@@ -18,11 +18,26 @@ const SECURITY_HEADERS = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
 ];
 
+const apiProxyOrigin = process.env['API_PROXY_ORIGIN']?.replace(/\/+$/, '');
+const localDevApiProxyOrigin = process.env['NODE_ENV'] === 'development' ? 'http://rutgers.localhost:8088' : '';
+const resolvedApiProxyOrigin = apiProxyOrigin || localDevApiProxyOrigin;
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   outputFileTracingRoot: path.join(path.dirname(fileURLToPath(import.meta.url)), '../..'),
   headers: () => Promise.resolve([{ source: '/:path*', headers: SECURITY_HEADERS }]),
+  rewrites: () =>
+    Promise.resolve(
+      resolvedApiProxyOrigin
+        ? [
+            {
+              source: '/api/:path*',
+              destination: `${resolvedApiProxyOrigin}/api/:path*`,
+            },
+          ]
+        : [],
+    ),
 };
 
 export default nextConfig;

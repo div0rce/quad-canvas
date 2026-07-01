@@ -1,10 +1,9 @@
 // apps/web — pixel inspector data: a cell's placement history (DC2 attribution) + a pure palette
 // color lookup. Public read (same tenant-host constraint as the rest of the web app).
 import type { dto } from '@quad/core';
-import { getPaletteByKey } from '@quad/config';
+import { colorHexForValue, colorNameForValue } from '@quad/config';
 import { fetchAllPages } from '@/lib/fetch-all-pages';
-
-const API_BASE = process.env['NEXT_PUBLIC_API_BASE'] ?? '';
+import { apiPath } from '@/lib/api-base';
 
 function isHistoryEntry(value: unknown): value is dto.PixelHistoryEntry {
   if (!value || typeof value !== 'object') return false;
@@ -15,7 +14,7 @@ function isHistoryEntry(value: unknown): value is dto.PixelHistoryEntry {
 export async function fetchPixelHistory(x: number, y: number): Promise<dto.PixelHistoryListResponse | null> {
   try {
     return await fetchAllPages(
-      `${API_BASE}/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`,
+      apiPath(`/api/v1/canvas/current/pixels/${x}/${y}/history?limit=200`),
       undefined,
       isHistoryEntry,
     );
@@ -26,10 +25,10 @@ export async function fetchPixelHistory(x: number, y: number): Promise<dto.Pixel
 
 /** Hex for a color index in a palette, or a neutral fallback for an unknown palette/index. */
 export function colorHex(paletteKey: string, index: number): string {
-  return getPaletteByKey(paletteKey)?.colors.find((c) => c.index === index)?.hex ?? '#cccccc';
+  return colorHexForValue(paletteKey, index);
 }
 
 /** Human color name for a palette index (for accessible text alongside the swatch). */
 export function colorName(paletteKey: string, index: number): string {
-  return getPaletteByKey(paletteKey)?.colors.find((c) => c.index === index)?.name ?? `color ${index}`;
+  return colorNameForValue(paletteKey, index);
 }
