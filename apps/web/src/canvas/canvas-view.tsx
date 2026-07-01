@@ -893,10 +893,6 @@ export function CanvasView(): React.ReactElement {
       : pendingColor === null
         ? 'Pick a color'
         : 'Confirm';
-  const placeHint =
-    cooldownRemainingMs > 0
-      ? 'Your cooldown is running.'
-      : 'Placement is a deliberate two step, so a stray tap never wastes your cooldown.';
   const cdBig = cooldownRemainingMs > 0 ? formatCountdown(cooldownRemainingMs) : loadState === 'error' ? 'Offline' : 'Ready';
   const coordinateCell = pointerCell ?? selected ?? keyboardCell;
   const coordinateLabel = coordinateCell ? `(${coordinateCell.x}, ${coordinateCell.y})` : '(--, --)';
@@ -1195,7 +1191,6 @@ export function CanvasView(): React.ReactElement {
                     Cancel
                   </button>
                 </div>
-                <p className="quad-place-hint">{placeHint}</p>
                 <div className="quad-report-slot">
                   <ReportControl key={`${selected.x},${selected.y}`} x={selected.x} y={selected.y} />
                 </div>

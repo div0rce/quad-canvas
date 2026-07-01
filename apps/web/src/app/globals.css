@@ -924,12 +924,6 @@ a {
   gap: 10px;
   margin-top: 10px;
 }
-.quad-place-hint {
-  font-size: 15px;
-  color: var(--muted-tag);
-  margin: 8px 0 0;
-  line-height: 1.35;
-}
 .quad-report-slot {
   margin-top: 8px;
 }
