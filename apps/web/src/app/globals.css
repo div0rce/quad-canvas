@@ -1837,3 +1837,63 @@ a {
   font-size: 19px;
   color: var(--muted-tag);
 }
+
+/* ----- Guilds (/guilds, /guilds/new, /guilds/[slug]) ----- */
+.quad-guild__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+}
+.quad-guild__label {
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-label);
+  margin-top: 8px;
+}
+.quad-guild__optional {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted-faint);
+}
+.quad-guild__textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.4;
+}
+.quad-guild__error {
+  color: var(--live-red);
+  font-size: 18px;
+  margin: 4px 0 0;
+}
+.quad-guild__form .quad-btn {
+  align-self: flex-start;
+  margin-top: 12px;
+}
+.quad-guild__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.quad-guild__header h1 {
+  font-size: 20px;
+  color: var(--ink);
+  margin: 0;
+}
+.quad-guild__desc {
+  font-size: 20px;
+  color: var(--ink-strong);
+  margin: 8px 0 0;
+  max-width: 60ch;
+}
+.quad-guild__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.quad-guild__row {
+  align-items: center;
+}

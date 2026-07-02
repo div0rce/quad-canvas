@@ -6,10 +6,11 @@ describe('userMenuItems', () => {
     const onSignOut = (): void => undefined;
     const items = userMenuItems('/profiles/mira7', onSignOut);
 
-    expect(items.map((i) => i.key)).toEqual(['profile', 'friends', 'add-friends', 'signout']);
+    expect(items.map((i) => i.key)).toEqual(['profile', 'friends', 'add-friends', 'guilds', 'signout']);
     expect(items[0]).toMatchObject({ label: 'View profile', href: '/profiles/mira7' });
     expect(items[1]).toMatchObject({ label: 'Friends', href: '/friends' });
     expect(items[2]).toMatchObject({ label: 'Add friends', href: '/friends/add' });
+    expect(items[3]).toMatchObject({ label: 'Guilds', href: '/guilds' });
     const signout = items.at(-1);
     expect(signout).toMatchObject({ label: 'Sign out', separated: true, destructive: true });
     expect(signout?.action).toBe(onSignOut);

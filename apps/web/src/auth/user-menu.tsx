@@ -27,6 +27,7 @@ export function userMenuItems(profileHref: string, onSignOut: () => void): reado
     { key: 'profile', label: 'View profile', href: profileHref },
     { key: 'friends', label: 'Friends', href: '/friends' },
     { key: 'add-friends', label: 'Add friends', href: '/friends/add' },
+    { key: 'guilds', label: 'Guilds', href: '/guilds' },
     { key: 'signout', label: 'Sign out', action: onSignOut, separated: true, destructive: true },
   ];
 }

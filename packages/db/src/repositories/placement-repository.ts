@@ -380,6 +380,36 @@ export type SendFriendRequestResult =
   | { readonly kind: 'not_found' };
 export type FriendMutationResult = { readonly kind: 'ok' | 'not_found' };
 
+// ---- Guilds: social/identity grouping within a tenant (confers NO placement advantage). ----
+
+export interface GuildSummaryRow {
+  readonly slug: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly memberCount: number;
+  readonly joined: boolean;
+  readonly active: boolean;
+}
+export interface GuildMemberRow {
+  readonly handle: string;
+  readonly displayName: string | null;
+  readonly role: string;
+}
+export interface GuildDetailRow extends GuildSummaryRow {
+  readonly members: readonly GuildMemberRow[];
+}
+export interface CreateGuildInput {
+  readonly tenantId: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly description: string | null;
+}
+export type CreateGuildResult =
+  | { readonly kind: 'created'; readonly slug: string }
+  | { readonly kind: 'duplicate' }
+  | { readonly kind: 'invalid' };
+export type GuildMutationResult = { readonly kind: 'ok' | 'not_found' };
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -463,6 +493,19 @@ export interface PlacementRepository {
   cancelFriendRequest(tenantId: string, requesterUserId: string, addresseeHandle: string): Promise<FriendMutationResult>;
   /** Remove a confirmed friend by handle (either direction). */
   removeFriend(tenantId: string, userId: string, otherHandle: string): Promise<FriendMutationResult>;
+
+  /** Guilds in the tenant with the caller's membership/active flags (directory). */
+  listGuilds(tenantId: string, userId: string): Promise<readonly GuildSummaryRow[]>;
+  /** One guild's profile + members + the caller's relationship, or null. */
+  getGuild(tenantId: string, userId: string, slug: string): Promise<GuildDetailRow | null>;
+  /** Create a guild (slug derived from the name); the creator joins and it becomes their active guild. */
+  createGuild(input: CreateGuildInput): Promise<CreateGuildResult>;
+  /** Join a guild by slug (idempotent). */
+  joinGuild(tenantId: string, userId: string, slug: string): Promise<GuildMutationResult>;
+  /** Leave a guild by slug. */
+  leaveGuild(tenantId: string, userId: string, slug: string): Promise<GuildMutationResult>;
+  /** Set the caller's active guild (must be a member); clears any prior active guild. */
+  setActiveGuild(tenantId: string, userId: string, slug: string): Promise<GuildMutationResult>;
 }
 
 /** Parse a compound keyset cursor `"<iso>|<id>"` (createdAt + a tiebreak id). Returns null for an
@@ -1953,6 +1996,122 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         },
       });
       return { kind: res.count > 0 ? 'ok' : 'not_found' };
+    },
+
+    async listGuilds(tenantId, userId) {
+      const guilds = await prisma.guild.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          slug: true,
+          name: true,
+          description: true,
+          _count: { select: { members: true } },
+          members: { where: { userId }, select: { active: true } },
+        },
+      });
+      return guilds.map((g) => ({
+        slug: g.slug,
+        name: g.name,
+        description: g.description,
+        memberCount: g._count.members,
+        joined: g.members.length > 0,
+        active: g.members[0]?.active ?? false,
+      }));
+    },
+
+    async getGuild(tenantId, userId, slug) {
+      const g = await prisma.guild.findUnique({
+        where: { tenantId_slug: { tenantId, slug } },
+        select: {
+          slug: true,
+          name: true,
+          description: true,
+          _count: { select: { members: true } },
+          members: {
+            orderBy: { createdAt: 'asc' },
+            take: 100,
+            select: {
+              userId: true,
+              active: true,
+              user: { select: { publicHandle: true, displayName: true, memberships: { where: { tenantId, status: 'active' }, select: { role: true } } } },
+            },
+          },
+        },
+      });
+      if (!g) return null;
+      const mine = g.members.find((m) => m.userId === userId);
+      const members: GuildMemberRow[] = g.members.flatMap((m) => {
+        const role = m.user.memberships[0]?.role;
+        return m.user.publicHandle === null || role === undefined
+          ? []
+          : [{ handle: m.user.publicHandle, displayName: m.user.displayName, role }];
+      });
+      return {
+        slug: g.slug,
+        name: g.name,
+        description: g.description,
+        memberCount: g._count.members,
+        joined: mine !== undefined,
+        active: mine?.active ?? false,
+        members,
+      };
+    },
+
+    async createGuild(input) {
+      const slug = input.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+      if (slug === '') return { kind: 'invalid' };
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.guildMembership.updateMany({ where: { tenantId: input.tenantId, userId: input.userId, active: true }, data: { active: false } });
+          await tx.guild.create({
+            data: {
+              tenantId: input.tenantId,
+              slug,
+              name: input.name.trim(),
+              description: input.description,
+              createdByUserId: input.userId,
+              members: { create: { tenantId: input.tenantId, userId: input.userId, active: true } },
+            },
+          });
+        });
+        return { kind: 'created', slug };
+      } catch {
+        return { kind: 'duplicate' }; // the tenant-scoped slug already exists
+      }
+    },
+
+    async joinGuild(tenantId, userId, slug) {
+      const guild = await prisma.guild.findUnique({ where: { tenantId_slug: { tenantId, slug } }, select: { id: true } });
+      if (!guild) return { kind: 'not_found' };
+      await prisma.guildMembership.upsert({
+        where: { tenantId_guildId_userId: { tenantId, guildId: guild.id, userId } },
+        create: { tenantId, guildId: guild.id, userId, active: false },
+        update: {},
+      });
+      return { kind: 'ok' };
+    },
+
+    async leaveGuild(tenantId, userId, slug) {
+      const guild = await prisma.guild.findUnique({ where: { tenantId_slug: { tenantId, slug } }, select: { id: true } });
+      if (!guild) return { kind: 'not_found' };
+      const res = await prisma.guildMembership.deleteMany({ where: { tenantId, guildId: guild.id, userId } });
+      return { kind: res.count > 0 ? 'ok' : 'not_found' };
+    },
+
+    async setActiveGuild(tenantId, userId, slug) {
+      const guild = await prisma.guild.findUnique({ where: { tenantId_slug: { tenantId, slug } }, select: { id: true } });
+      if (!guild) return { kind: 'not_found' };
+      return prisma.$transaction(async (tx) => {
+        const membership = await tx.guildMembership.findUnique({
+          where: { tenantId_guildId_userId: { tenantId, guildId: guild.id, userId } },
+          select: { id: true },
+        });
+        if (!membership) return { kind: 'not_found' as const }; // must join before setting active
+        await tx.guildMembership.updateMany({ where: { tenantId, userId, active: true }, data: { active: false } });
+        await tx.guildMembership.update({ where: { id: membership.id }, data: { active: true } });
+        return { kind: 'ok' as const };
+      });
     },
   };
 }

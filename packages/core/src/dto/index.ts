@@ -368,3 +368,35 @@ export interface FriendSearchResponse {
 export interface SendFriendRequestCommand {
   readonly handle: string;
 }
+
+/** A guild in the directory (DC2 identity only). `joined`/`active` reflect the caller's relationship. */
+export interface GuildSummary {
+  readonly slug: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly memberCount: number;
+  readonly joined: boolean;
+  readonly active: boolean;
+}
+
+export interface GuildsResponse {
+  readonly guilds: readonly GuildSummary[];
+}
+
+/** A member of a guild (DC2 only — handle, never email). */
+export interface GuildMemberSummary {
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly role: Role;
+}
+
+/** A single guild's profile: its details + the caller's relationship + its members. */
+export interface GuildDetailResponse extends GuildSummary {
+  readonly members: readonly GuildMemberSummary[];
+}
+
+/** Create-a-guild command. The slug is derived server-side from the name. */
+export interface CreateGuildCommand {
+  readonly name: string;
+  readonly description?: string;
+}
