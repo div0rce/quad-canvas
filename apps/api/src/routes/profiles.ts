@@ -44,6 +44,16 @@ function toResponse(row: ProfileRow): dto.ProfileResponse {
     currentTermStats: toStats(row.currentTermStats),
     recentPlacements: row.recentPlacements.map(toRecentPlacement),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
+    ...(row.activeGuild !== null
+      ? {
+          activeGuild: {
+            slug: row.activeGuild.slug,
+            name: row.activeGuild.name,
+            guildPixels: row.activeGuild.guildPixels,
+            placerRank: row.activeGuild.placerRank,
+          },
+        }
+      : {}),
   };
 }
 

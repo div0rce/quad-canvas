@@ -243,6 +243,8 @@ export interface ProfileResponse {
   readonly currentTermStats: ProfileStats;
   /** Latest visible public placement facts for the member, newest first. */
   readonly recentPlacements: readonly ProfileRecentPlacement[];
+  /** The member's active guild + its current-term credit, when one is set. */
+  readonly activeGuild?: ProfileActiveGuild;
 }
 
 /** One day's placement count for the contribution heatmap. `date` is `YYYY-MM-DD`. */
@@ -377,6 +379,10 @@ export interface GuildSummary {
   readonly memberCount: number;
   readonly joined: boolean;
   readonly active: boolean;
+  /** Current-term placements credited to the guild (attribution only — no placement power). */
+  readonly pixels: number;
+  /** 1-based rank among the tenant's guilds by `pixels`. */
+  readonly rank: number;
 }
 
 export interface GuildsResponse {
@@ -409,4 +415,28 @@ export interface UpdateProfileCommand {
 
 export interface UpdateProfileResponse {
   readonly handle: string | null;
+}
+
+/** A member's active guild + its current-term credit shown on the profile. */
+export interface ProfileActiveGuild {
+  readonly slug: string;
+  readonly name: string;
+  readonly guildPixels: number;
+  readonly placerRank: number;
+}
+
+/** One recent placement by a friend (DC2). */
+export interface FriendActivityItem {
+  readonly handle: string;
+  readonly at: Coordinate;
+  readonly color: ColorIndex;
+  readonly placedAt: string;
+}
+
+export interface FriendActivityResponse {
+  readonly items: readonly FriendActivityItem[];
+}
+
+export interface FriendRelationshipResponse {
+  readonly relationship: FriendRelationship;
 }

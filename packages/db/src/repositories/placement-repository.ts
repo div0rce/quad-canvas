@@ -304,6 +304,15 @@ export interface ArchiveStatsRow {
   readonly topPlacers: ReadonlyArray<{ readonly handle: string; readonly displayName: string | null; readonly pixelsPlaced: number }>;
 }
 
+export interface ProfileActiveGuildRow {
+  readonly slug: string;
+  readonly name: string;
+  /** Current-term placements credited to the guild. */
+  readonly guildPixels: number;
+  /** The member's 1-based placer rank within the guild (current term). */
+  readonly placerRank: number;
+}
+
 export interface ProfileRow {
   readonly handle: string;
   readonly displayName: string | null;
@@ -315,6 +324,8 @@ export interface ProfileRow {
   readonly lifetimeStats: ProfileStatsRow;
   readonly currentTermStats: ProfileStatsRow;
   readonly recentPlacements: readonly ProfileRecentPlacementRow[];
+  /** The member's active guild + its current-term credit, or null when none is set. */
+  readonly activeGuild: ProfileActiveGuildRow | null;
 }
 
 export interface ProfileStatsRow {
@@ -379,6 +390,13 @@ export type SendFriendRequestResult =
   | { readonly kind: 'self' }
   | { readonly kind: 'not_found' };
 export type FriendMutationResult = { readonly kind: 'ok' | 'not_found' };
+export interface FriendActivityRow {
+  readonly handle: string;
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+  readonly placedAt: Date;
+}
 
 // ---- Guilds: social/identity grouping within a tenant (confers NO placement advantage). ----
 
@@ -389,6 +407,10 @@ export interface GuildSummaryRow {
   readonly memberCount: number;
   readonly joined: boolean;
   readonly active: boolean;
+  /** Current-term placements credited to the guild: by members whose ACTIVE guild is this one. */
+  readonly pixels: number;
+  /** 1-based rank among the tenant's guilds by `pixels` (deterministic tie order). */
+  readonly rank: number;
 }
 export interface GuildMemberRow {
   readonly handle: string;
@@ -505,6 +527,10 @@ export interface PlacementRepository {
   cancelFriendRequest(tenantId: string, requesterUserId: string, addresseeHandle: string): Promise<FriendMutationResult>;
   /** Remove a confirmed friend by handle (either direction). */
   removeFriend(tenantId: string, userId: string, otherHandle: string): Promise<FriendMutationResult>;
+  /** The caller's relationship to a member by handle. */
+  friendRelationship(tenantId: string, userId: string, otherHandle: string): Promise<FriendRelationshipKind | null>;
+  /** Recent current-term placements by the caller's confirmed friends (newest first, DC2). */
+  friendActivity(tenantId: string, userId: string, limit: number): Promise<readonly FriendActivityRow[]>;
 
   /** Guilds in the tenant with the caller's membership/active flags (directory). */
   listGuilds(tenantId: string, userId: string): Promise<readonly GuildSummaryRow[]>;
@@ -710,6 +736,47 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
     });
   };
 
+  /** Current-term guild pixel credit: placements on the ACTIVE canvas grouped by each placer's
+   *  active guild. Credit is attribution-only (a team scoreboard) — it confers no placement power.
+   *  Returns per-guild totals plus per-(guild, member) counts for placer rank. */
+  const guildPixelCredit = async (
+    tenantId: string,
+  ): Promise<{ totals: Map<string, number>; perMember: Map<string, Map<string, number>> }> => {
+    const totals = new Map<string, number>();
+    const perMember = new Map<string, Map<string, number>>();
+    const canvas = await prisma.canvas.findFirst({ where: { tenantId, status: 'active' }, select: { id: true } });
+    if (!canvas) return { totals, perMember };
+    const activeMemberships = await prisma.guildMembership.findMany({
+      where: { tenantId, active: true },
+      select: { guildId: true, userId: true },
+    });
+    if (activeMemberships.length === 0) return { totals, perMember };
+    const guildOf = new Map(activeMemberships.map((m) => [m.userId, m.guildId]));
+    const counts = await prisma.pixelEvent.groupBy({
+      by: ['actorUserId'],
+      where: { canvasId: canvas.id, type: 'PixelPlaced', actorUserId: { in: [...guildOf.keys()] } },
+      _count: { _all: true },
+    });
+    for (const c of counts) {
+      const guildId = guildOf.get(c.actorUserId);
+      if (guildId === undefined) continue;
+      totals.set(guildId, (totals.get(guildId) ?? 0) + c._count._all);
+      const members = perMember.get(guildId) ?? new Map<string, number>();
+      members.set(c.actorUserId, c._count._all);
+      perMember.set(guildId, members);
+    }
+    return { totals, perMember };
+  };
+
+  /** 1-based placer rank of `userId` within a guild's per-member counts (0 placements → after all placers). */
+  const placerRank = (members: Map<string, number> | undefined, userId: string): number => {
+    const mine = members?.get(userId) ?? 0;
+    if (!members) return 1;
+    let ahead = 0;
+    for (const [id, count] of members) if (id !== userId && count > mine) ahead++;
+    return ahead + 1;
+  };
+
   const buildProfileRow = async (
     tenantId: string,
     member: {
@@ -738,6 +805,21 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           }),
       recentPlacements(tenantId, member.userId),
     ]);
+    // The member's active guild + its current-term credit (a scoreboard fact, not power).
+    const activeMembership = await prisma.guildMembership.findFirst({
+      where: { tenantId, userId: member.userId, active: true },
+      select: { guildId: true, guild: { select: { slug: true, name: true } } },
+    });
+    let activeGuild: ProfileActiveGuildRow | null = null;
+    if (activeMembership) {
+      const credit = await guildPixelCredit(tenantId);
+      activeGuild = {
+        slug: activeMembership.guild.slug,
+        name: activeMembership.guild.name,
+        guildPixels: credit.totals.get(activeMembership.guildId) ?? 0,
+        placerRank: placerRank(credit.perMember.get(activeMembership.guildId), member.userId),
+      };
+    }
     return {
       handle: member.user.publicHandle,
       displayName: member.user.displayName,
@@ -749,6 +831,7 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       lifetimeStats,
       currentTermStats,
       recentPlacements: recent,
+      activeGuild,
     };
   };
 
@@ -2014,47 +2097,104 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
       return { kind: res.count > 0 ? 'ok' : 'not_found' };
     },
 
-    async listGuilds(tenantId, userId) {
-      const guilds = await prisma.guild.findMany({
-        where: { tenantId },
-        orderBy: { createdAt: 'desc' },
-        select: {
-          slug: true,
-          name: true,
-          description: true,
-          _count: { select: { members: true } },
-          members: { where: { userId }, select: { active: true } },
-        },
+    async friendRelationship(tenantId, userId, otherHandle) {
+      const other = await prisma.membership.findFirst({
+        where: { tenantId, status: 'active', user: { publicHandle: otherHandle.replace(/^@/, '') } },
+        select: { userId: true },
       });
-      return guilds.map((g) => ({
+      if (!other) return null;
+      if (other.userId === userId) return 'self';
+      const edge = await prisma.friendship.findFirst({
+        where: {
+          tenantId,
+          OR: [
+            { requesterUserId: userId, addresseeUserId: other.userId },
+            { requesterUserId: other.userId, addresseeUserId: userId },
+          ],
+        },
+        select: { status: true, requesterUserId: true },
+      });
+      if (!edge) return 'none';
+      if (edge.status === 'accepted') return 'friends';
+      return edge.requesterUserId === userId ? 'outgoing' : 'incoming';
+    },
+
+    async friendActivity(tenantId, userId, limit) {
+      const canvas = await prisma.canvas.findFirst({ where: { tenantId, status: 'active' }, select: { id: true } });
+      if (!canvas) return [];
+      const edges = await prisma.friendship.findMany({
+        where: { tenantId, status: 'accepted', OR: [{ requesterUserId: userId }, { addresseeUserId: userId }] },
+        select: { requesterUserId: true, addresseeUserId: true },
+      });
+      const friendIds = edges.map((e) => (e.requesterUserId === userId ? e.addresseeUserId : e.requesterUserId));
+      if (friendIds.length === 0) return [];
+      const events = await prisma.pixelEvent.findMany({
+        where: { canvasId: canvas.id, type: 'PixelPlaced', actorUserId: { in: friendIds }, x: { not: null }, y: { not: null } },
+        orderBy: { seq: 'desc' },
+        take: Math.max(1, Math.min(limit, 50)),
+        select: { x: true, y: true, newColor: true, createdAt: true, actor: { select: { publicHandle: true } } },
+      });
+      return events.flatMap((e) =>
+        e.actor.publicHandle === null || e.x === null || e.y === null || e.newColor === null
+          ? []
+          : [{ handle: e.actor.publicHandle, x: e.x, y: e.y, color: e.newColor, placedAt: e.createdAt }],
+      );
+    },
+
+    async listGuilds(tenantId, userId) {
+      const [guilds, credit] = await Promise.all([
+        prisma.guild.findMany({
+          where: { tenantId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            description: true,
+            _count: { select: { members: true } },
+            members: { where: { userId }, select: { active: true } },
+          },
+        }),
+        guildPixelCredit(tenantId),
+      ]);
+      // Rank by current-term credited pixels (desc); ties keep newest-first order deterministically.
+      const ordered = [...guilds].sort((a, b) => (credit.totals.get(b.id) ?? 0) - (credit.totals.get(a.id) ?? 0));
+      const rankOf = new Map(ordered.map((g, i) => [g.id, i + 1]));
+      return ordered.map((g) => ({
         slug: g.slug,
         name: g.name,
         description: g.description,
         memberCount: g._count.members,
         joined: g.members.length > 0,
         active: g.members[0]?.active ?? false,
+        pixels: credit.totals.get(g.id) ?? 0,
+        rank: rankOf.get(g.id) ?? ordered.length,
       }));
     },
 
     async getGuild(tenantId, userId, slug) {
-      const g = await prisma.guild.findUnique({
-        where: { tenantId_slug: { tenantId, slug } },
-        select: {
-          slug: true,
-          name: true,
-          description: true,
-          _count: { select: { members: true } },
-          members: {
-            orderBy: { createdAt: 'asc' },
-            take: 100,
-            select: {
-              userId: true,
-              active: true,
-              user: { select: { publicHandle: true, displayName: true, memberships: { where: { tenantId, status: 'active' }, select: { role: true } } } },
+      const [g, credit] = await Promise.all([
+        prisma.guild.findUnique({
+          where: { tenantId_slug: { tenantId, slug } },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            description: true,
+            _count: { select: { members: true } },
+            members: {
+              orderBy: { createdAt: 'asc' },
+              take: 100,
+              select: {
+                userId: true,
+                active: true,
+                user: { select: { publicHandle: true, displayName: true, memberships: { where: { tenantId, status: 'active' }, select: { role: true } } } },
+              },
             },
           },
-        },
-      });
+        }),
+        guildPixelCredit(tenantId),
+      ]);
       if (!g) return null;
       const mine = g.members.find((m) => m.userId === userId);
       const members: GuildMemberRow[] = g.members.flatMap((m) => {
@@ -2063,6 +2203,9 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
           ? []
           : [{ handle: m.user.publicHandle, displayName: m.user.displayName, role }];
       });
+      const pixels = credit.totals.get(g.id) ?? 0;
+      let rank = 1;
+      for (const [guildId, total] of credit.totals) if (guildId !== g.id && total > pixels) rank++;
       return {
         slug: g.slug,
         name: g.name,
@@ -2070,6 +2213,8 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         memberCount: g._count.members,
         joined: mine !== undefined,
         active: mine?.active ?? false,
+        pixels,
+        rank,
         members,
       };
     },
