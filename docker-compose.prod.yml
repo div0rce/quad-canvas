@@ -62,6 +62,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       QUAD_DYNAMIC_COOLDOWN: ${QUAD_DYNAMIC_COOLDOWN:-1}
+      # Opt-in DEV knob: log the masked verification link token so sign-in works without a mail
+      # provider. Leave 0 anywhere real; tokens in logs are a secret-hygiene risk.
+      QUAD_LOG_MAIL_TOKEN: ${QUAD_LOG_MAIL_TOKEN:-0}
     # Loopback-only: reachable on the host for debugging, NOT off-host. Only the edge proxy is published
     # publicly — otherwise a direct caller could spoof X-Forwarded-For (with TRUST_PROXY=true) and bypass
     # the per-IP rate limit. To expose the API directly, pin TRUST_PROXY to the edge's IP/CIDR instead.
