@@ -30,6 +30,8 @@ model Tenant {
   moderationActions ModerationAction[]
   reports           Report[]
   friendships       Friendship[]
+  guilds            Guild[]
+  guildMemberships  GuildMembership[]
 }
 
 model User {
@@ -51,6 +53,8 @@ model User {
   reports              Report[]
   friendshipsRequested Friendship[]       @relation("friendshipRequester")
   friendshipsReceived  Friendship[]       @relation("friendshipAddressee")
+  guildsCreated        Guild[]            @relation("guildCreator")
+  guildMemberships     GuildMembership[]
 }
 
 model Membership {
@@ -218,4 +222,45 @@ model Friendship {
   @@index([tenantId, addresseeUserId, status])
   @@index([tenantId, requesterUserId, status])
   @@map("friendships")
+}
+
+// Guilds: social/identity grouping within a tenant. Purely cosmetic — a guild confers NO placement
+// advantage (fairness invariant); it is a team badge + directory. A user may belong to several and
+// mark one as their active guild (attribution).
+model Guild {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  slug            String
+  name            String
+  description     String?
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User              @relation("guildCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  members   GuildMembership[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("guilds")
+}
+
+model GuildMembership {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  guildId   String   @map("guild_id")
+  userId    String   @map("user_id")
+  // At most one active guild per user per tenant (enforced in the repo on set-active).
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  guild  Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, guildId, userId])
+  @@index([tenantId, userId])
+  @@index([guildId])
+  @@map("guild_memberships")
 }
