@@ -1,6 +1,7 @@
 import { CanvasView } from '@/canvas/canvas-view';
 import { SessionBadge } from '@/auth/session-badge';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { resolveCurrentTenant } from '@/lib/tenant';
 
 // The live canvas route: paints the current canvas from the REST snapshot, applies WebSocket deltas
@@ -13,12 +14,7 @@ export default async function CanvasPage(): Promise<React.ReactElement> {
       <div className="quad-panel quad-canvas-page">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Home', href: '/home' },
-            { label: 'Canvas', href: '/canvas', active: true },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives' },
-          ]}
+          nav={mainNav('canvas')}
           right={<SessionBadge />}
         />
         <h1 className="quad-sr-only">Live canvas</h1>

@@ -11,6 +11,7 @@ import { colorHexForValue, colorNameForValue } from '@quad/config';
 import { fetchProfile } from '@/content/content-client';
 import { ContributionHeatmap } from '@/content/contribution-heatmap';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 import { fetchSession } from '@/auth/auth-client';
@@ -176,13 +177,7 @@ export default function ProfilePage(): React.ReactElement {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Home', href: '/home' },
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Guilds', href: '/guilds' },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives' },
-          ]}
+          nav={mainNav()}
           right={<SessionBadge />}
         />
 
@@ -207,7 +202,11 @@ export default function ProfilePage(): React.ReactElement {
                     <div className="quad-profile__handle-row">
                       <h1 className="quad-profile__handle quad-pixel">{displayHandle}</h1>
                       <span className="quad-badge">Public handle</span>
-                      {relationship !== null && relationship !== 'self' ? (
+                      {relationship === 'self' ? (
+                        <Link className="quad-btn" href="/settings">
+                          Edit profile
+                        </Link>
+                      ) : relationship !== null ? (
                         <button
                           type="button"
                           className={relationship === 'friends' ? 'quad-btn' : 'quad-btn quad-btn--primary'}

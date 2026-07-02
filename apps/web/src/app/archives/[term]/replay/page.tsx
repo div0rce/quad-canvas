@@ -9,6 +9,7 @@ import { fetchArchiveAt, fetchReplayMeta } from '@/archives/archives-client';
 import { paintSnapshot } from '@/archives/paint-snapshot';
 import { replayStep, nextReplaySeq, frameInterval, isReplayFrameCurrent } from '@/archives/replay';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { useTenant } from '@/components/tenant-provider';
 
 const CELL_PX = 8;
@@ -119,11 +120,7 @@ export default function ReplayPage(): React.ReactElement {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives', active: true },
-          ]}
+          nav={mainNav('archive')}
           right={<span className="quad-eyebrow">From the permanent history</span>}
         />
 

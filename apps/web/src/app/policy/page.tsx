@@ -2,6 +2,7 @@
 // the repository doc is authoritative. Static page (no data), linked from the moderator console.
 import { SessionBadge } from '@/auth/session-badge';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { resolveCurrentTenant } from '@/lib/tenant';
 
 export const metadata = { title: 'Content policy' };
@@ -15,11 +16,7 @@ export default async function PolicyPage(): Promise<React.ReactElement> {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives' },
-          ]}
+          nav={mainNav()}
           right={<SessionBadge />}
         />
         <div style={{ padding: 'clamp(20px, 4vw, 32px)', maxWidth: 720, lineHeight: 1.5 }}>

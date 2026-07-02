@@ -9,14 +9,11 @@ import type { dto } from '@quad/core';
 import { fetchSession } from '@/auth/auth-client';
 import { addButtonLabel, acceptFriendRequest, cancelFriendRequest, searchFriends, sendFriendRequest } from '@/friends/friends-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
-const NAV = [
-  { label: 'Home', href: '/home' },
-  { label: 'Friends', href: '/friends' },
-  { label: 'Canvas', href: '/canvas' },
-];
+const NAV = mainNav();
 
 export default function AddFriendsPage(): React.ReactElement {
   const router = useRouter();

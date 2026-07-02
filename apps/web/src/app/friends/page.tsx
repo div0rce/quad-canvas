@@ -9,14 +9,11 @@ import type { dto } from '@quad/core';
 import { fetchSession } from '@/auth/auth-client';
 import { acceptFriendRequest, cancelFriendRequest, fetchFriends, removeFriend } from '@/friends/friends-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
-const NAV = [
-  { label: 'Home', href: '/home' },
-  { label: 'Friends', href: '/friends', active: true },
-  { label: 'Canvas', href: '/canvas' },
-];
+const NAV = mainNav();
 
 function MemberRow({
   member,
