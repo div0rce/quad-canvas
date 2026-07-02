@@ -23,6 +23,7 @@ import { makeSessionRoutes } from './routes/session.js';
 import { makeModerationRoutes } from './routes/moderation.js';
 import { makeAdminRoutes } from './routes/admin.js';
 import { makeReportRoutes } from './routes/reports.js';
+import { makeFriendRoutes } from './routes/friends.js';
 import { makeArchiveRoutes } from './routes/archives.js';
 import { makeProfileRoutes } from './routes/profiles.js';
 import { makeLeaderboardRoutes } from './routes/leaderboards.js';
@@ -146,6 +147,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     await app.register(makeModerationRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
     await app.register(makeAdminRoutes(opts.placement.repo, opts.auth.sessionStore, opts.placement.bus));
     await app.register(makeReportRoutes(opts.placement.repo, reportRateLimit));
+    await app.register(makeFriendRoutes(opts.placement.repo));
   }
 
   if (opts.placement) {

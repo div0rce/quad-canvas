@@ -350,6 +350,36 @@ export interface LeaderboardQuery {
   readonly limit: number;
 }
 
+// ---- Friends: request-based, tenant-scoped graph (DC2 only — never exposes an email). ----
+
+export interface FriendMemberRow {
+  readonly handle: string;
+  readonly displayName: string | null;
+  readonly role: string;
+}
+export interface FriendsView {
+  readonly friends: readonly FriendMemberRow[];
+  readonly incoming: readonly FriendMemberRow[];
+  readonly outgoing: readonly FriendMemberRow[];
+}
+export type FriendRelationshipKind = 'self' | 'none' | 'outgoing' | 'incoming' | 'friends';
+export interface FriendSearchRow extends FriendMemberRow {
+  readonly relationship: FriendRelationshipKind;
+}
+export interface SendFriendRequestInput {
+  readonly tenantId: string;
+  readonly requesterUserId: string;
+  readonly targetHandle: string;
+  readonly idempotencyKey: string;
+}
+export type SendFriendRequestResult =
+  | { readonly kind: 'requested' }
+  | { readonly kind: 'accepted' }
+  | { readonly kind: 'exists'; readonly relationship: FriendRelationshipKind }
+  | { readonly kind: 'self' }
+  | { readonly kind: 'not_found' };
+export type FriendMutationResult = { readonly kind: 'ok' | 'not_found' };
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -420,6 +450,19 @@ export interface PlacementRepository {
   findByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PlacedRow | null>;
   /** Atomically enforce idempotency + cooldown, then append the event + update the projection. */
   appendPlacement(input: AppendPlacementInput): Promise<AppendResult>;
+
+  /** The caller's confirmed friends + pending requests (both directions), DC2 only. */
+  listFriends(tenantId: string, userId: string): Promise<FriendsView>;
+  /** Active members whose public handle matches `query` (prefix), with the caller's relationship. */
+  searchFriendCandidates(tenantId: string, userId: string, query: string, limit: number): Promise<readonly FriendSearchRow[]>;
+  /** Send (or auto-accept a reciprocal) friend request by the target's public handle. Idempotent. */
+  sendFriendRequest(input: SendFriendRequestInput): Promise<SendFriendRequestResult>;
+  /** Accept an incoming request from `requesterHandle`. */
+  acceptFriendRequest(tenantId: string, addresseeUserId: string, requesterHandle: string): Promise<FriendMutationResult>;
+  /** Cancel an outgoing request to `addresseeHandle`. */
+  cancelFriendRequest(tenantId: string, requesterUserId: string, addresseeHandle: string): Promise<FriendMutationResult>;
+  /** Remove a confirmed friend by handle (either direction). */
+  removeFriend(tenantId: string, userId: string, otherHandle: string): Promise<FriendMutationResult>;
 }
 
 /** Parse a compound keyset cursor `"<iso>|<id>"` (createdAt + a tiebreak id). Returns null for an
@@ -1759,6 +1802,157 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         });
         return { kind: 'applied', auditId: action.id, createdAt: action.createdAt, seq };
       });
+    },
+
+    async listFriends(tenantId, userId) {
+      const rows = await prisma.friendship.findMany({
+        where: { tenantId, OR: [{ requesterUserId: userId }, { addresseeUserId: userId }] },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          status: true,
+          requesterUserId: true,
+          addresseeUserId: true,
+          requester: { select: { publicHandle: true, displayName: true, memberships: { where: { tenantId, status: 'active' }, select: { role: true } } } },
+          addressee: { select: { publicHandle: true, displayName: true, memberships: { where: { tenantId, status: 'active' }, select: { role: true } } } },
+        },
+      });
+      const friends: FriendMemberRow[] = [];
+      const incoming: FriendMemberRow[] = [];
+      const outgoing: FriendMemberRow[] = [];
+      for (const r of rows) {
+        const iAmRequester = r.requesterUserId === userId;
+        const other = iAmRequester ? r.addressee : r.requester;
+        const role = other.memberships[0]?.role;
+        if (other.publicHandle === null || role === undefined) continue; // the other side is not an active member
+        const row: FriendMemberRow = { handle: other.publicHandle, displayName: other.displayName, role };
+        if (r.status === 'accepted') friends.push(row);
+        else if (iAmRequester) outgoing.push(row);
+        else incoming.push(row);
+      }
+      return { friends, incoming, outgoing };
+    },
+
+    async searchFriendCandidates(tenantId, userId, query, limit) {
+      const q = query.trim().replace(/^@/, '');
+      if (q.length === 0) return [];
+      const members = await prisma.membership.findMany({
+        where: { tenantId, status: 'active', userId: { not: userId }, user: { publicHandle: { startsWith: q, mode: 'insensitive' } } },
+        orderBy: { user: { publicHandle: 'asc' } },
+        take: Math.max(1, Math.min(limit, 25)),
+        select: { userId: true, role: true, user: { select: { publicHandle: true, displayName: true } } },
+      });
+      if (members.length === 0) return [];
+      const ids = members.map((m) => m.userId);
+      const edges = await prisma.friendship.findMany({
+        where: {
+          tenantId,
+          OR: [
+            { requesterUserId: userId, addresseeUserId: { in: ids } },
+            { addresseeUserId: userId, requesterUserId: { in: ids } },
+          ],
+        },
+        select: { status: true, requesterUserId: true, addresseeUserId: true },
+      });
+      const relationOf = (otherId: string): FriendRelationshipKind => {
+        const e = edges.find((x) => x.requesterUserId === otherId || x.addresseeUserId === otherId);
+        if (!e) return 'none';
+        if (e.status === 'accepted') return 'friends';
+        return e.requesterUserId === userId ? 'outgoing' : 'incoming';
+      };
+      return members.flatMap((m) =>
+        m.user.publicHandle === null
+          ? []
+          : [{ handle: m.user.publicHandle, displayName: m.user.displayName, role: m.role, relationship: relationOf(m.userId) }],
+      );
+    },
+
+    async sendFriendRequest(input) {
+      const target = await prisma.membership.findFirst({
+        where: { tenantId: input.tenantId, status: 'active', user: { publicHandle: input.targetHandle.replace(/^@/, '') } },
+        select: { userId: true },
+      });
+      if (!target) return { kind: 'not_found' };
+      if (target.userId === input.requesterUserId) return { kind: 'self' };
+      return prisma.$transaction(async (tx) => {
+        const byKey = await tx.friendship.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey: input.idempotencyKey } },
+          select: { requesterUserId: true, status: true },
+        });
+        if (byKey) {
+          if (byKey.status === 'accepted') return { kind: 'exists', relationship: 'friends' } as const;
+          return { kind: 'exists', relationship: byKey.requesterUserId === input.requesterUserId ? 'outgoing' : 'incoming' } as const;
+        }
+        const existing = await tx.friendship.findFirst({
+          where: {
+            tenantId: input.tenantId,
+            OR: [
+              { requesterUserId: input.requesterUserId, addresseeUserId: target.userId },
+              { requesterUserId: target.userId, addresseeUserId: input.requesterUserId },
+            ],
+          },
+          select: { id: true, status: true, requesterUserId: true },
+        });
+        if (existing) {
+          if (existing.status === 'accepted') return { kind: 'exists', relationship: 'friends' } as const;
+          if (existing.requesterUserId === input.requesterUserId) return { kind: 'exists', relationship: 'outgoing' } as const;
+          await tx.friendship.update({ where: { id: existing.id }, data: { status: 'accepted' } });
+          return { kind: 'accepted' } as const; // a reciprocal incoming request confirms both sides
+        }
+        await tx.friendship.create({
+          data: {
+            tenantId: input.tenantId,
+            requesterUserId: input.requesterUserId,
+            addresseeUserId: target.userId,
+            status: 'pending',
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
+        return { kind: 'requested' } as const;
+      });
+    },
+
+    async acceptFriendRequest(tenantId, addresseeUserId, requesterHandle) {
+      const requester = await prisma.membership.findFirst({
+        where: { tenantId, status: 'active', user: { publicHandle: requesterHandle.replace(/^@/, '') } },
+        select: { userId: true },
+      });
+      if (!requester) return { kind: 'not_found' };
+      const res = await prisma.friendship.updateMany({
+        where: { tenantId, requesterUserId: requester.userId, addresseeUserId, status: 'pending' },
+        data: { status: 'accepted' },
+      });
+      return { kind: res.count > 0 ? 'ok' : 'not_found' };
+    },
+
+    async cancelFriendRequest(tenantId, requesterUserId, addresseeHandle) {
+      const addressee = await prisma.membership.findFirst({
+        where: { tenantId, user: { publicHandle: addresseeHandle.replace(/^@/, '') } },
+        select: { userId: true },
+      });
+      if (!addressee) return { kind: 'not_found' };
+      const res = await prisma.friendship.deleteMany({
+        where: { tenantId, requesterUserId, addresseeUserId: addressee.userId, status: 'pending' },
+      });
+      return { kind: res.count > 0 ? 'ok' : 'not_found' };
+    },
+
+    async removeFriend(tenantId, userId, otherHandle) {
+      const other = await prisma.membership.findFirst({
+        where: { tenantId, user: { publicHandle: otherHandle.replace(/^@/, '') } },
+        select: { userId: true },
+      });
+      if (!other) return { kind: 'not_found' };
+      const res = await prisma.friendship.deleteMany({
+        where: {
+          tenantId,
+          status: 'accepted',
+          OR: [
+            { requesterUserId: userId, addresseeUserId: other.userId },
+            { requesterUserId: other.userId, addresseeUserId: userId },
+          ],
+        },
+      });
+      return { kind: res.count > 0 ? 'ok' : 'not_found' };
     },
   };
 }
