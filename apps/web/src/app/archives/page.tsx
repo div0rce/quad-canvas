@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { dto } from '@quad/core';
 import { fetchArchives } from '@/archives/archives-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
@@ -35,11 +36,7 @@ export default function ArchivesPage(): React.ReactElement {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives', active: true },
-          ]}
+          nav={mainNav('archive')}
           right={<SessionBadge />}
         />
         <div style={{ padding: 'clamp(16px, 4vw, 28px)' }}>

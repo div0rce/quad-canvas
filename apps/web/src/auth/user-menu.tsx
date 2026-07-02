@@ -25,6 +25,7 @@ export interface UserMenuItem {
 export function userMenuItems(profileHref: string, onSignOut: () => void): readonly UserMenuItem[] {
   return [
     { key: 'profile', label: 'View profile', href: profileHref },
+    { key: 'settings', label: 'Edit profile', href: '/settings' },
     { key: 'friends', label: 'Friends', href: '/friends' },
     { key: 'add-friends', label: 'Add friends', href: '/friends/add' },
     { key: 'guilds', label: 'Guilds', href: '/guilds' },

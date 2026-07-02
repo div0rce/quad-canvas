@@ -8,14 +8,11 @@ import Link from 'next/link';
 import { fetchSession } from '@/auth/auth-client';
 import { createGuild } from '@/guilds/guilds-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
-const NAV = [
-  { label: 'Home', href: '/home' },
-  { label: 'Guilds', href: '/guilds' },
-  { label: 'Canvas', href: '/canvas' },
-];
+const NAV = mainNav('guilds');
 
 export default function NewGuildPage(): React.ReactElement {
   const router = useRouter();

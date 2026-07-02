@@ -2065,3 +2065,10 @@ a.quad-home__card:hover {
   color: var(--muted-tag);
   font-size: 16px;
 }
+
+/* ----- Settings ----- */
+.quad-settings__saved {
+  color: var(--live-green);
+  font-size: 18px;
+  margin: 4px 0 0;
+}

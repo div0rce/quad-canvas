@@ -9,6 +9,7 @@ import type { dto } from '@quad/core';
 import { fetchArchiveSnapshot, fetchReplayMeta, fetchArchiveStats } from '@/archives/archives-client';
 import { paintSnapshot, archiveImageFilename } from '@/archives/paint-snapshot';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
@@ -76,11 +77,7 @@ export default function ArchiveTermPage(): React.ReactElement {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Leaderboard', href: '/leaderboards' },
-            { label: 'Archive', href: '/archives', active: true },
-          ]}
+          nav={mainNav('archive')}
           right={<SessionBadge />}
         />
         <div style={{ padding: 'clamp(16px, 4vw, 28px)' }}>

@@ -11,19 +11,14 @@ import type { dto } from '@quad/core';
 import { fetchSession, type SessionInfo } from '@/auth/auth-client';
 import { fetchProfile } from '@/content/content-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 import { boardSize, fetchCanvasMeta, fetchRecentPlacements, statsSummary, welcomeName } from '@/home/home-client';
 import { fetchFriendActivity } from '@/friends/friends-client';
 import { fetchGuilds } from '@/guilds/guilds-client';
 
-const NAV = [
-  { label: 'Home', href: '/home', active: true },
-  { label: 'Canvas', href: '/canvas' },
-  { label: 'Guilds', href: '/guilds' },
-  { label: 'Leaderboard', href: '/leaderboards' },
-  { label: 'Archive', href: '/archives' },
-];
+const NAV = mainNav();
 
 export default function HomePage(): React.ReactElement {
   const router = useRouter();

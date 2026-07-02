@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { dto } from '@quad/core';
 import { fetchLeaderboard, ordinal, type LeaderboardCategory, type LeaderboardWindow } from '@/content/content-client';
 import { AppBar } from '@/components/ui/app-bar';
+import { mainNav } from '@/components/main-nav';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
 
@@ -60,11 +61,7 @@ export default function LeaderboardsPage(): React.ReactElement {
       <div className="quad-panel">
         <AppBar
           tenantLabel={tenant?.title ?? null}
-          nav={[
-            { label: 'Canvas', href: '/canvas' },
-            { label: 'Leaderboard', href: '/leaderboards', active: true },
-            { label: 'Archive', href: '/archives' },
-          ]}
+          nav={mainNav('leaderboard')}
           right={<SessionBadge />}
         />
 
