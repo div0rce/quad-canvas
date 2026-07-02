@@ -327,3 +327,44 @@ export interface TenantConfigResponse {
   readonly termCadence: string;
   readonly domains: readonly string[];
 }
+
+/** A DC2 member reference for the friends graph — public handle + optional display name, never email. */
+export interface FriendMember {
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly role: Role;
+}
+
+/** The signed-in member's friends view: confirmed friends + pending requests in both directions. */
+export interface FriendsResponse {
+  readonly friends: readonly FriendMember[];
+  /** Requests others sent to the caller, awaiting the caller's confirmation. */
+  readonly incoming: readonly FriendMember[];
+  /** Requests the caller sent, awaiting the other member's confirmation. */
+  readonly outgoing: readonly FriendMember[];
+  readonly counts: {
+    readonly friends: number;
+    readonly incoming: number;
+    readonly outgoing: number;
+  };
+}
+
+/** The caller's relationship to a member surfaced in friend search. */
+export type FriendRelationship = 'self' | 'none' | 'outgoing' | 'incoming' | 'friends';
+
+/** A member found by public-handle search, with the caller's relationship to them (DC2 only). */
+export interface FriendSearchResult {
+  readonly handle: string;
+  readonly displayName?: string;
+  readonly role: Role;
+  readonly relationship: FriendRelationship;
+}
+
+export interface FriendSearchResponse {
+  readonly results: readonly FriendSearchResult[];
+}
+
+/** Add-a-friend command: the target's public handle (never an email). The Idempotency-Key is a header. */
+export interface SendFriendRequestCommand {
+  readonly handle: string;
+}

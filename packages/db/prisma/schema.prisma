@@ -29,6 +29,7 @@ model Tenant {
   pixels            Pixel[]
   moderationActions ModerationAction[]
   reports           Report[]
+  friendships       Friendship[]
 }
 
 model User {
@@ -43,11 +44,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships       Membership[]
-  pixelEvents       PixelEvent[]
-  pixels            Pixel[]
-  moderationActions ModerationAction[]
-  reports           Report[]
+  memberships          Membership[]
+  pixelEvents          PixelEvent[]
+  pixels               Pixel[]
+  moderationActions    ModerationAction[]
+  reports              Report[]
+  friendshipsRequested Friendship[]       @relation("friendshipRequester")
+  friendshipsReceived  Friendship[]       @relation("friendshipAddressee")
 }
 
 model Membership {
@@ -191,4 +194,28 @@ model Report {
   @@unique([tenantId, idempotencyKey]) // duplicate-safe retries (tenant-scoped; nulls are distinct)
   @@index([tenantId, status, createdAt])
   @@map("reports")
+}
+
+// Campus friend graph: request-based, tenant-scoped. A row is a directed request
+// (requester -> addressee); `status` = pending | accepted. Both directions are read to
+// resolve a user's confirmed friends. DC2 only — the graph never exposes any email.
+model Friendship {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  requesterUserId String   @map("requester_user_id")
+  addresseeUserId String   @map("addressee_user_id")
+  status          String   @default("pending")
+  idempotencyKey  String?  @map("idempotency_key")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requester User   @relation("friendshipRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  addressee User   @relation("friendshipAddressee", fields: [addresseeUserId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, requesterUserId, addresseeUserId])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, addresseeUserId, status])
+  @@index([tenantId, requesterUserId, status])
+  @@map("friendships")
 }
