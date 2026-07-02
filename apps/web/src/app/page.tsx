@@ -1,13 +1,27 @@
-import { AppShell } from '@/components/app-shell';
-import { SignedInRedirect } from '@/components/signed-in-redirect';
+'use client';
 
-// The root route. Signed-out visitors get the tenant marketing landing; signed-in members are sent
-// to their dashboard (/home). Tenant is resolved server-side by the layout.
-export default function Page(): React.ReactElement {
+// The root route: routing only (design page map). Signed-in members go to /home; visitors go to the
+// /welcome landing. The server stays authoritative — this is a convenience router, not a gate.
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { fetchSession } from '@/auth/auth-client';
+
+export default function RootRouter(): React.ReactElement {
+  const router = useRouter();
+  useEffect(() => {
+    let active = true;
+    void fetchSession().then((s) => {
+      if (active) router.replace(s.authenticated ? '/home' : '/welcome');
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
   return (
-    <>
-      <SignedInRedirect to="/home" />
-      <AppShell />
-    </>
+    <main className="quad-page">
+      <p className="quad-sr-only" role="status">
+        Loading…
+      </p>
+    </main>
   );
 }

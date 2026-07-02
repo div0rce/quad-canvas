@@ -1981,3 +1981,87 @@ a {
   font-size: 20px;
   color: var(--ink-strong);
 }
+
+/* ----- Profile: display name + active-guild chip ----- */
+.quad-profile__display-name {
+  font-size: 21px;
+  color: var(--ink-strong);
+  margin: 4px 0 0;
+}
+.quad-profile__guild-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.quad-profile__guild-chip:hover .quad-badge {
+  background: var(--qa-tint);
+}
+.quad-profile__guild-meta {
+  font-size: 17px;
+  color: var(--muted-tag);
+}
+
+/* ----- Home: lower cards (guild / guild board / friends / live feed) ----- */
+.quad-home__lower {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+  padding: 0 24px 32px;
+}
+.quad-home__card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  text-decoration: none;
+  color: var(--ink);
+}
+a.quad-home__card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translate(-1px, -1px);
+}
+.quad-home__card-title {
+  font-family: var(--font-pixel), var(--font-pixel-fallback);
+  font-size: 14px;
+  color: var(--ink);
+}
+.quad-home__card-meta {
+  font-size: 18px;
+  color: var(--muted-tag);
+}
+.quad-home__card-meta a {
+  color: var(--ink);
+}
+.quad-home__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 19px;
+}
+.quad-home__list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.quad-home__list a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.quad-home__list a:hover {
+  text-decoration: underline;
+}
+.quad-home__list-rank {
+  color: var(--muted-tag);
+  font-size: 16px;
+}
+.quad-home__list-meta {
+  margin-left: auto;
+  color: var(--muted-tag);
+  font-size: 16px;
+}

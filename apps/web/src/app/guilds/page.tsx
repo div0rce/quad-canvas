@@ -79,10 +79,13 @@ export default function GuildsPage(): React.ReactElement {
               ) : (
                 guilds.map((g) => (
                   <li key={g.slug} className="quad-friends__row quad-guild__row">
+                    <span className="quad-home__list-rank" aria-label={`Rank ${g.rank}`}>
+                      #{g.rank}
+                    </span>
                     <span className="quad-friends__row-main">
                       <Link href={`/guilds/${encodeURIComponent(g.slug)}`}>{g.name}</Link>
                       <span className="quad-friends__display">
-                        {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
+                        {g.pixels.toLocaleString('en-US')} px · {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
                         {g.description ? ` · ${g.description}` : ''}
                       </span>
                     </span>

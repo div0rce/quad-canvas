@@ -80,7 +80,8 @@ export default function GuildProfilePage(): React.ReactElement {
                 <div>
                   <h1 className="quad-pixel">{guild.name}</h1>
                   <p className="quad-friends__note">
-                    {guild.memberCount} {guild.memberCount === 1 ? 'member' : 'members'}
+                    #{guild.rank} · {guild.pixels.toLocaleString('en-US')} guild pixels · {guild.memberCount}{' '}
+                    {guild.memberCount === 1 ? 'member' : 'members'}
                     {guild.active ? ' · your active guild' : ''}
                   </p>
                   {guild.description ? <p className="quad-guild__desc">{guild.description}</p> : null}
