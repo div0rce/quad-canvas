@@ -38,8 +38,12 @@ export default function HomePage(): React.ReactElement {
         router.replace('/'); // /home is for members; send visitors to the landing
         return;
       }
+      if (!s.handle) {
+        router.replace('/onboarding'); // a new member who hasn't picked a handle yet
+        return;
+      }
       setSession(s);
-      if (s.handle) void fetchProfile(s.handle.replace(/^@/, '')).then((p) => active && setProfile(p));
+      void fetchProfile(s.handle.replace(/^@/, '')).then((p) => active && setProfile(p));
     });
     void fetchCanvasMeta().then((c) => active && setCanvas(c));
     return () => {

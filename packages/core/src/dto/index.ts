@@ -400,3 +400,13 @@ export interface CreateGuildCommand {
   readonly name: string;
   readonly description?: string;
 }
+
+/** Self-edit the caller's profile (onboarding / settings). Both fields optional; DC2 only. */
+export interface UpdateProfileCommand {
+  readonly handle?: string;
+  readonly displayName?: string;
+}
+
+export interface UpdateProfileResponse {
+  readonly handle: string | null;
+}

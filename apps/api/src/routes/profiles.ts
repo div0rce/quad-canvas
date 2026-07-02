@@ -59,6 +59,33 @@ export function makeProfileRoutes(repo: PlacementRepository): FastifyPluginAsync
       return reply.send(toResponse(row));
     });
 
+    app.post('/api/v1/profiles/me', async (request, reply) => {
+      if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
+      const principal = request.principal;
+      if (!principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const body = (request.body ?? {}) as Partial<dto.UpdateProfileCommand>;
+      if (body.handle === undefined && body.displayName === undefined) {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'Nothing to update.');
+      }
+      if (body.handle !== undefined && typeof body.handle !== 'string') {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'handle must be a string.');
+      }
+      if (body.displayName !== undefined && typeof body.displayName !== 'string') {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'displayName must be a string.');
+      }
+      const result = await repo.updateProfile({
+        tenantId: request.tenant.id,
+        userId: principal.userId,
+        ...(body.handle !== undefined ? { handle: body.handle } : {}),
+        ...(body.displayName !== undefined ? { displayName: body.displayName.trim() === '' ? null : body.displayName.trim() } : {}),
+      });
+      if (result.kind === 'invalid_handle') {
+        return err(reply, request, 422, 'VALIDATION_ERROR', 'A handle must be 3–24 letters, numbers, underscores, or hyphens.');
+      }
+      if (result.kind === 'handle_taken') return err(reply, request, 409, 'CONFLICT', 'That handle is already taken.');
+      return reply.send({ handle: result.handle } satisfies dto.UpdateProfileResponse);
+    });
+
     app.get('/api/v1/profiles/:handle', async (request, reply) => {
       if (!request.tenant) return err(reply, request, 404, 'NOT_FOUND', 'No tenant for this host.');
       const { handle } = request.params as { handle: string };
