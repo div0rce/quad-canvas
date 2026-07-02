@@ -410,6 +410,18 @@ export type CreateGuildResult =
   | { readonly kind: 'invalid' };
 export type GuildMutationResult = { readonly kind: 'ok' | 'not_found' };
 
+// ---- Profile self-edit (onboarding / settings): set the public handle + display name. ----
+export interface UpdateProfileInput {
+  readonly tenantId: string;
+  readonly userId: string;
+  readonly handle?: string;
+  readonly displayName?: string | null;
+}
+export type UpdateProfileResult =
+  | { readonly kind: 'ok'; readonly handle: string | null }
+  | { readonly kind: 'handle_taken' }
+  | { readonly kind: 'invalid_handle' };
+
 export interface PlacementRepository {
   /** The tenant's current ACTIVE canvas (open for placement), or null. */
   findCurrentCanvas(tenantId: string): Promise<CurrentCanvasRow | null>;
@@ -506,6 +518,10 @@ export interface PlacementRepository {
   leaveGuild(tenantId: string, userId: string, slug: string): Promise<GuildMutationResult>;
   /** Set the caller's active guild (must be a member); clears any prior active guild. */
   setActiveGuild(tenantId: string, userId: string, slug: string): Promise<GuildMutationResult>;
+
+  /** Set the caller's public handle and/or display name (onboarding / settings). Handle is
+   *  validated + must be free among active members of the tenant. */
+  updateProfile(input: UpdateProfileInput): Promise<UpdateProfileResult>;
 }
 
 /** Parse a compound keyset cursor `"<iso>|<id>"` (createdAt + a tiebreak id). Returns null for an
@@ -2112,6 +2128,28 @@ export function createPlacementRepository(prisma: PrismaClient): PlacementReposi
         await tx.guildMembership.update({ where: { id: membership.id }, data: { active: true } });
         return { kind: 'ok' as const };
       });
+    },
+
+    async updateProfile(input) {
+      const data: { publicHandle?: string; displayName?: string | null } = {};
+      if (input.handle !== undefined) {
+        const h = input.handle.trim();
+        if (!/^[a-zA-Z0-9_-]{3,24}$/.test(h)) return { kind: 'invalid_handle' };
+        const taken = await prisma.membership.findFirst({
+          where: {
+            tenantId: input.tenantId,
+            status: 'active',
+            userId: { not: input.userId },
+            user: { publicHandle: { equals: h, mode: 'insensitive' } },
+          },
+          select: { id: true },
+        });
+        if (taken) return { kind: 'handle_taken' };
+        data.publicHandle = h;
+      }
+      if (input.displayName !== undefined) data.displayName = input.displayName;
+      const user = await prisma.user.update({ where: { id: input.userId }, data, select: { publicHandle: true } });
+      return { kind: 'ok', handle: user.publicHandle };
     },
   };
 }

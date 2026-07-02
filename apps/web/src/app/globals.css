@@ -1897,3 +1897,87 @@ a {
 .quad-guild__row {
   align-items: center;
 }
+
+/* ----- Onboarding (/onboarding) ----- */
+.quad-onb {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  max-width: 620px;
+  margin: 0 auto;
+}
+.quad-onb__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: var(--border-structural) solid var(--ink);
+  padding-bottom: 14px;
+}
+.quad-onb__progress {
+  font-size: 17px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-tag);
+}
+.quad-onb__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px;
+}
+.quad-onb__card h1 {
+  font-size: 20px;
+  color: var(--ink);
+  margin: 0;
+}
+.quad-onb__lead {
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--ink-strong);
+  margin: 0;
+}
+.quad-onb__handle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
+  color: var(--muted-tag);
+}
+.quad-onb__handle .quad-friends__search {
+  flex: 1;
+}
+.quad-onb__hint {
+  font-size: 17px;
+  color: var(--muted-tag);
+  margin: 0;
+}
+.quad-onb__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.quad-onb__skip {
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 17px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-tag);
+  cursor: pointer;
+}
+.quad-onb__skip:hover {
+  color: var(--ink);
+}
+.quad-onb__steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 20px;
+  color: var(--ink-strong);
+}
