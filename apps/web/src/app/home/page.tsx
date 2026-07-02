@@ -18,6 +18,7 @@ import { boardSize, fetchCanvasMeta, statsSummary, welcomeName } from '@/home/ho
 const NAV = [
   { label: 'Home', href: '/home', active: true },
   { label: 'Canvas', href: '/canvas' },
+  { label: 'Guilds', href: '/guilds' },
   { label: 'Leaderboard', href: '/leaderboards' },
   { label: 'Archive', href: '/archives' },
 ];
