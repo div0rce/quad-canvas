@@ -1738,3 +1738,102 @@ a {
   font-size: 18px;
   color: var(--muted-tag);
 }
+
+/* ----- Friends area (/friends, /friends/add) ----- */
+.quad-friends {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+}
+.quad-friends__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.quad-friends__head h1 {
+  font-size: 20px;
+  color: var(--ink);
+  margin: 0;
+}
+.quad-friends__note {
+  font-size: 19px;
+  color: var(--muted-tag);
+  margin: 6px 0 0;
+}
+.quad-friends__search {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 20px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+  color: var(--ink);
+}
+.quad-friends__search:focus-visible {
+  outline: 3px solid var(--status-blue);
+  outline-offset: 2px;
+}
+.quad-friends section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.quad-friends section .quad-eyebrow {
+  margin-top: 8px;
+}
+.quad-friends__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quad-friends__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: var(--border-component) solid var(--ink);
+}
+.quad-friends__avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+.quad-friends__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 20px;
+}
+.quad-friends__row-main a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.quad-friends__row-main a:hover {
+  text-decoration: underline;
+}
+.quad-friends__display {
+  font-size: 17px;
+  color: var(--muted-tag);
+}
+.quad-friends__remove {
+  color: var(--muted-tag);
+}
+.quad-friends__remove:hover {
+  color: var(--live-red);
+  border-color: var(--live-red);
+}
+.quad-friends__empty {
+  padding: 16px 14px;
+  font-size: 19px;
+  color: var(--muted-tag);
+}
