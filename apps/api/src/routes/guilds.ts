@@ -21,6 +21,8 @@ function toSummary(row: GuildSummaryRow): dto.GuildSummary {
     memberCount: row.memberCount,
     joined: row.joined,
     active: row.active,
+    pixels: row.pixels,
+    rank: row.rank,
     ...(row.description !== null ? { description: row.description } : {}),
   };
 }

@@ -66,6 +66,32 @@ export function makeFriendRoutes(repo: PlacementRepository): FastifyPluginAsync 
       return reply.send({ results: rows.map(toSearchResult) } satisfies dto.FriendSearchResponse);
     });
 
+    app.get('/api/v1/friends/activity', member, async (request, reply) => {
+      const principal = request.principal;
+      if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const rows = await repo.friendActivity(request.tenant.id, principal.userId, 10);
+      void reply.header('Cache-Control', 'private, no-store');
+      const body: dto.FriendActivityResponse = {
+        items: rows.map((r) => ({
+          handle: r.handle,
+          at: { x: r.x, y: r.y },
+          color: r.color as dto.FriendActivityItem['color'],
+          placedAt: r.placedAt.toISOString(),
+        })),
+      };
+      return reply.send(body);
+    });
+
+    app.get('/api/v1/friends/relationship/:handle', member, async (request, reply) => {
+      const principal = request.principal;
+      if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');
+      const { handle } = request.params as { handle: string };
+      const relationship = await repo.friendRelationship(request.tenant.id, principal.userId, handle);
+      if (relationship === null) return err(reply, request, 404, 'NOT_FOUND', 'No member with that handle.');
+      void reply.header('Cache-Control', 'private, no-store');
+      return reply.send({ relationship } satisfies dto.FriendRelationshipResponse);
+    });
+
     app.post('/api/v1/friends/requests', member, async (request, reply) => {
       const principal = request.principal;
       if (!request.tenant || !principal) return err(reply, request, 401, 'UNAUTHENTICATED', 'Authentication required.');

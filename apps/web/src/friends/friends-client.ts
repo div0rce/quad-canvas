@@ -53,6 +53,24 @@ export async function fetchFriends(): Promise<dto.FriendsResponse | null> {
   return isFriendsResponse(body) ? body : null;
 }
 
+function isActivityItem(v: unknown): v is dto.FriendActivityItem {
+  return isRecord(v) && typeof v['handle'] === 'string' && isRecord(v['at']) && typeof v['placedAt'] === 'string';
+}
+
+/** Recent placements by the caller's confirmed friends (newest first), or [] on failure. */
+export async function fetchFriendActivity(): Promise<readonly dto.FriendActivityItem[]> {
+  const body = await getJson('/api/v1/friends/activity');
+  const items = isRecord(body) ? body['items'] : undefined;
+  return Array.isArray(items) && items.every(isActivityItem) ? items : [];
+}
+
+/** The caller's relationship to a member by handle, or null when signed out / unknown member. */
+export async function fetchRelationship(handle: string): Promise<dto.FriendRelationship | null> {
+  const body = await getJson(`/api/v1/friends/relationship/${encodeURIComponent(handle.replace(/^@/, ''))}`);
+  const rel = isRecord(body) ? body['relationship'] : undefined;
+  return isRelationship(rel) ? rel : null;
+}
+
 /** Search active members by public handle (prefix), with the caller's relationship to each. */
 export async function searchFriends(query: string): Promise<readonly dto.FriendSearchResult[]> {
   if (query.trim() === '') return [];

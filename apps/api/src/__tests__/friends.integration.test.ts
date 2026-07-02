@@ -84,6 +84,35 @@ describe('friend graph (integration)', () => {
     expect((await repo.sendFriendRequest({ tenantId, requesterUserId: a, targetHandle: 'ghost', idempotencyKey: 'y2' })).kind).toBe('not_found');
   });
 
+  it('reports the relationship by handle and surfaces friend activity', async () => {
+    const tenantId = await seedTenant('t4');
+    const a = await seedMember(tenantId, 'finn');
+    const b = await seedMember(tenantId, 'gwen');
+    expect(await repo.friendRelationship(tenantId, a, 'finn')).toBe('self');
+    expect(await repo.friendRelationship(tenantId, a, 'gwen')).toBe('none');
+    expect(await repo.friendRelationship(tenantId, a, 'ghost')).toBeNull();
+
+    await repo.sendFriendRequest({ tenantId, requesterUserId: a, targetHandle: 'gwen', idempotencyKey: 'r1' });
+    expect(await repo.friendRelationship(tenantId, a, 'gwen')).toBe('outgoing');
+    expect(await repo.friendRelationship(tenantId, b, 'finn')).toBe('incoming');
+    await repo.acceptFriendRequest(tenantId, b, 'finn');
+    expect(await repo.friendRelationship(tenantId, a, 'gwen')).toBe('friends');
+
+    // Friend activity: gwen places on the active canvas; finn sees it (newest first, DC2).
+    const canvas = await prisma.canvas.create({
+      data: { tenantId, termLabel: 'F26', status: 'active', width: 10, height: 10 },
+      select: { id: true },
+    });
+    await prisma.pixelEvent.create({
+      data: { tenantId, canvasId: canvas.id, actorUserId: b, type: 'PixelPlaced', seq: 1, x: 2, y: 3, newColor: 5, idempotencyKey: 'fa-1' },
+    });
+    const activity = await repo.friendActivity(tenantId, a, 10);
+    expect(activity).toEqual([expect.objectContaining({ handle: 'gwen', x: 2, y: 3, color: 5 })]);
+    // Non-friends see nothing.
+    const c = await seedMember(tenantId, 'hale');
+    expect(await repo.friendActivity(tenantId, c, 10)).toEqual([]);
+  });
+
   it('scopes the graph to the tenant', async () => {
     const t1 = await seedTenant('ta');
     const t2 = await seedTenant('tb');

@@ -1,8 +1,11 @@
 'use client';
 
 // apps/web — public member profile. DC2 only: handle/display/role/public activity, never email.
-import { useEffect, useState } from 'react';
+// Signed-in viewers get a relationship-aware Add-friend action; the member's active guild (and its
+// current-term credit) links to the guild profile.
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import type { dto } from '@quad/core';
 import { colorHexForValue, colorNameForValue } from '@quad/config';
 import { fetchProfile } from '@/content/content-client';
@@ -10,6 +13,14 @@ import { ContributionHeatmap } from '@/content/contribution-heatmap';
 import { AppBar } from '@/components/ui/app-bar';
 import { SessionBadge } from '@/auth/session-badge';
 import { useTenant } from '@/components/tenant-provider';
+import { fetchSession } from '@/auth/auth-client';
+import {
+  acceptFriendRequest,
+  addButtonLabel,
+  cancelFriendRequest,
+  fetchRelationship,
+  sendFriendRequest,
+} from '@/friends/friends-client';
 
 type Scope = 'term' | 'lifetime';
 
@@ -119,6 +130,8 @@ export default function ProfilePage(): React.ReactElement {
   const handle = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw[0] ?? '') : '';
   const [data, setData] = useState<dto.ProfileResponse | null | undefined>(undefined);
   const [scope, setScope] = useState<Scope>('term');
+  const [relationship, setRelationship] = useState<dto.FriendRelationship | null>(null);
+  const [relationshipBusy, setRelationshipBusy] = useState(false);
 
   useEffect(() => {
     if (!handle) return;
@@ -126,10 +139,30 @@ export default function ProfilePage(): React.ReactElement {
     void fetchProfile(handle).then((profile) => {
       if (active) setData(profile);
     });
+    // Only a signed-in viewer has a relationship to show (self → no button).
+    void fetchSession().then((s) => {
+      if (!active || !s.authenticated) return;
+      void fetchRelationship(handle).then((rel) => {
+        if (active) setRelationship(rel);
+      });
+    });
     return () => {
       active = false;
     };
   }, [handle]);
+
+  const onFriendAction = useCallback(async () => {
+    if (relationship === null || relationship === 'self' || relationship === 'friends' || relationshipBusy) return;
+    setRelationshipBusy(true);
+    const next =
+      relationship === 'outgoing'
+        ? await cancelFriendRequest(handle) // tap again to cancel
+        : relationship === 'incoming'
+          ? await acceptFriendRequest(handle)
+          : await sendFriendRequest(handle);
+    setRelationshipBusy(false);
+    if (next) setRelationship(next);
+  }, [relationship, relationshipBusy, handle]);
 
   const palette = tenant?.palette ?? 'default';
   const stats = data ? (scope === 'term' ? data.currentTermStats : data.lifetimeStats) : null;
@@ -144,7 +177,9 @@ export default function ProfilePage(): React.ReactElement {
         <AppBar
           tenantLabel={tenant?.title ?? null}
           nav={[
+            { label: 'Home', href: '/home' },
             { label: 'Canvas', href: '/canvas' },
+            { label: 'Guilds', href: '/guilds' },
             { label: 'Leaderboard', href: '/leaderboards' },
             { label: 'Archive', href: '/archives' },
           ]}
@@ -172,11 +207,30 @@ export default function ProfilePage(): React.ReactElement {
                     <div className="quad-profile__handle-row">
                       <h1 className="quad-profile__handle quad-pixel">{displayHandle}</h1>
                       <span className="quad-badge">Public handle</span>
+                      {relationship !== null && relationship !== 'self' ? (
+                        <button
+                          type="button"
+                          className={relationship === 'friends' ? 'quad-btn' : 'quad-btn quad-btn--primary'}
+                          disabled={relationship === 'friends' || relationshipBusy}
+                          onClick={() => void onFriendAction()}
+                        >
+                          {addButtonLabel(relationship)}
+                        </button>
+                      ) : null}
                     </div>
+                    {data.displayName ? <p className="quad-profile__display-name">{data.displayName}</p> : null}
                     <p className="quad-profile__meta">
                       Member since {memberSince(data.joinedAt)} / {schoolName(tenant?.title).toUpperCase()} /{' '}
                       {canvasCountLabel(stats.canvasesParticipated)}
                     </p>
+                    {data.activeGuild ? (
+                      <Link href={`/guilds/${encodeURIComponent(data.activeGuild.slug)}`} className="quad-profile__guild-chip">
+                        <span className="quad-badge">{data.activeGuild.name}</span>
+                        <span className="quad-profile__guild-meta">
+                          {data.activeGuild.guildPixels.toLocaleString('en-US')} guild px · #{data.activeGuild.placerRank} placer
+                        </span>
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
 
